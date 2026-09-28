@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-09-28
 
 ### Changed
+- The `/raid-log` waiting line reads as a short bold "⏳ Đã nhận yêu cầu · Artist đang xử lý…" with the render-queue note in small text below it, instead of one long sentence above the card. The Japanese line now speaks in Artist's usual voice.
 - The `/raid-log` opening card reads "📜 Raid log" with one question and a hint line, with no footer and no mention of the caller; the roster menu shows each character's class icon with `Roster <name> · <item level>`.
 - `/raid-log` controls are one button row (◀️ tab ▶️, 📐 Bracketed/Normalized, ↩️ Defaults) above four menus for raid, log, player and tab. A closed menu shows its facts: each raid's log count and best parse, each log's percent, DPS, nDPS and duration, each player's class icon, gear score and badges, each tab with a short explanation. Refresh moved into the raid menu beside ⏬ Load older logs.
 - The `/raid-log` panel is a log book: 👑 MVP DMG, 📈 DPS score and 🎯 MVP Counter on the DPS row, ✨ MVP Radiant Sup, 🤝 Sup contribution and ⏱️ Sup uptime on the support row, then duration, total DMG and team DPS, each name with its class icon. The raid's five latest logs follow, coloured by parse, and the side colour follows the open log; the TEST title, description lines and footer are gone.

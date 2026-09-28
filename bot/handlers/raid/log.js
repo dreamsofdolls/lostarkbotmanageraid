@@ -255,7 +255,8 @@ function createRaidLogCommand({
     try {
       if (action !== "search") {
         // Acknowledge and show progress in one request, before any DB/Bible work.
-        await interaction.update({ content: t("raid-log.waiting", state.lang), allowedMentions: { parse: [] } });
+        const waiting = `${t("raid-log.waiting", state.lang)}\n-# ${t("raid-log.waitingHint", state.lang)}`;
+        await interaction.update({ content: waiting, allowedMentions: { parse: [] } });
         waitingShown = true;
       }
       await stages[state.stage](interaction, state, action);
