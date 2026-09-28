@@ -27,7 +27,7 @@ function resolveSharedTaskReset(preset, requestedReset) {
   return preset.reset || "weekly";
 }
 
-function readSharedAddRequest(interaction) {
+function readSharedAddRequest(interaction, lang) {
   const rosterName = interaction.options.getString("roster", true);
   const presetKey = interaction.options.getString("preset", true);
   const preset = getSharedTaskPreset(presetKey);
@@ -36,7 +36,7 @@ function readSharedAddRequest(interaction) {
   const taskNameInput = interaction.options.getString("name", false);
   const taskName = String(taskNameInput || preset.defaultName).trim();
   const expiresRaw = interaction.options.getString("expires_at", false);
-  const expiresAt = parseSharedTaskExpiresAt(expiresRaw);
+  const expiresAt = parseSharedTaskExpiresAt(expiresRaw, lang);
   const applyAllRosters =
     typeof interaction.options.getBoolean === "function" &&
     interaction.options.getBoolean("all_rosters", false) === true;

@@ -182,9 +182,10 @@ function createAllModeComponentHandlers({
         const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
         if (applyRefreshedUserDoc(result.userDoc)) pendingAggregateCache.clear();
         recomputeFilteredPages({ resetPage: false });
+        // The session can end during the refresh; its controls stay disabled.
         await interaction.editReply({
           embeds: [renderEmbed(currentAbsoluteIndex())],
-          components: buildComponents(false),
+          components: buildComponents(state.sessionEnded),
         }).catch((err) => {
           console.warn("[raid-check all] roster-refresh editReply failed:", err?.message || err);
         });
