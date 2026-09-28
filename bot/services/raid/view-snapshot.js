@@ -15,11 +15,7 @@ const {
 const {
   commitCollectedRaidViewRefresh,
 } = require("./view-refresh-commit");
-
-function toPlainUserSnapshot(userDoc) {
-  if (!userDoc) return null;
-  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
-}
+const { toPlainUserDoc } = require("../../utils/user-doc");
 
 /**
  * Build the view-snapshot service.
@@ -61,13 +57,13 @@ function createRaidViewSnapshotService({
   ) {
     if (!seedDoc) return null;
     const discordId = seedDoc.discordId;
-    if (!discordId) return toPlainUserSnapshot(seedDoc);
+    if (!discordId) return toPlainUserDoc(seedDoc);
 
     const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
     const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
 
     if (!hasRoster) {
-      if (!didFreshenSeedWeek) return toPlainUserSnapshot(seedDoc);
+      if (!didFreshenSeedWeek) return toPlainUserDoc(seedDoc);
       try {
         return await saveWithRetry(async () => {
           const doc = await User.findOne({ discordId });
@@ -115,7 +111,7 @@ function createRaidViewSnapshotService({
       const needsFreshWrite =
         didFreshenSeedWeek || refreshCollected.length > 0 || autoManageBibleHit;
 
-      if (!needsFreshWrite) return toPlainUserSnapshot(seedDoc);
+      if (!needsFreshWrite) return toPlainUserDoc(seedDoc);
 
       const snapshot = await commitCollectedRaidViewRefresh({
         User,

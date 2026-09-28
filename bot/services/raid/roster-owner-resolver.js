@@ -10,6 +10,8 @@
 
 "use strict";
 
+const { findAccountByName } = require("../../utils/user-doc");
+
 function pickOwnerLabel(userDoc) {
   if (!userDoc) return "(unknown user)";
   const candidates = [
@@ -80,19 +82,15 @@ function createRosterOwnerResolver({
     const ownDoc = Object.prototype.hasOwnProperty.call(context, "ownDoc")
       ? context.ownDoc
       : await loadUserForAutocomplete(executorId);
-    if (ownDoc && Array.isArray(ownDoc.accounts)) {
-      const ownAccount = ownDoc.accounts.find(
-        (account) => normalizeName(account.accountName) === target
-      );
-      if (ownAccount) {
-        return {
-          ownerDiscordId: executorId,
-          ownerLabel: null,
-          ownerDoc: ownDoc,
-          account: ownAccount,
-          actingForOther: false,
-        };
-      }
+    const ownAccount = findAccountByName(ownDoc, rosterName, normalizeName);
+    if (ownAccount) {
+      return {
+        ownerDiscordId: executorId,
+        ownerLabel: null,
+        ownerDoc: ownDoc,
+        account: ownAccount,
+        actingForOther: false,
+      };
     }
 
     // Once the own-roster fast path misses, helper registrations and live
@@ -140,9 +138,7 @@ function createRosterOwnerResolver({
       || await User.findOne({ discordId: sharedMatch.ownerDiscordId });
     if (!ownerDoc || !Array.isArray(ownerDoc.accounts)) return null;
     const ownerAccount = sharedMatch.account
-      || ownerDoc.accounts.find(
-        (account) => normalizeName(account.accountName) === target
-      );
+      || findAccountByName(ownerDoc, rosterName, normalizeName);
     if (!ownerAccount) return null;
     return {
       ownerDiscordId: sharedMatch.ownerDiscordId,

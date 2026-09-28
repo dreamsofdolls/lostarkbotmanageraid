@@ -22,6 +22,7 @@ const {
 } = require("../../../utils/raid/common/changed-characters");
 const { BIBLE_ERROR_KIND } = require("../bible/error-kinds");
 const { describeBibleError } = require("../bible/error-text");
+const { getAppliedAutoManageEntries } = require("./utils");
 
 const MAX_REASON_NAMES = 10;
 // What the user can fix first, then what waits on Bible, then the rest.
@@ -47,9 +48,7 @@ function createAutoManageReportEmbeds({
   getAutoManageCooldownMs,
 }) {
   function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport, lang = "vi") {
-    const visibleApplied = (probeReport?.perChar || []).filter(
-      (c) => !c.error && Array.isArray(c.applied) && c.applied.length > 0
-    );
+    const visibleApplied = getAppliedAutoManageEntries(probeReport).filter((c) => !c.error);
     const lines = hiddenChars
       .slice(0, 20)
       .map((c) =>

@@ -3,6 +3,7 @@
 const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
 const { assertBibleSyncAllowed, enableBibleSync } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 const { t } = require("../../../../services/i18n");
+const { getAutoManageEntries } = require("../../../../services/auto-manage/reports/utils");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
 
 function buildEnableSimpleSuccessEmbed({ EmbedBuilder, UI, lang, descriptionKey }) {
@@ -159,7 +160,7 @@ function createAutoManageEnableHandler({
         weekResetStart,
         probeCollected
       );
-      const hiddenChars = (probeReport?.perChar || []).filter((charReport) =>
+      const hiddenChars = getAutoManageEntries(probeReport).filter((charReport) =>
         isPublicLogDisabledError(charReport?.error)
       );
 

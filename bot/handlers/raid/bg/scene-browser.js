@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const { UI } = require("../../../utils/raid/common/shared");
 const {
   clampEmbedTitle,
   normalizeStoredBuffer,
@@ -10,10 +11,10 @@ const RAID_BG_BROWSER_MS = 3 * 60 * 1000;
 
 function browserMeta(variant) {
   return {
-    view: { color: 0x5865f2, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" },
+    view: { color: UI.colors.neutral, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" },
     replace: { color: 0xfaa61a, titleKey: "raidBg.browse.replaceTitle", descKey: "raidBg.browse.replaceDesc" },
-    delete: { color: 0xed4245, titleKey: "raidBg.browse.deleteTitle", descKey: "raidBg.browse.deleteDesc" },
-  }[variant] || { color: 0x5865f2, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" };
+    delete: { color: UI.colors.danger, titleKey: "raidBg.browse.deleteTitle", descKey: "raidBg.browse.deleteDesc" },
+  }[variant] || { color: UI.colors.neutral, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" };
 }
 
 function buildSceneBrowserPayload({

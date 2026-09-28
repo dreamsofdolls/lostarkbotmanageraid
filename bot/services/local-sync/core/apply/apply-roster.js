@@ -11,6 +11,7 @@ const {
 } = require("../../../../domain/raid-catalog");
 const { normalizeDifficulty } = require("../catalog");
 const { COMPANION_SCOPE } = require("../scope");
+const { isCurrentWeekCompletion } = require("../../../../utils/raid/schedule/reset-windows");
 
 function buildRosterCharacterIndex(userDoc) {
   const index = new Map();
@@ -57,11 +58,6 @@ function resolveBucketModePreference(userDoc, bucket, { rosterIndex = null } = {
   return modeKey && modeKey !== bucket.modeKey
     ? { ...bucket, modeKey }
     : bucket;
-}
-
-function isCurrentWeekCompletion(value, currentWeekStartMs = 0) {
-  const completedAt = Number(value);
-  return completedAt > 0 && completedAt >= currentWeekStartMs;
 }
 
 function raidAlreadyComplete(character, raidKey, currentWeekStartMs = 0) {

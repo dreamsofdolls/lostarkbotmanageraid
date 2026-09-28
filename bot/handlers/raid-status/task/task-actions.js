@@ -9,6 +9,7 @@
 
 const { normalizeName } = require("../../../utils/raid/common/shared");
 const { resolveScheduledSharedTaskState } = require("../../../utils/raid/tasks/shared-tasks");
+const { findAccountByName } = require("../../../utils/user-doc");
 
 function parseTaskToggleValue(value) {
   if (!value || value === "noop") return { kind: "noop" };
@@ -49,16 +50,9 @@ async function mutateFreshAccount(options, mutateAccount) {
     discordId,
     targetAccountName,
   } = options;
-  const normalizedTargetAccountName = normalizeName(targetAccountName);
-
   await saveWithRetry(async () => {
     const userDocFresh = await User.findOne({ discordId });
-    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-
-    const account = userDocFresh.accounts.find(
-      (candidate) =>
-        normalizeName(candidate?.accountName) === normalizedTargetAccountName
-    );
+    const account = findAccountByName(userDocFresh, targetAccountName, normalizeName);
     if (!account) return;
 
     const changed = await mutateAccount(account);

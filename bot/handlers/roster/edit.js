@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { findAccountByName } = require("../../utils/user-doc");
 const {
   handlePickerSessionTimeout,
   newPickerSessionId,
@@ -155,9 +156,7 @@ function createEditRosterCommand({
       return;
     }
 
-    const targetAccount = userDoc.accounts.find(
-      (account) => normalizeName(account.accountName) === normalizeName(rosterArg)
-    );
+    const targetAccount = findAccountByName(userDoc, rosterArg, normalizeName);
     if (!targetAccount) {
       await interaction.editReply({
         embeds: [

@@ -45,6 +45,7 @@ module.exports = {
   applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
   resolveLocalSyncTarget: apply.resolveTarget,
   bucketizeLocalSyncDeltas: apply.bucketize,
+  getLocalSyncBucketGates: apply.effectiveGatesForBucket,
   normalizeLocalSyncDifficulty: apply.normalizeDifficulty,
   PREVIEW_APPLY_LEASE_MS: previewJobs.PREVIEW_APPLY_LEASE_MS,
   normalizePreviewDeltas: previewJobs.normalizePreviewDeltas,

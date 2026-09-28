@@ -260,5 +260,6 @@ module.exports = {
   applyLocalSyncDeltas,
   resolveTarget,
   bucketize,
+  effectiveGatesForBucket,
   normalizeDifficulty,
 };

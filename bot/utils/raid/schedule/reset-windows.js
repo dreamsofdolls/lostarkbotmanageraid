@@ -72,8 +72,21 @@ function weeklyResetStartFromKey(key) {
   return start;
 }
 
+/**
+ * Whether a stored gate completion falls in the weekly window that starts at
+ * `currentWeekStartMs`. A missing or zero completion never counts.
+ * @param {number|string|Date|null} value - stored completedDate
+ * @param {number} [currentWeekStartMs=0] - window-start UTC ms
+ * @returns {boolean}
+ */
+function isCurrentWeekCompletion(value, currentWeekStartMs = 0) {
+  const completedAt = Number(value);
+  return completedAt > 0 && completedAt >= currentWeekStartMs;
+}
+
 module.exports = {
   dailyResetStartMs,
   weeklyResetStartMs,
   weeklyResetStartFromKey,
+  isCurrentWeekCompletion,
 };

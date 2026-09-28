@@ -27,6 +27,7 @@ const {
 } = require("../../utils/raid/common/changed-characters");
 const {
   bucketizeLocalSyncDeltas,
+  getLocalSyncBucketGates,
   resolvePreviewJobState,
 } = require("../../services/local-sync");
 const { describeLocalSyncCard } = require("./discord-console-card");
@@ -72,7 +73,7 @@ function groupPreviewBuckets(job, lang, summary = null) {
   for (const bucket of bucketizeLocalSyncDeltas(job?.deltas || [])) {
     const charName = String(bucket.charName || "?");
     if (!byCharacter.has(charName)) byCharacter.set(charName, []);
-    const gates = getGatesForRaid(bucket.raidKey).slice(0, bucket.gateIndex + 1);
+    const gates = getLocalSyncBucketGates(bucket);
     byCharacter.get(charName).push({
       raidKey: bucket.raidKey,
       modeKey: bucket.modeKey,
