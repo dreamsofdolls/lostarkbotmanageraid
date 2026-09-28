@@ -3,19 +3,39 @@
 const { captureTabOptions } = require("./tabs");
 
 const NORMALIZED_SWITCH = "Use normalized DPS percentiles";
+// The button that leaves a player's detail view.
+const OVERVIEW_BUTTON = "Return to Overview";
+
+/**
+ * @param {object} page Playwright page
+ * @param {string} name Bible's exact button label
+ * @returns {object} locator
+ */
+function bibleButton(page, name) {
+  return page.getByRole("button", { name, exact: true });
+}
+
+/**
+ * Waits until the team overview shows its party tables.
+ * @param {object} page
+ * @returns {Promise<void>}
+ */
+function waitForPartyTables(page) {
+  return page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
+}
 
 async function selectCaptureTab(page, { tab, bracketed, player }) {
   const options = captureTabOptions(tab);
-  await page.getByRole("button", { name: options.button, exact: true }).click();
+  await bibleButton(page, options.button).click();
   if (options.allBuffs !== undefined) {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await bibleButton(page, "Settings").click();
     const item = page.getByRole("menuitem").filter({ hasText: "Offensive Buffs Only" });
     if (await item.locator("input").isChecked() === options.allBuffs) await item.locator("label").click();
     await page.keyboard.press("Escape");
   }
-  if (options.sub) await page.getByRole("button", { name: options.sub, exact: true }).click();
+  if (options.sub) await bibleButton(page, options.sub).click();
   const sub = player ? options.breakdown || "By Source" : options.chart || "Average DPS";
-  const subButton = page.getByRole("button", { name: sub, exact: true });
+  const subButton = bibleButton(page, sub);
   // Older logs can lack the damage attribution analysis, but still have skills.
   if (options.breakdown || options.chart || await subButton.count()) await subButton.click();
   await setNormalized(page, !bracketed);
@@ -45,8 +65,8 @@ async function setNormalized(page, on) {
  * @returns {Promise<void>}
  */
 async function returnToOverview(page) {
-  await page.getByRole("button", { name: "Return to Overview", exact: true }).click();
-  await page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
+  await bibleButton(page, OVERVIEW_BUTTON).click();
+  await waitForPartyTables(page);
 }
 
 async function fitCaptureTables(page) {
@@ -82,4 +102,7 @@ async function waitForCharts(page) {
   }));
 }
 
-module.exports = { selectCaptureTab, fitCaptureTables, waitForCharts, setNormalized, returnToOverview };
+module.exports = {
+  selectCaptureTab, fitCaptureTables, waitForCharts, setNormalized, returnToOverview,
+  bibleButton, waitForPartyTables, OVERVIEW_BUTTON,
+};

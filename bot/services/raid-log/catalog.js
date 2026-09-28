@@ -105,4 +105,4 @@ function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bible
   return catalog;
 }
 
-module.exports = { createRaidLogCatalog, normalizeCatalogLogs, mergeLogs, MAX_LOG_PAGES };
+module.exports = { createRaidLogCatalog, normalizeCatalogLogs };

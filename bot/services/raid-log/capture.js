@@ -7,7 +7,7 @@ const { readCaptureMemory } = require("./memory");
 const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
 const { inspectPlayerPage, selectPlayer } = require("./detail");
-const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview } = require("./page-controls");
+const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview, bibleButton, waitForPartyTables } = require("./page-controls");
 const { collectTeamMetrics } = require("./team-metrics");
 const { captureAssetsReady } = require("./assets");
 const { createRenderQueue } = require("./render-queue");
@@ -189,8 +189,8 @@ function createRaidLogCapture({
       } else await preparePage();
       const page = resource.page;
       if (needsNavigation) {
-        await page.getByRole("button", { name: "Damage", exact: true }).click();
-        await page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
+        await bibleButton(page, "Damage").click();
+        await waitForPartyTables(page);
         await page.waitForFunction(captureAssetsReady, false);
         resource.baseline = await page.evaluate(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
