@@ -25,7 +25,7 @@ function createRaidSetCommandDefinition() {
     .addStringOption((option) =>
       option
         .setName("roster")
-        .setDescription("Roster (account) chứa character - autocomplete")
+        .setDescription("Roster (account) containing the character - autocomplete")
         .setDescriptionLocalizations({
           vi: "Roster (account) chứa character - autocomplete",
           ja: "キャラを含むロスター（アカウント）- オートコンプリート",

@@ -15,6 +15,9 @@ const {
   buildSceneBrowserPayload,
   sceneBrowserUpdatePayload,
 } = require("../scene-browser");
+const {
+  guardCollectorListener,
+} = require("../../../../utils/discord/collector-listener");
 
 function applyViewBrowserAction({ id, values, index, imageCount }) {
   if (id === "raidbg:scene") return { handled: true, index: Number(values?.[0]) || 0 };
@@ -66,7 +69,7 @@ async function handleView({ interaction, deps, lang }) {
   if (images.length < 2 || !message?.createMessageComponentCollector) return;
 
   const collector = message.createMessageComponentCollector({ time: RAID_BG_BROWSER_MS });
-  collector.on("collect", async (component) => {
+  collector.on("collect", guardCollectorListener("[raid-bg] view", async (component) => {
     const action = applyViewBrowserAction({
       id: component.customId,
       values: component.values,
@@ -77,7 +80,7 @@ async function handleView({ interaction, deps, lang }) {
     index = action.index;
     const next = render();
     await component.update(sceneBrowserUpdatePayload(next));
-  });
+  }));
   collector.on("end", async () => {
     try { await interaction.editReply({ components: [] }); } catch { /* message gone */ }
   });

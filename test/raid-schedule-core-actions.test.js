@@ -130,3 +130,20 @@ test("schedule core end action writes clears, freezes event, and updates manage 
   assert.equal(interaction.editReplies[0].components.length, 0);
   assert.equal(interaction.editReplies[0].embeds[0].tone, "warn");
 });
+
+test("schedule core unlock after the start time turns auto-lock off so the next tick does not re-lock", async () => {
+  const { actions } = makeActions();
+  const started = makeEvent({ status: "locked", autoLockAtStart: true, startAt: new Date(Date.now() - 10 * 60000) });
+
+  await actions.handleLockToggle(makeInteraction(), started, "unlock", "vi");
+
+  assert.equal(started.status, "open");
+  assert.equal(started.autoLockAtStart, false);
+  assert.equal(started.saved, 1);
+
+  // Unlocking before the start keeps auto-lock armed.
+  const upcoming = makeEvent({ status: "locked", autoLockAtStart: true, startAt: new Date(Date.now() + 60 * 60000) });
+  await actions.handleLockToggle(makeInteraction(), upcoming, "unlock", "vi");
+  assert.equal(upcoming.status, "open");
+  assert.equal(upcoming.autoLockAtStart, true);
+});

@@ -222,3 +222,33 @@ test("Local Sync roster selects route through the exported console handler", asy
   assert.equal(rosterSelectCalls, 1);
   assert.equal(typeof commandModule.handleLocalSyncRosterSelect, "function");
 });
+
+test("the generic error reply reads the user's language through the passed UserModel", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const { clearUserLanguageCache, t: translate } = require("../bot/services/i18n");
+  clearUserLanguageCache();
+  const replies = [];
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    UserModel: { findOne: () => ({ lean: async () => ({ language: "en" }) }) },
+    handlers: {
+      handleRaidManagementCommand: async () => {
+        throw new Error("unexpected failure");
+      },
+    },
+  });
+
+  await router.handle({
+    id: "registry-generic-error",
+    commandName: "raid-status",
+    user: { id: "registry-user-en" },
+    isChatInputCommand: () => true,
+    isRepliable: () => true,
+    reply: async (payload) => replies.push(payload),
+  });
+
+  assert.deepEqual(replies, [
+    { content: translate("common.genericError", "en"), flags: 64 },
+  ]);
+  clearUserLanguageCache();
+});

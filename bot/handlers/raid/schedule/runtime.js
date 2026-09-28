@@ -175,8 +175,9 @@ function createScheduleRuntimeHelpers({
     for (const [discordId, entries] of byUser.entries()) {
       try {
         const results = await applyRaidSetBatchForDiscordId({ discordId, entries });
-        updated += results.filter((r) => r.updated).length;
-        failed += results.filter((r) => !r.updated).length;
+        // Already complete (e.g. an End retried after a lost save) is cleared, not failed.
+        updated += results.filter((r) => r.updated || r.alreadyComplete).length;
+        failed += results.filter((r) => !r.updated && !r.alreadyComplete).length;
       } catch (error) {
         failed += entries.length;
         logger.warn?.("[raid-schedule] auto-clear write failed:", error?.message || error);

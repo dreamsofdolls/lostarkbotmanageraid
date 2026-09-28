@@ -25,6 +25,7 @@ const {
 const {
   localizedRaidLabel,
 } = require("../gold/gold-formatting");
+const { createStatusRedraw } = require("../view/redraw");
 const {
   deferEphemeralReply,
   editEmbed,
@@ -120,6 +121,13 @@ function createStatusComponentRouteHandlers(ctx) {
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
     refreshLocalSyncSnapshot = async () => null,
     runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
+    // The session's shared redraw (view/redraw.js); built here when not given.
+    redrawMessage = createStatusRedraw({
+      interaction,
+      buildEmbedAndCanvas,
+      buildComponents,
+      isSessionEnded: () => false,
+    }),
   } = ctx;
   const goldReplacementFlow = createGoldReplacementFlow({
     EmbedBuilder,
@@ -218,10 +226,7 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       session.setCachedLocalSyncResumeUrl(freshUrl);
-      await interaction.editReply({
-        ...(await buildEmbedAndCanvas()),
-        components: buildComponents(false),
-      }).catch((err) => {
+      await redrawMessage().catch((err) => {
         console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
       });
 
@@ -302,10 +307,7 @@ function createStatusComponentRouteHandlers(ctx) {
           session.userDoc,
           session.statusUserMeta?.piggybackOutcome || null
         );
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        });
+        await redrawMessage();
       } catch (err) {
         console.error("[raid-status] local-refresh failed:", err?.message || err);
         await followUpNotice(component, EmbedBuilder, {
@@ -372,10 +374,7 @@ function createStatusComponentRouteHandlers(ctx) {
           session.statusUserMeta?.piggybackOutcome || null
         );
 
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        }).catch((err) => {
+        await redrawMessage().catch((err) => {
           console.warn("[raid-status] roster-refresh editReply failed:", err?.message || err);
         });
 
@@ -440,10 +439,7 @@ function createStatusComponentRouteHandlers(ctx) {
         };
       }
 
-      await interaction.editReply({
-        ...(await buildEmbedAndCanvas()),
-        components: buildComponents(false),
-      }).catch(() => {});
+      await redrawMessage().catch(() => {});
 
       const followupPayload = buildManualSyncFollowupPayload(manualOutcome, lang);
       if (followupPayload) await followUpNotice(component, EmbedBuilder, followupPayload).catch(() => {});
@@ -567,16 +563,42 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status side-task toggle",
         detail: `kind=${parsed.kind}`,
       });
-      if (!writeContext) return noRedraw();
+      if (!writeContext) {
+        // Task rows render disabled on a view-only share, so a pick only
+        // lands here from a card drawn before the share or roster changed.
+        const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
+        await followUpNotice(component, EmbedBuilder, sharedFrom
+          ? {
+            type: "lock",
+            title: t("raid-task.shareViewOnly.title", lang),
+            description: t("raid-task.shareViewOnly.description", lang, {
+              owner: sharedFrom.ownerLabel || "(unknown)",
+            }),
+          }
+          : {
+            type: "warn",
+            title: t("raid-status.taskView.toggleFailedTitle", lang),
+            description: t("raid-status.taskView.toggleFailedDescription", lang),
+          }).catch(() => {});
+        return noRedraw();
+      }
       const { targetAccountName, writeDiscordId } = writeContext;
 
-      await toggleParsedSideTask({
+      const toggleResult = await toggleParsedSideTask({
         User,
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
         parsed,
       });
+      if (!toggleResult.ok) {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.taskView.toggleFailedTitle", lang),
+          description: t("raid-status.taskView.toggleFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
 
       await reloadViewerAccounts();
       return redraw();

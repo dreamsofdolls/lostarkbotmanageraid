@@ -36,6 +36,8 @@ module.exports = {
       blocked: "Bible chặn request (HTTP 403)",
       notFound: "Không tìm thấy trên Bible",
     },
+    // Last-resort reply when a command or button throws an unhandled error.
+    genericError: "Có lỗi xảy ra khi xử lý lệnh. Cậu thử lại giúp tớ nhé.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -162,7 +164,8 @@ module.exports = {
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
   "raid-log": {
-    waiting: "⏳ Đã nhận yêu cầu. Artist đang xử lý log và chuẩn bị ảnh; nếu có lượt đang render, yêu cầu của cậu sẽ chờ đến lượt. Bảng sẽ tự cập nhật khi xong.",
+    waiting: "⏳ **Đã nhận yêu cầu** · Artist đang xử lý…",
+    waitingHint: "Bảng sẽ tự cập nhật khi xong. Nếu có lượt khác đang render, cậu chờ một chút nhé.",
     picker: {
       title: "Raid log",
       withRoster: "Cậu muốn xem log của ai? Chọn nhân vật trong roster bên dưới, hoặc tìm bất kỳ tên nào ở NA.",
@@ -1093,6 +1096,8 @@ module.exports = {
       bulkTogglePlaceholder: "Bulk toggle task cho mọi char...",
       charNoTaskPlaceholder: "{name} chưa có task - dùng /raid-task add",
       charTogglePlaceholder: "Toggle task của {name}...",
+      toggleFailedTitle: "Không đổi được task",
+      toggleFailedDescription: "Artist chưa lưu được task cậu vừa chọn. Session có thể đã cũ hoặc roster/character vừa được cập nhật; cậu mở lại `/raid-status` rồi thử lại nha~",
     },
     goldView: {
       embedTitle: "💰 Gold & độ khó · {accountName}",

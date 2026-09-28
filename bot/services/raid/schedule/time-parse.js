@@ -36,8 +36,8 @@ const VN_TSHORT_RE = /^t([2-7])\b\s*(.*)$/;
 const VN_CN_RE = /^(?:cn|ch[uủ]\s*nh[aậ]t)\b\s*(.*)$/;
 const EN_DOW_RE = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b\s*(.*)$/;
 const EN_DOW = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0 };
-// "D/M" or "D/M/YY(YY)" followed by a time.
-const DATE_RE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/;
+// "D/M" or "D/M/YY(YY)" followed by a time. A 3-digit year is a typo, not year 202.
+const DATE_RE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?\s+(.+)$/;
 
 // Parse just a time-of-day token (already space-collapsed) into {hh, mm}, or
 // null. Shared by the time-only path and every day-anchor path.
@@ -94,7 +94,9 @@ function resolveOnWeekday(dow, hh, mm, lang, now) {
 }
 
 // Resolve to day/month(/year) at hh:mm in lead tz. No year -> this year, or next
-// year if that instant already passed. Returns null for impossible dates (31/2).
+// year if that instant already passed. Returns null for impossible dates (31/2)
+// and for an explicit year that lands at/before now (a past event would be
+// auto-locked and purged right away).
 function resolveOnDate(day, month, year, hh, mm, lang, now) {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const { offsetMs, local } = localNowFor(lang, now);
@@ -102,7 +104,8 @@ function resolveOnDate(day, month, year, hh, mm, lang, now) {
   let targetLocalMs = Date.UTC(yr, month - 1, day, hh, mm, 0, 0);
   const check = new Date(targetLocalMs);
   if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null; // e.g. 31/2
-  if (year == null && targetLocalMs <= local.getTime()) {
+  if (targetLocalMs <= local.getTime()) {
+    if (year != null) return null;
     targetLocalMs = Date.UTC(yr + 1, month - 1, day, hh, mm, 0, 0);
   }
   return new Date(targetLocalMs - offsetMs);

@@ -30,6 +30,7 @@ module.exports = {
       blocked: "Bible にブロックされました (HTTP 403)",
       notFound: "Bible に見つかりません",
     },
+    genericError: "コマンドの処理中にエラーが発生しましたわ。もう一度お試しくださいませ。",
   },
   "local-sync-discord": {
     title: "ローカル同期コンソール",
@@ -151,7 +152,8 @@ module.exports = {
     footer: "いつでも /raid-language で変えられますわ♪",
   },
   "raid-log": {
-    waiting: "⏳ リクエストを受け付けました。ログを処理して画像を準備しています。他の画像を作成中の場合は順番に処理します。完了するとこのパネルが更新されます。",
+    waiting: "⏳ **リクエストを受け付けましたわ** · 処理中ですの…",
+    waitingHint: "完了するとこのパネルが更新されますわ。他の画像を作成中なら、順番をお待ちくださいませ。",
     picker: {
       title: "レイドログ",
       withRoster: "どなたのログをご覧になりますの？ 下のロスターから選ぶか、NA のお名前で検索してくださいませ。",
@@ -1072,6 +1074,8 @@ module.exports = {
       bulkTogglePlaceholder: "全キャラのタスクを一括トグル...",
       charNoTaskPlaceholder: "{name} にはまだタスクが無いですわ - /raid-task add で追加してね",
       charTogglePlaceholder: "{name} のタスクをトグル...",
+      toggleFailedTitle: "タスクを更新できませんでしたわ",
+      toggleFailedDescription: "このタスクを保存できませんでしたの。セッションが古いか、ロスター/キャラが更新された可能性がありますわ。`/raid-status` を開き直してもう一度試してくださいね。",
     },
     goldView: {
       embedTitle: "💰 ゴールド＆難易度 · {accountName}",

@@ -84,6 +84,11 @@ function createScheduleCoreActions({
     if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     const onBoard = onBoardMessage(interaction, event);
     event.status = action === "unlock" ? "open" : "locked";
+    // The auto-lock tick re-locks any open, auto-lock, already-started board,
+    // so a manual unlock after the start has to switch auto-lock off too.
+    if (action === "unlock" && event.startAt && new Date(event.startAt).getTime() <= Date.now()) {
+      event.autoLockAtStart = false;
+    }
     await interaction.deferUpdate();
     await event.save();
     const langForBoard = await boardLang(event.guildId);

@@ -19,8 +19,13 @@
 const {
   buildRuntimeInstanceIdentity,
 } = require("../runtime/instance-identity");
+const { t, getUserLanguage, DEFAULT_LANGUAGE } = require("../i18n");
+const { waitWithBudget } = require("../../utils/raid/common/shared");
 
 const INITIAL_ACK_DEADLINE_MS = 3_000;
+// The generic error reply waits at most this long for the user's language,
+// so a stalled database read cannot push it past Discord's reply deadline.
+const ERROR_LANGUAGE_BUDGET_MS = 1_000;
 const INTERACTION_DEDUPE_TTL_MS = 15 * 60 * 1_000;
 const INTERACTION_DEDUPE_MAX_ENTRIES = 4_096;
 
@@ -131,6 +136,7 @@ function createInteractionDeduper({
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [modalRoutes] - Modal submission handlers matched by customId prefix.
  * @property {string} [instanceIdentity] - secret-free runtime fingerprint for diagnostics
  * @property {{warn: Function, error: Function}} [log] - injectable logger
+ * @property {object} [UserModel] - Mongoose User model, read for the generic error reply's language
  */
 
 /**
@@ -148,9 +154,24 @@ function createInteractionRouter({
   modalRoutes = [],
   instanceIdentity = buildRuntimeInstanceIdentity(),
   log = console,
+  UserModel = null,
 }) {
   const allowedCommandSet = new Set(allowedCommands);
   const interactionDeduper = createInteractionDeduper();
+
+  // Error path: a failed or stalled lookup falls back to the default
+  // language rather than costing the user the reply.
+  async function resolveErrorLanguage(interaction) {
+    try {
+      const { timedOut, value } = await waitWithBudget(
+        getUserLanguage(interaction?.user?.id, { UserModel }),
+        ERROR_LANGUAGE_BUDGET_MS
+      );
+      return timedOut ? DEFAULT_LANGUAGE : value;
+    } catch {
+      return DEFAULT_LANGUAGE;
+    }
+  }
 
   async function dispatch(interaction) {
     if (interaction.isChatInputCommand()) {
@@ -244,8 +265,9 @@ function createInteractionRouter({
     // try a fresh reply. Both paths swallow secondary failures because
     // the user has already seen *something* go wrong - don't compound
     // the bug with an unhandled rejection.
+    const lang = await resolveErrorLanguage(interaction);
     const payload = {
-      content: "Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại.",
+      content: t("common.genericError", lang),
       flags: MessageFlags.Ephemeral,
     };
     if (interaction.replied || interaction.deferred) {

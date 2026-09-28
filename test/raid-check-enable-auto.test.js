@@ -404,3 +404,47 @@ test("buildDisableAutoDmEmbed: emits no roster fields (disable case skips status
   // sync is off.
   assert.equal((json.fields || []).length, 0);
 });
+
+// `count` rosters of 20 characters, as a Manager may enable auto-sync for.
+function makeLargeRosterDoc(count) {
+  return makeUserDoc({
+    lastAutoManageSyncAt: 1700000000000,
+    accounts: Array.from({ length: count }, (_, rosterIndex) => ({
+      accountName: `Roster${String(rosterIndex).padStart(2, "0")}`,
+      characters: Array.from({ length: 20 }, (_, index) => ({
+        name: `Charactername${String(rosterIndex * 20 + index).padStart(3, "0")}`,
+        itemLevel: 1740,
+        publicLogDisabled: false,
+      })),
+    })),
+  });
+}
+
+test("buildEnableAutoDmEmbed: stays within Discord's embed limits and counts the characters left out", () => {
+  const { embedLength } = require("discord.js");
+  for (const rosters of [7, 30]) {
+    const json = buildEnableAutoDmEmbed(EmbedBuilder, {
+      managerId: "manager-1",
+      userDoc: makeLargeRosterDoc(rosters),
+    }, "en").toJSON();
+    const fields = json.fields || [];
+    const shownCharacters = fields.reduce(
+      (sum, field) => sum + (field.value.match(/Charactername\d{3}/g) || []).length,
+      0
+    );
+
+    assert.ok(fields.length <= 25, `${rosters} rosters: ${fields.length} fields`);
+    assert.ok(embedLength(json) <= 6000, `${rosters} rosters: ${embedLength(json)} characters`);
+    assert.ok(shownCharacters > 0 && shownCharacters < rosters * 20);
+    assert.match(fields.at(-1).value, new RegExp(`\\+${rosters * 20 - shownCharacters} more characters`));
+  }
+});
+
+test("buildEnableAutoDmEmbed: lists every roster when they fit", () => {
+  const json = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc: makeLargeRosterDoc(2),
+  }, "en").toJSON();
+  assert.equal(json.fields.length, 2);
+  assert.doesNotMatch(json.fields.at(-1).value, /more characters/);
+});

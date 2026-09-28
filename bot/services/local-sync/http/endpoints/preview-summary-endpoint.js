@@ -532,7 +532,15 @@ function createPreviewSummaryEndpoint({ User }) {
     if (!request) return;
     const { token, discordId, payload, scope, scopeExplicit, body } = request;
 
-    const deltas = Array.isArray(body?.deltas) ? body.deltas : [];
+    // Normalized like the preview job's deltas, so the preview counts only
+    // clears the job would store and shares its size cap.
+    let deltas;
+    try {
+      deltas = normalizePreviewDeltas(Array.isArray(body?.deltas) ? body.deltas : []);
+    } catch (err) {
+      send(res, 400, { ok: false, error: err?.message || "deltas invalid" });
+      return;
+    }
 
     let userDoc;
     try {

@@ -24,7 +24,7 @@ const TASK_RESET_CHOICES = Object.freeze([
 function configureCharacterRosterOption(option) {
   return option
     .setName("roster")
-    .setDescription("Roster (account) chứa character - autocomplete")
+    .setDescription("Roster (account) containing the character - autocomplete")
     .setDescriptionLocalizations({
       vi: "Roster (account) chứa character - autocomplete",
       ja: "キャラを含むロスター（アカウント）- オートコンプリート",
@@ -53,7 +53,7 @@ function createRaidTaskCommandDefinition() {
         .addStringOption((opt) =>
           opt
             .setName("action")
-            .setDescription("single = một char cụ thể · all = mọi char trong roster")
+            .setDescription("single = one specific character · all = every character in the roster")
             .setDescriptionLocalizations({
               vi: "single = một char cụ thể · all = mọi char trong roster",
               ja: "single = 単体キャラ · all = ロスター内の全キャラ",

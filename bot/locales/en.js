@@ -28,6 +28,7 @@ module.exports = {
       blocked: "Bible blocked the request (HTTP 403)",
       notFound: "Not found on Bible",
     },
+    genericError: "Something went wrong while handling this command. Please try again.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -149,7 +150,8 @@ module.exports = {
     footer: "Run /raid-language any time to switch back",
   },
   "raid-log": {
-    waiting: "⏳ Request received. Artist is processing the log and preparing images; if another render is running, your request will wait its turn. This panel will update when ready.",
+    waiting: "⏳ **Request received** · Artist is working on it…",
+    waitingHint: "This panel updates when ready. If another render is running, yours waits its turn.",
     picker: {
       title: "Raid log",
       withRoster: "Whose logs would you like to see? Pick a character from your roster below, or search any NA name.",
@@ -1071,6 +1073,8 @@ module.exports = {
       bulkTogglePlaceholder: "Bulk toggle a task across every char...",
       charNoTaskPlaceholder: "{name} has no tasks - use /raid-task add",
       charTogglePlaceholder: "Toggle {name}'s tasks...",
+      toggleFailedTitle: "Couldn't update the task",
+      toggleFailedDescription: "Artist couldn't save this task. The session may be stale or the roster/character changed; reopen `/raid-status` and try again.",
     },
     goldView: {
       embedTitle: "💰 Gold & difficulty · {accountName}",

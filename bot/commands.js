@@ -839,6 +839,7 @@ const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
   ButtonBuilder,
   ButtonStyle,
   UI,
+  boardPayload: raidScheduleCommandHandlers.boardPayload,
 });
 ({
   startRaidScheduleAutoLockScheduler,
@@ -1148,6 +1149,7 @@ module.exports = {
   handleLocalSyncRosterSelect,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
+  getCachedMonitorChannelId,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,

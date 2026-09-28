@@ -6,7 +6,7 @@ const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confi
 
 function buildResetConfirmEmbed({ EmbedBuilder, UI, lang }) {
   return new EmbedBuilder()
-    .setColor(UI.colors.error || 0xff5555)
+    .setColor(UI.colors.danger || 0xff5555)
     .setTitle(`${UI.icons.warn} ${t("raid-auto-manage.reset.confirmTitle", lang)}`)
     .setDescription(t("raid-auto-manage.reset.confirmDescription", lang))
     .setTimestamp();

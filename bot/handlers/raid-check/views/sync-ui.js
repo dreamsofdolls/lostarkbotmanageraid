@@ -23,6 +23,9 @@ const {
   getAppliedAutoManageEntries,
 } = require("../../../services/auto-manage/reports/utils");
 
+// Discord's cap on an embed description.
+const SYNC_DM_DESCRIPTION_LIMIT = 4096;
+
 /**
  * Build the /raid-check Sync UI service: the DM embed builder and the Sync
  * click handler.
@@ -88,18 +91,25 @@ function createSyncUi({
       });
     });
 
+    // Discord rejects a description past 4096 characters, which a large
+    // Sync reaches; keep as many character lines as fit, then "+N more".
+    const describe = (count) => [
+      t("raid-check.syncDm.intro", lang),
+      "",
+      ...lines.slice(0, count),
+      ...(count < lines.length
+        ? [t("raid-status.embed.moreCharacters", lang, { n: lines.length - count })]
+        : []),
+      "",
+      t("raid-check.syncDm.footer", lang),
+    ].join("\n");
+    let shown = lines.length;
+    while (shown > 0 && describe(shown).length > SYNC_DM_DESCRIPTION_LIMIT) shown -= 1;
+
     return new EmbedBuilder()
       .setColor(UI.colors.success)
       .setTitle(t("raid-check.syncDm.title", lang, { doneIcon: UI.icons.done }))
-      .setDescription(
-        [
-          t("raid-check.syncDm.intro", lang),
-          "",
-          ...lines,
-          "",
-          t("raid-check.syncDm.footer", lang),
-        ].join("\n")
-      )
+      .setDescription(describe(shown))
       .setTimestamp();
   }
 
