@@ -1,10 +1,8 @@
 "use strict";
 
 const { getUserLanguage, getGuildLanguage } = require("../../../services/i18n");
-const {
-  getRaidRequirementMap,
-  getGatesForRaid,
-} = require("../../../domain/raid-catalog");
+const { getGatesForRaid } = require("../../../domain/raid-catalog");
+const { getRequirementFor } = require("../../../utils/raid/common/character/assigned-raids");
 const { assignSlots } = require("../../../services/raid/schedule/slots/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/lifecycle/auto-clear");
 const { shapeOwnedBoardOptions } = require("../../../services/raid/schedule/boards/owned-boards");
@@ -83,7 +81,7 @@ function createScheduleRuntimeHelpers({
   }
 
   function raidMetaFor(raidKey, modeKey) {
-    return getRaidRequirementMap()[`${raidKey}_${modeKey}`] || null;
+    return getRequirementFor(raidKey, modeKey);
   }
 
   function isLeadActionAllowed(interaction) {

@@ -8,13 +8,13 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { getRaidRequirementMap } = require("../../../../domain/raid-catalog");
 const { assignSlots } = require("../../../../services/raid/schedule/slots/slots");
 const { shapeOwnedBoardOptions } = require("../../../../services/raid/schedule/boards/owned-boards");
 const {
   buildTurnPlanEmbed,
   buildSwitcherRow,
   renderGauge,
+  rosterLabel,
   STATUS_CODE,
 } = require("./board");
 const {
@@ -26,11 +26,6 @@ const {
 
 // Discord allows 5 action rows per message: up to 5 kick selects of 25.
 const KICK_SELECT_ROWS = 5;
-
-function raidLabelFor(event) {
-  const meta = getRaidRequirementMap()[`${event.raidKey}_${event.modeKey}`];
-  return meta?.label || `${event.raidKey} ${event.modeKey}`;
-}
 
 function createSchedulePanelBuilders({
   ActionRowBuilder,
@@ -97,7 +92,7 @@ function createSchedulePanelBuilders({
     const compCount = slots.support.length + slots.dps.length;
     const gauge = renderGauge(compCount, event.partySize);
     const manageDesc = [
-      `\`${raidLabelFor(event)} · ${STATUS_CODE[event.status] || ""}\``,
+      `\`${rosterLabel(event.raidKey, event.modeKey)} · ${STATUS_CODE[event.status] || ""}\``,
       `${gauge ? `${gauge}  ` : ""}**${compCount}/${event.partySize}** · ⏳ ${slots.waitlist.length}`,
       t("raid-schedule.notice.manageDescription", lang),
     ].join("\n");
