@@ -4,17 +4,20 @@
 const { tPick: t } = require("../../../../services/i18n");
 const { createTaskMutationHandler } = require("../write-handler");
 const {
-  generateTaskId,
-  normalizeName,
   findAccountInUser,
   getCharacterDisplayName,
   ensureSideTasks,
-  countByReset,
 } = require("../../../../utils/raid/tasks/side-tasks");
 const {
   capForReset,
   cycleStartForReset,
 } = require("./reset-policy");
+const {
+  tryAddSideTask,
+  cycleLabelForReset,
+  invalidTaskNameNotice,
+  noRosterNotice,
+} = require("./add-common");
 
 function readAddAllRequest(interaction) {
   return {
@@ -25,14 +28,7 @@ function readAddAllRequest(interaction) {
 }
 
 function buildAddAllValidationNotice(request, lang) {
-  if (!request.taskName) {
-    return {
-      type: "warn",
-      title: t("raid-task.common.invalidTaskNameTitle", lang),
-      description: t("raid-task.common.invalidTaskNameDescription", lang),
-    };
-  }
-  return null;
+  return request.taskName ? null : invalidTaskNameNotice(lang);
 }
 
 function createAddAllResult(rosterName) {
@@ -45,38 +41,15 @@ function createAddAllResult(rosterName) {
   };
 }
 
-function buildTaskRecord(request, cycleStart) {
-  return {
-    taskId: generateTaskId(),
-    name: request.taskName,
-    reset: request.reset,
-    completed: false,
-    lastResetAt: cycleStart,
-    createdAt: Date.now(),
-  };
-}
+const RESULT_LIST_BY_OUTCOME = Object.freeze({
+  added: "added",
+  "cap-reached": "skippedCap",
+  duplicate: "skippedDup",
+});
 
 function applyAddAllToCharacter(character, request, result, cycleStart) {
-  const sideTasks = ensureSideTasks(character);
-  const charName = getCharacterDisplayName(character);
-  if (countByReset(sideTasks, request.reset) >= capForReset(request.reset)) {
-    result.skippedCap.push(charName);
-    return;
-  }
-
-  const taskNameNormalized = normalizeName(request.taskName);
-  const dup = sideTasks.some(
-    (task) =>
-      normalizeName(task?.name) === taskNameNormalized &&
-      task?.reset === request.reset
-  );
-  if (dup) {
-    result.skippedDup.push(charName);
-    return;
-  }
-
-  sideTasks.push(buildTaskRecord(request, cycleStart));
-  result.added.push(charName);
+  const outcome = tryAddSideTask(ensureSideTasks(character), request, cycleStart);
+  result[RESULT_LIST_BY_OUTCOME[outcome]].push(getCharacterDisplayName(character));
 }
 
 function applyAddAllToUserDoc(userDoc, request, result, deps) {
@@ -104,12 +77,6 @@ function applyAddAllToUserDoc(userDoc, request, result, deps) {
   }
 
   return result.added.length > 0;
-}
-
-function cycleLabelForReset(reset, lang) {
-  return reset === "daily"
-    ? t("raid-task.add.cycleDailyLabel", lang)
-    : t("raid-task.add.cycleWeeklyLabel", lang);
 }
 
 function skippedLines(names, reason, lang) {
@@ -172,11 +139,7 @@ function buildAddAllCompletedNotice(result, request, lang) {
 }
 
 const ADD_ALL_NOTICE_BUILDERS = {
-  "no-roster": ({ lang }) => ({
-    type: "warn",
-    title: t("raid-task.common.noRosterTitle", lang),
-    description: t("raid-task.common.noRosterDescription", lang),
-  }),
+  "no-roster": ({ lang }) => noRosterNotice(lang),
   "no-roster-match": ({ request, lang }) => ({
     type: "warn",
     title: t("raid-task.common.rosterNotFoundTitle", lang),
