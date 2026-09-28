@@ -107,6 +107,9 @@ const characterSchema = new mongoose.Schema(
       serca: { type: assignedRaidSchema, default: () => ({}) },
       horizon: { type: assignedRaidSchema, default: () => ({}) },
     },
+    // Legacy raid-clear counters from the LoaLogs port; nothing reads them.
+    // Kept because roster saves $set the whole characters array, so dropping
+    // the path would silently erase entries still stored on older users.
     tasks: { type: [characterTaskSchema], default: [] },
     // Per-character side tasks (daily/weekly chores). Cap is enforced at
     // the command layer (/raid-task add) because Mongoose subdoc validators
@@ -156,17 +159,6 @@ const userSchema = new mongoose.Schema(
     discordDisplayName: { type: String, default: "" },
     weeklyResetKey: { type: String, default: "" },
     accounts: { type: [accountSchema], default: [] },
-    tasks: {
-      type: [
-        {
-          name: { type: String, required: true },
-          type: { type: String, required: true },
-          timesToComplete: { type: Number, default: 1 },
-          id: { type: String, required: true },
-        },
-      ],
-      default: [],
-    },
     // Opt-in flag for /raid-auto-manage - when true, the bot is
     // allowed to pull lostark.bible clear logs for this user's
     // characters and reconcile raid progress automatically. Off by
@@ -201,10 +193,6 @@ const userSchema = new mongoose.Schema(
     // Rolling 24-hour gate, including private/no-actionable/exhausted outcomes.
     lastAutoManageDailyFinishedAt: { type: Number, default: null },
     lastAutoManageDailyOutcome: { type: String, default: "" },
-    // Unix timestamp, in milliseconds, of the last channel notice posted when
-    // every character returned "Logs not enabled". The seven-day deduplication
-    // window limits repeated mentions for the same private-log condition.
-    lastPrivateLogNudgeAt: { type: Number, default: null },
     // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
     // a user can have at most one active sync source at a time. Local-sync
     // pulls raid clears from the user's local LOA Logs encounters.db via a

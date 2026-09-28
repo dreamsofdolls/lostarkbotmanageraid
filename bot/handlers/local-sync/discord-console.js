@@ -7,7 +7,6 @@ const {
   getLatestPreviewJob,
   getOrMintLocalSyncToken,
   getPreviewJob,
-  recordPreviewDelivery,
   issueLocalSyncAccessUrl,
   resolvePreviewJobState,
 } = require("../../services/local-sync");
@@ -261,9 +260,6 @@ function createLocalSyncDiscordConsole({
     }
     const payload = await buildConsole(targetUser, { job, lang, userDoc });
     const message = await targetUser.send(payload);
-    await recordPreviewDelivery(jobId, discordId, message, jobDeps).catch((err) => {
-      console.warn("[local-sync/discord] delivery receipt failed:", err?.message || err);
-    });
     return { delivered: true, channel: "dm", messageId: message.id };
   }
 

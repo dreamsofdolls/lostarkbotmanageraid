@@ -35,8 +35,6 @@ const localSyncPreviewSchema = new mongoose.Schema(
     applyingAt: { type: Date, default: null },
     appliedAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
-    deliveryChannelId: { type: String, default: "" },
-    deliveryMessageId: { type: String, default: "" },
     expiresAt: { type: Date, required: true },
   },
   {

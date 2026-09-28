@@ -54,7 +54,6 @@ module.exports = {
   getPreviewJob: previewJobs.getPreviewJob,
   getLatestPreviewJob: previewJobs.getLatestPreviewJob,
   cancelPreviewJob: previewJobs.cancelPreviewJob,
-  recordPreviewDelivery: previewJobs.recordPreviewDelivery,
   applyPreviewJob: applyPreview.applyPreviewJob,
   propagatePartyDeltas: partyPropagation.propagatePartyDeltas,
   findRegisteredPartyTargets: partyPropagation.findRegisteredPartyTargets,

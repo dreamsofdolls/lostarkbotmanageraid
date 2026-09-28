@@ -309,18 +309,6 @@ async function cancelPreviewJob(jobId, discordId, deps = {}) {
   );
 }
 
-async function recordPreviewDelivery(jobId, discordId, message, deps = {}) {
-  const PreviewModel = deps.PreviewModel || LocalSyncPreview;
-  const deliveryChannelId = String(message?.channelId || message?.channel?.id || "");
-  const deliveryMessageId = String(message?.id || "");
-  if (!deliveryChannelId || !deliveryMessageId) return null;
-  return PreviewModel.findOneAndUpdate(
-    { jobId, discordId },
-    { $set: { deliveryChannelId, deliveryMessageId } },
-    { new: true }
-  );
-}
-
 module.exports = {
   PREVIEW_APPLY_LEASE_MS,
   normalizePreviewDeltas,
@@ -337,5 +325,4 @@ module.exports = {
   finishPreviewJob,
   failPreviewJob,
   cancelPreviewJob,
-  recordPreviewDelivery,
 };

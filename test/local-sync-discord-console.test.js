@@ -462,7 +462,7 @@ test("global Local Sync buttons acknowledge quickly but reject a different Disco
   assert.match(replies[0].content, /different Discord account/);
 });
 
-test("Discord DM delivery renders the durable console and stores its receipt", async () => {
+test("Discord DM delivery renders the durable console without writing the preview", async () => {
   const discordId = "raid-sync-dm-user";
   const userDoc = {
     discordId,
@@ -478,6 +478,12 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
   PreviewModel.findOne = (filter) => {
     previewReads += 1;
     return readPreview(filter);
+  };
+  let previewWrites = 0;
+  const writePreview = PreviewModel.findOneAndUpdate.bind(PreviewModel);
+  PreviewModel.findOneAndUpdate = (...args) => {
+    previewWrites += 1;
+    return writePreview(...args);
   };
   const UserModel = makeConsoleUserModel(userDoc);
   let userReads = 0;
@@ -532,8 +538,7 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
   assert.equal(previewReads, 0, "the freshly created preview snapshot should be reused");
   assert.equal(userReads, 0, "the endpoint roster snapshot should be reused");
   assert.ok(componentIds(sent[0]).includes(`local-sync:apply:${pendingJob.jobId}`));
-  assert.equal(PreviewModel.value.deliveryChannelId, "dm-channel-1");
-  assert.equal(PreviewModel.value.deliveryMessageId, "message-1");
+  assert.equal(previewWrites, 0, "sending the DM should not write to the preview");
 });
 
 function matchesFilter(doc, filter) {
