@@ -53,9 +53,14 @@ const ACTION_ALIASES = new Map([
 ]);
 
 const GATE_TOKEN_RE = /^g([1-9])$/;
+// User (<@id>, <@!id>), role (<@&id>) and channel (<#id>) mention markup.
+// None of it can be a raid, difficulty or character name, so a post that
+// tags someone must parse exactly like the same post without the tag.
+const MENTION_RE = /<(?:@[!&]?|#)\d+>/g;
 
 function normalizeRaidChannelContent(content) {
   return String(content || "")
+    .replace(MENTION_RE, " ")
     .trim()
     .replace(/act\s+4/gi, "act4")
     .replace(/horizon\s+cathedral/gi, "horizon")

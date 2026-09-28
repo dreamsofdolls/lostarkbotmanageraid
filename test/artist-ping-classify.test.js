@@ -6,7 +6,11 @@ const assert = require("node:assert/strict");
 const {
   PING_BUCKETS,
   classifyArtistPing,
+  isClaimedByRaidParser,
 } = require("../bot/services/raid/artist-ping/ping-classify");
+const {
+  parseRaidMessage,
+} = require("../bot/services/raid/channel-monitor/channel-monitor-parser");
 
 const ping = (content, extra = {}) =>
   classifyArtistPing({ content, mentionsArtist: true, ...extra });
@@ -22,6 +26,36 @@ test("bots never get a reply", () => {
 test("a raid clear that happens to tag Artist belongs to the parser", () => {
   // The load-bearing guard: chatter must never steal a progress update.
   assert.equal(ping("<@1> Act4 Hard Soulrano", { parsesAsRaidCommand: true }), null);
+});
+
+test("a parsed raid clear is claimed by the parser in any channel", () => {
+  const parsed = parseRaidMessage("<@1> act4 hm Soulrano");
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: true }), true);
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: false }), true);
+});
+
+test("a raid parse error only silences Artist where the monitor answers it", () => {
+  // Chatter that happens to contain a raid keyword parses as an error object,
+  // which is truthy; it must not read as a raid command everywhere.
+  const parsed = parseRaidMessage("<@1> can you reset my stuff");
+  assert.equal(parsed.error, "invalid-raid");
+  // In the monitored raid channel the parser's hint is the answer.
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: true }), true);
+  // Elsewhere nothing posts a hint, so Artist still answers the ping.
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: false }), false);
+  assert.equal(
+    ping("<@1> can you reset my stuff", {
+      parsesAsRaidCommand: isClaimedByRaidParser({ parsed, inRaidChannel: false }),
+    }),
+    "fallback"
+  );
+});
+
+test("a message the parser ignores is never claimed", () => {
+  const parsed = parseRaidMessage("<@1> hi");
+  assert.equal(parsed, null);
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: true }), false);
+  assert.equal(isClaimedByRaidParser({ parsed, inRaidChannel: false }), false);
 });
 
 test("a bare mention is its own bucket", () => {
@@ -79,6 +113,23 @@ test("context outranks content", () => {
   assert.equal(ping("<@1> chào", { vietnamHour: 2 }), "greeting");
   // Spam beats sleeping: the newer signal about how they pinged wins.
   assert.equal(ping("<@1> chào", { vietnamHour: 4, recentlyAnswered: true }), "spam");
+});
+
+test("the sleep window follows the guild's language time zone", () => {
+  // Bedtime and wake-up posts fire at 03:00 and 08:00 on the guild's clock.
+  // jp runs two hours ahead of Vietnam: 03:00-07:59 JST is 01:00-05:59 VN.
+  assert.equal(ping("<@1> chào", { vietnamHour: 1, guildLang: "jp" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 5, guildLang: "jp" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 6, guildLang: "jp" }), "greeting");
+  assert.equal(ping("<@1> chào", { vietnamHour: 0, guildLang: "jp" }), "greeting");
+  // en runs on UTC: 03:00-07:59 UTC is 10:00-14:59 VN.
+  assert.equal(ping("<@1> chào", { vietnamHour: 10, guildLang: "en" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 14, guildLang: "en" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 15, guildLang: "en" }), "greeting");
+  assert.equal(ping("<@1> chào", { vietnamHour: 4, guildLang: "en" }), "greeting");
+  // A Vietnamese guild keeps 03:00-07:59 Vietnam time.
+  assert.equal(ping("<@1> chào", { vietnamHour: 3, guildLang: "vi" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 8, guildLang: "vi" }), "greeting");
 });
 
 test("every returned bucket is declared in PING_BUCKETS", () => {

@@ -32,6 +32,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A `/raid-schedule-preview` board that auto-locks at its start time keeps the 🗓 Board khác của lead switcher; before, the auto-lock refresh dropped that row.
 - On a `/raid-schedule-preview` board with more than 25 signups, Kick shows one menu per 25 people so everyone can be kicked; before, signups after #25 were missing from it. Editing a turn no longer removes members the 25-name menu could not list, such as someone who re-joined with another character and moved to the end.
 - Pressing End again on a `/raid-schedule-preview` board after the "board just changed" notice no longer reports every comp member as failed: characters whose raid is already complete count as cleared in the summary.
+- A post in the raid text channel that tags someone, such as `@Artist act4 hm Soulrano` or a mention after the names, is recorded like the same post without the tag. The mention used to be read as a raid or character name, so the post was rejected with a hint. Role and channel mentions are skipped the same way.
+- Artist answers an @-mention that uses a raid word such as "reset" or "hard" without being a raid post, like `@Artist can you reset my stuff`. Such a ping used to get no reply in any channel. In the raid text channel, where the monitor answers it with a hint, she still stays quiet so the author gets one answer.
+- Artist's "sleeping" reply to an @-mention follows the guild's `/raid-language` clock, like her bedtime and wake-up posts. A Japanese or English server used to get it on Vietnam time, so she chatted after announcing bedtime and claimed to be asleep after waking up there.
 
 ## 2026-09-27
 

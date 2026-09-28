@@ -86,6 +86,33 @@ test("pinging inside the sleep window wakes a drowsy Artist", () => {
   assert.match(ping(r), /artistPing\.sleeping/);
 });
 
+test("the sleep window follows the guild's clock, not Vietnam's", () => {
+  const replyAt = (utcMs, guildLang) =>
+    createArtistPingResponder({
+      clock: () => utcMs,
+      translate: (key) => key,
+    }).buildPingReply({
+      content: "<@1> chào",
+      userId: "u1",
+      mentionsArtist: true,
+      guildLang,
+    });
+
+  // 18:30 UTC: 01:30 in Vietnam, 03:30 in Japan, the hour after jp bedtime.
+  const jpBedtime = Date.UTC(2026, 3, 23, 18, 30);
+  assert.equal(replyAt(jpBedtime, "jp"), "artistPing.sleeping");
+  assert.equal(replyAt(jpBedtime, "vi"), "artistPing.greeting");
+  // 23:30 UTC: 06:30 in Vietnam, 08:30 in Japan, after jp wake-up.
+  const jpMorning = Date.UTC(2026, 3, 23, 23, 30);
+  assert.equal(replyAt(jpMorning, "jp"), "artistPing.greeting");
+  assert.equal(replyAt(jpMorning, "vi"), "artistPing.sleeping");
+  assert.equal(replyAt(jpMorning, "en"), "artistPing.greeting");
+  // 04:30 UTC: 11:30 in Vietnam, inside the en (UTC) window.
+  assert.equal(replyAt(Date.UTC(2026, 3, 24, 4, 30), "en"), "artistPing.sleeping");
+  // No guild language reads as a Vietnamese guild, as before.
+  assert.equal(replyAt(jpMorning, undefined), "artistPing.sleeping");
+});
+
 test("resetCooldowns clears the window state", () => {
   const r = harness();
   ping(r);

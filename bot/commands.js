@@ -1148,6 +1148,7 @@ module.exports = {
   handleLocalSyncRosterSelect,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
+  getCachedMonitorChannelId,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
