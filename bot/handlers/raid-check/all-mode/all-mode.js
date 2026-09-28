@@ -185,7 +185,16 @@ function createAllModeHandler({
       getStatusRaidsForCharacter,
       lang,
     });
-    const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
+    const {
+      applyRefreshedUserDoc: applyRefreshedPageDocs,
+    } = createAllModeRefreshIndex(users, pagesData);
+    // The embed reads the refreshed doc, so the auto-sync button's maps follow it.
+    const applyRefreshedUserDoc = (userDoc) => {
+      if (!applyRefreshedPageDocs(userDoc)) return false;
+      autoManageStateByDiscordId.set(userDoc.discordId, !!userDoc.autoManageEnabled);
+      localSyncStateByDiscordId.set(userDoc.discordId, !!userDoc.localSyncEnabled);
+      return true;
+    };
     const { buildRaidPage } = createAllModePageRenderers({
       authorMeta,
       buildAccountPageEmbed,

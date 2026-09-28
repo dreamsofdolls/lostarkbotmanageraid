@@ -311,3 +311,28 @@ test("raid-check roster refresh that outlives the session leaves the controls di
 
   assert.ok(lastEditComponents(session.edits).every(item => item.disabled));
 });
+
+test("raid-check auto-sync button follows the flag of a refreshed roster", async () => {
+  const userDoc = {
+    discordId: "roster-user", discordDisplayName: "Roster user", autoManageEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+  };
+  const { handlers, edits } = await openAllModeSession({
+    userDoc,
+    // The manager turned auto-sync off with this view's own button earlier.
+    runManualRosterRefresh: async () => ({
+      status: "updated", accountName: "Roster", userDoc: { ...userDoc, autoManageEnabled: false },
+    }),
+  });
+  const buttonIds = () => lastEditComponents(edits).map(item => item.custom_id);
+  assert.ok(buttonIds().includes("raid-check:disable-auto-one:roster-user"));
+
+  await handlers.collect({
+    customId: "raid-check-all:roster-refresh", user: { id: "ui-manager" },
+    deferUpdate: async () => {}, followUp: async () => {},
+  });
+
+  assert.ok(buttonIds().includes("raid-check:enable-auto-one:roster-user"));
+  assert.ok(!buttonIds().includes("raid-check:disable-auto-one:roster-user"));
+  await handlers.end();
+});

@@ -23,6 +23,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - A Discord error on a click in the `/raid-check` Manager view or the `/raid-bg view` scene browser (a click Discord had already expired, for one) is logged and the session carries on. It used to shut the whole bot down, taking every open panel with it.
 - A `/raid-check` 🔄 Refresh roster that finishes after the 5-minute session has closed shows the refreshed roster with the controls still disabled. It used to switch the expired buttons back on, and clicking one ended in "This interaction failed".
+- The `/raid-check` Enable / Disable auto-sync button follows the user's auto-sync state once 🔄 Refresh roster or the opening background refresh reloads them, as the roster card already did. It used to keep the label from when the view opened, so a Manager who had just turned auto-sync off was still offered Disable.
 
 ## 2026-09-27
 
