@@ -222,6 +222,14 @@ function isGoldBound(raidKey, modeKey) {
   return !!RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.boundGold;
 }
 
+// One gate's paid gold: `gold` is everything it pays, `bound` the part of it
+// that is bound. A fully bound mode pays only bound gold.
+function getGateGoldParts(raidKey, modeKey, gate) {
+  const bound = getBoundGoldForGate(raidKey, modeKey, gate);
+  const unbound = isGoldBound(raidKey, modeKey) ? 0 : getGoldForGate(raidKey, modeKey, gate);
+  return { gold: unbound + bound, bound };
+}
+
 // Canonical progression order: raid groups follow their catalog declaration
 // order (Act 4 -> Kazeros -> Serca -> Horizon), and modes follow theirs
 // (normal -> solo -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
@@ -270,6 +278,7 @@ module.exports = {
   getGoldForGate,
   getBaseGoldForGate,
   getBoundGoldForGate,
+  getGateGoldParts,
   hasRaidMode,
   isGoldBound,
   isSoloModeKey,
