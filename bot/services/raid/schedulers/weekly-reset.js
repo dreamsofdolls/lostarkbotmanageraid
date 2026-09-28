@@ -55,27 +55,15 @@ function getWeekKey(date = new Date()) {
 }
 
 /**
- * Target week key for reset purposes. The "reset moment" is Wednesday 10:00 UTC,
- * which is Wednesday 17:00 Vietnam time (UTC+7). Before that moment in a given
- * ISO week, the target is the PREVIOUS ISO week (so users stay on last week's
- * key). At or after that moment, the target is the current ISO week. This lets
- * catch-up runs on non-Wednesdays still pick up any users whose cursor lags the
- * current target - the window missing bug.
+ * Target week key for reset purposes: the ISO week of the current reset
+ * window's start (Wednesday 10:00 UTC = Wednesday 17:00 Vietnam time). Before
+ * that moment in a given ISO week, the target is the PREVIOUS ISO week (so
+ * users stay on last week's key). At or after that moment, the target is the
+ * current ISO week. This lets catch-up runs on non-Wednesdays still pick up
+ * any users whose cursor lags the current target - the window missing bug.
  */
 function getTargetResetKey(now = new Date()) {
-  const utcDay = now.getUTCDay();
-  const utcHour = now.getUTCHours();
-  // Sunday (0) is ISO day 7 - part of the same ISO week as the preceding
-  // Wednesday, so treat it as "after this week's reset moment".
-  const passedResetMoment =
-    utcDay === 0 ||
-    utcDay > 3 ||
-    (utcDay === 3 && utcHour >= 10);
-
-  if (passedResetMoment) return getWeekKey(now);
-
-  const earlier = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  return getWeekKey(earlier);
+  return getWeekKey(new Date(weeklyResetStartMs(now)));
 }
 
 function getCurrentResetStartMs(now = new Date()) {
@@ -152,7 +140,6 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
  */
 async function resetWeekly(now = new Date()) {
   const targetKey = getTargetResetKey(now);
-  const resetStartMs = getCurrentResetStartMs(now);
 
   const staleUsers = await User.find({ weeklyResetKey: { $ne: targetKey } }).select("_id discordId").lean();
   let modifiedCount = 0;
@@ -161,14 +148,7 @@ async function resetWeekly(now = new Date()) {
     try {
       const didModify = await saveWithRetry(async () => {
         const user = await User.findOne({ discordId });
-        if (!user || user.weeklyResetKey === targetKey) return false;
-
-        for (const account of user.accounts || []) {
-          for (const character of account.characters || []) {
-            clearCharacterProgress(character, { preserveSinceMs: resetStartMs });
-          }
-        }
-        user.weeklyResetKey = targetKey;
+        if (!ensureFreshWeek(user, now)) return false;
         await user.save();
         return true;
       });
@@ -208,11 +188,7 @@ async function resetWeekly(now = new Date()) {
  * for rare long outages.
  */
 function isWithinWeeklyResetWindow(now = new Date()) {
-  const utcDay = now.getUTCDay();    // 0 = Sunday, 3 = Wednesday, 4 = Thursday
-  const utcHour = now.getUTCHours();
-  if (utcDay === 3 && utcHour >= 10) return true; // Wed 10:00 UTC → Wed 23:59 UTC
-  if (utcDay === 4 && utcHour < 10) return true;  // Thu 00:00 UTC → Thu 09:59 UTC
-  return false;
+  return now.getTime() - weeklyResetStartMs(now) < 24 * 60 * 60 * 1000;
 }
 
 /**

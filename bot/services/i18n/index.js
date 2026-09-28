@@ -283,6 +283,8 @@ module.exports = {
   normalizeLanguage,
   resolveLocale,
   getSupportedLanguages,
+  lookupKey,
+  applyVars,
   DEFAULT_LANGUAGE,
   SUPPORTED_LANGUAGES,
 };

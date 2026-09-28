@@ -13,6 +13,7 @@ const {
   rollbackGuildState,
 } = require("./guild-state-claim");
 const { sleep } = require("../../../utils/async");
+const { toLocalClock } = require("../../../utils/raid/schedule/artist-clock");
 
 const MAINTENANCE_POST_RETRY_DELAY_MS = 1_000;
 
@@ -28,8 +29,7 @@ const MAINTENANCE_GROUPS = {
 };
 
 function maintenanceTickKey(now, slot) {
-  const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return `${vn.toISOString().slice(0, 10)}:${slot.key}`;
+  return `${toLocalClock(now, "vi").toISOString().slice(0, 10)}:${slot.key}`;
 }
 
 async function claimMaintenanceTick({ GuildConfig, cfg, conf, groupConfig, tickKey }) {

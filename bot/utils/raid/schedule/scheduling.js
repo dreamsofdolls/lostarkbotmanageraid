@@ -9,6 +9,8 @@
  * handlers/raid/channel.js (via re-export from commands).
  */
 
+const { weeklyResetStartMs } = require("./reset-windows");
+
 /**
  * Build the scheduling-helpers service from injected scheduler-state
  * getters. All resolve* fns are getters (not values) so the factory can
@@ -78,21 +80,7 @@ function createSchedulingHelpers({
   }
   
   function nextWeeklyResetBoundaryMs(now) {
-    const candidate = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-      10, 0, 0, 0
-    ));
-    const utcDay = now.getUTCDay();
-    if (utcDay === 3 && now.getUTCHours() < 10) {
-      return candidate.getTime();
-    }
-    // If today is Wed at/after 10 UTC, daysUntilWed collapses to 0 via
-    // modulo; promote it to 7 to advance a full week.
-    const daysUntilWed = ((3 - utcDay + 7) % 7) || 7;
-    candidate.setUTCDate(candidate.getUTCDate() + daysUntilWed);
-    return candidate.getTime();
+    return weeklyResetStartMs(now) + 7 * 24 * 60 * 60 * 1000;
   }
 
   function nextHalfHourBoundaryMs(now) {
