@@ -22,7 +22,7 @@ const {
 } = require("../../../utils/raid/common/changed-characters");
 const { BIBLE_ERROR_KIND } = require("../bible/error-kinds");
 const { describeBibleError } = require("../bible/error-text");
-const { getAppliedAutoManageEntries } = require("./utils");
+const { getAppliedAutoManageEntries, getAutoManageEntries } = require("./utils");
 
 const MAX_REASON_NAMES = 10;
 // What the user can fix first, then what waits on Bible, then the rest.
@@ -64,7 +64,7 @@ function createAutoManageReportEmbeds({
     const description = [
       t("raid-auto-manage.hiddenWarning.descriptionLine1", lang, {
         hidden: hiddenChars.length,
-        total: (probeReport?.perChar || []).length,
+        total: getAutoManageEntries(probeReport).length,
       }),
       "",
       t("raid-auto-manage.hiddenWarning.charsBlockHeader", lang),

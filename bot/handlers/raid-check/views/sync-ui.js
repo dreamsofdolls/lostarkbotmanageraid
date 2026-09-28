@@ -20,6 +20,7 @@ const {
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const {
   getAppliedAutoManageEntries,
+  getAutoManageEntries,
 } = require("../../../services/auto-manage/reports/utils");
 
 // Discord's cap on an embed description.
@@ -70,7 +71,7 @@ function createSyncUi({
   // Private logs are a user setting that no retry fixes, so a report whose
   // characters all failed on that alone counts as skipped, not failed.
   function hasOnlyPrivateLogErrors(report) {
-    const entries = Array.isArray(report?.perChar) ? report.perChar : [];
+    const entries = getAutoManageEntries(report);
     return entries.length > 0 &&
       entries.every((entry) => isPublicLogDisabledError(entry?.error));
   }
