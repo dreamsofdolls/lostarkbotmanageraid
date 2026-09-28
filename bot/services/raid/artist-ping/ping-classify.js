@@ -65,6 +65,25 @@ const CONTENT_BUCKET_ORDER = Object.freeze([
 ]);
 
 /**
+ * Whether the raid text parser, not Artist, answers this message. A parsed
+ * clear is never chatter, wherever it was posted. A parse error comes back as
+ * a truthy `{error}` object, but the monitor only answers it (with a hint) in
+ * the guild's monitored raid channel; anywhere else nothing answers it, so it
+ * must not cost the pinger a reply.
+ *
+ * @param {Object} input
+ * @param {null|Object} input.parsed - parseRaidMessage result for the message
+ * @param {boolean} [input.inRaidChannel=false] - posted in the guild's
+ *   monitored raid channel
+ * @returns {boolean} value for classifyArtistPing's parsesAsRaidCommand
+ */
+function isClaimedByRaidParser({ parsed, inRaidChannel = false } = {}) {
+  if (!parsed) return false;
+  if (parsed.error) return Boolean(inRaidChannel);
+  return true;
+}
+
+/**
  * Decide which response bucket an @Artist mention falls into.
  *
  * @param {Object} input
@@ -113,4 +132,5 @@ function classifyArtistPing({
 module.exports = {
   PING_BUCKETS,
   classifyArtistPing,
+  isClaimedByRaidParser,
 };

@@ -29,6 +29,7 @@ const {
   handleRaidChannelMessage,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
+  getCachedMonitorChannelId,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
@@ -53,6 +54,9 @@ const { createRaidInteractionRouter } = require("./bot/app/interaction-router-re
 const {
   createArtistPingResponder,
 } = require("./bot/services/raid/artist-ping/ping-responder");
+const {
+  isClaimedByRaidParser,
+} = require("./bot/services/raid/artist-ping/ping-classify");
 const {
   parseRaidMessage,
 } = require("./bot/services/raid/channel-monitor/channel-monitor-parser");
@@ -221,8 +225,13 @@ async function startBot() {
           userId: message.author.id,
           mentionsArtist: true,
           // The parser owns raid updates; a clear that happens to tag Artist
-          // must be recorded, not chatted at.
-          parsesAsRaidCommand: Boolean(parseRaidMessage(message.content)),
+          // must be recorded, not chatted at. A parse error is only answered
+          // (with a hint) in the monitored raid channel, the same check
+          // handleRaidChannelMessage applies above.
+          parsesAsRaidCommand: isClaimedByRaidParser({
+            parsed: parseRaidMessage(message.content),
+            inRaidChannel: getCachedMonitorChannelId(message.guildId) === message.channelId,
+          }),
           lang,
         });
         if (reply) await message.reply({ content: reply });

@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - A post in the raid text channel that tags someone, such as `@Artist act4 hm Soulrano` or a mention after the names, is recorded like the same post without the tag. The mention used to be read as a raid or character name, so the post was rejected with a hint. Role and channel mentions are skipped the same way.
+- Artist answers an @-mention that uses a raid word such as "reset" or "hard" without being a raid post, like `@Artist can you reset my stuff`. Such a ping used to get no reply in any channel. In the raid text channel, where the monitor answers it with a hint, she still stays quiet so the author gets one answer.
 
 ## 2026-09-27
 
