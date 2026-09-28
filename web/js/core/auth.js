@@ -124,11 +124,5 @@ export function bootstrapAuthSession({
       return authState;
     },
     render,
-    updateExpSec(newExpSec) {
-      if (!newExpSec || !authState || authState.kind !== "ok") return false;
-      authState.expSec = newExpSec;
-      render();
-      return true;
-    },
   };
 }

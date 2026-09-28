@@ -690,15 +690,6 @@ table th { color: var(--text-dim); font-weight: 600; }
   color: #ffaa88;
   border-color: rgba(255, 112, 67, 0.5);
 }
-.gate-db-other-mode {
-  /* "cleared at a different mode" · the one cool hue on the page, so it
-     is pulled toward slate rather than cornflower to sit in the warm
-     palette. renderGateBadge still emits this state even though
-     renderDiffLegend filters it out of the legend strip. */
-  background: rgba(122, 148, 176, 0.16);
-  color: #a8bccd;
-  border-color: rgba(122, 148, 176, 0.42);
-}
 .gate-empty {
   background: var(--bg-deep);
   color: var(--text-dim);

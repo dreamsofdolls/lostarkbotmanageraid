@@ -5,7 +5,6 @@ import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/rend
 import { resolvePreviewLastSync } from "/sync/js/sync/preview-stats.js";
 
 const GATE_STATE_SYMBOL = Object.freeze({
-  "db-other-mode": "◐",
   "mode-conflict": "⚠",
   pending: "⏬",
   synced: "✓",
@@ -357,11 +356,10 @@ function renderClassIcon(className) {
 }
 
 function renderGateBadge(gate, state) {
-  // 5-state legend:
+  // 4-state legend (states from resolveCellState in preview-utils.js):
   //   synced        green checkmark
   //   pending       yellow down-arrow (will write)
   //   mode-conflict orange exclamation (will mode-reset + write)
-  //   db-other-mode blue dot (DB cleared at different mode, file silent)
   //   empty         gray dot
   const cls = `gate-badge gate-${state}`;
   const symbol = gateStateSymbol(state);

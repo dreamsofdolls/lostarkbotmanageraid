@@ -179,8 +179,6 @@ const {
 } = require("./utils/raid/common/character");
 const {
   RAID_CHECK_USER_QUERY_FIELDS,
-  getRaidScanRange,
-  buildRaidCheckUserQuery,
 } = require("./utils/raid/queries/raid-check");
 const { createSchedulingHelpers } = require("./utils/raid/schedule/scheduling");
 
@@ -264,9 +262,6 @@ let handleRaidScheduleSelect;
 let handleEditRosterCommand;
 let handleEditRosterAutocomplete;
 let handleEditRosterButton;
-let buildRaidCheckSnapshotFromUsers;
-let formatRaidCheckNotEligibleFieldValue;
-let getRaidCheckRenderableChars;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
@@ -714,8 +709,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   getGatesForRaid,
   ensureAssignedRaids,
   getGateKeys,
-  getRaidScanRange,
-  buildRaidCheckUserQuery,
   buildAccountPageEmbed,
   buildStatusFooterText,
   summarizeRaidProgress,
@@ -746,9 +739,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildTurnPlanEmbed,
 });
 ({
-  buildRaidCheckSnapshotFromUsers,
-  formatRaidCheckNotEligibleFieldValue,
-  getRaidCheckRenderableChars,
   handleRaidCheckCommand,
   handleRaidCheckButton,
 } = raidCheckCommandHandlers);
@@ -1161,16 +1151,12 @@ module.exports = {
   applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
   handleStuckNudgeButton,
   __test: {
-    buildRaidCheckSnapshotFromUsers,
-    formatRaidCheckNotEligibleFieldValue,
-    getRaidCheckRenderableChars,
     STATUS_PAGINATION_SESSION_MS,
     RAID_CHECK_PAGINATION_SESSION_MS,
     nextIntervalTickMs,
     nextAnnouncementEligibleBoundaryMs,
     nextAnnouncementSchedulerCheckMs,
     buildAnnouncementWhenItFiresText,
-    buildRaidCheckUserQuery,
     applyStaleAccountRefreshes,
     formatNextCooldownRemaining,
     buildAccountFreshnessLine,

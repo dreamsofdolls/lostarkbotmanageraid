@@ -6,11 +6,6 @@
 "use strict";
 
 module.exports = {
-  language: {
-    label: "English",
-    flag: "🇬🇧",
-    code: "en",
-  },
   common: {
     pagination: {
       previous: "◀ Previous",
@@ -360,7 +355,6 @@ module.exports = {
   },
   "raid-schedule": {
     board: {
-      summary: "**{raid}** · needs iLvl {ilvl}+",
       startLine: "Kicks off {rel} · {abs}",
       leadLine: "Lead: {lead}",
       roomLine: "Room: `{room}`",
@@ -1207,8 +1201,6 @@ module.exports = {
       eventGoneDescription: "This board was ended/cancelled/deleted after you opened /raid-check. Run /raid-check again for a fresh list~",
     },
     staleButton: {
-      title: "Button expired",
-      raidInvalidDescription: "The raid in this button is no longer valid (stale session or bot restarted). Run `/raid-check` again to refresh.",
       unsupportedActionTitle: "Unsupported button action",
       unsupportedActionDescription: "Action `{action}` does not match a known flow. The button may be from an old build - run `/raid-check` again to refresh.",
     },
@@ -1219,11 +1211,6 @@ module.exports = {
       noFilterMatchesDescription: "No roster has a character matching the selected user, raid, and status. Change a filter to continue.",
       sessionLockTitle: "Only the session opener can use this",
       sessionLockDescription: "This component belongs to someone else's `/raid-check` session. Open your own session by running `/raid-check`.",
-    },
-    snapshot: {
-      notEligibleLow: "_Not eligible yet (iLvl below min)_",
-      notEligibleHigh: "_Not eligible yet (out-grown this mode)_",
-      notEligibleGeneric: "_Not eligible yet_",
     },
     allMode: {
       rollupLine: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
@@ -1278,7 +1265,6 @@ module.exports = {
       reportLineAllIntro: "Checked **{users}** Auto-sync users · **{chars}** characters across **all raids**.",
       reportLineAllHint: "Reopen `/raid-check` to see the updated progress across all raids.",
       noOptedInTitle: "No opted-in users",
-      noOptedInDescription: "No one in the current pending list has run `/raid-auto-manage action:on`, so Artist has no users to sync. Ask the listed members to enable auto-manage, or use `/raid-set` to update manually.",
       reportTitle: {
         variants: [
           "Sync done",
@@ -1300,7 +1286,6 @@ module.exports = {
           "No one synced",
         ],
       },
-      reportLineIntro: "Artist triggered sync for **{users}** opted-in users (**{chars}** pending chars).",
       reportFields: {
         checked: "Checked",
         synced: "New data",
@@ -1314,8 +1299,6 @@ module.exports = {
       reportTailFailed: "⚠️ **{n}** users failed to sync - check the bot logs for details.",
       reportTailSkipped: "⏳ **{n}** users were skipped: another sync was running, they use Local Sync, they have no roster, or their logs are private.",
       reportHintAllFailed: "Try again in a few minutes, or ask each member to record progress with `/raid-set`.",
-      reportHintFailed: "Try again in a few minutes, or ask the members still pending on **{raidLabel}** to record progress with `/raid-set`.",
-      reportLineHint: "Open `/raid-check` and pick **{raidLabel}** in the filter dropdown to see the new pending list.",
     },
     syncDm: {
       title: "{doneIcon} Artist synced your raid progress",
@@ -2735,9 +2718,7 @@ module.exports = {
         random: "Random split",
       },
       assignmentLabel: "📌 Roster map",
-      fileLabel: "🖼️ File",
       dimsLabel: "📐 Dimensions",
-      sizeLabel: "💾 Storage",
       footer: "/raid-bg view to browse · /raid-bg edit to replace/delete",
     },
     browse: {
@@ -2770,30 +2751,7 @@ module.exports = {
       noneTitle: "ℹ️ No background yet",
       noneDescription:
         "You haven't handed Artist an image yet. Run `/raid-bg set image:<file>` to drop the first one in.",
-      currentTitle: "🖼️ Current background",
-      currentDescription: "This is what Artist's painting behind your `/raid-status` raid card.",
-      fileLabel: "📁 File",
-      dimsLabel: "📐 Stored",
-      imagesLabel: "🖼️ Images",
-      imagesValue: "{count} image(s) · {mode}",
-      uploadLabel: "🕐 Uploaded",
-      uploadUnknown: "unknown",
       slotsLabel: "🖼️ Saved slots",
-      assignmentLabel: "📌 Roster map",
-      footer: "/raid-bg set to upload · /raid-bg edit to replace/delete",
-    },
-    remove: {
-      nothingTitle: "ℹ️ Nothing to clear",
-      nothingDescription: "You haven't handed Artist an image yet.",
-      successTitle: "🗑️ Background cleared",
-      successDescription:
-        "You're back on the default text embed for `/raid-status`. Send Artist a new one with `/raid-bg set` any time.",
-      invalidImageTitle: "⚠️ Background slot not found",
-      invalidImageDescription:
-        "Slot #{requested} is not saved. Pick **1** through **{count}**, or leave `image` empty to clear everything.",
-      partialSuccessTitle: "🗑️ Background slot removed",
-      partialSuccessDescription:
-        "Artist removed slot **#{index}**. The remaining saved slots are shown below.",
     },
   },
 };

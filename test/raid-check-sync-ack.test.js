@@ -34,16 +34,21 @@ test("raid-check sync acknowledges before language and snapshot DB work", async 
         },
       };
     },
+    find() {
+      return {
+        select() { return this; },
+        lean: async () => {
+          events.push("snapshot");
+          return [];
+        },
+      };
+    },
   };
   const ui = createSyncUi({
     EmbedBuilder: FakeEmbedBuilder,
     MessageFlags: { Ephemeral: 64 },
     UI: { colors: { neutral: 0 }, icons: { info: "i" } },
     User,
-    computeRaidCheckSnapshot: async () => {
-      events.push("snapshot");
-      return { pendingChars: [], userMeta: new Map() };
-    },
   });
   const interaction = {
     user: { id: "sync-manager" },
@@ -55,10 +60,7 @@ test("raid-check sync acknowledges before language and snapshot DB work", async 
     },
   };
 
-  await ui.handleRaidCheckSyncClick(interaction, {
-    raidKey: "act4",
-    modeKey: "normal",
-  });
+  await ui.handleRaidCheckSyncClick(interaction);
 
   assert.equal(events[0], "defer");
   assert.ok(events.includes("language"));
@@ -69,10 +71,14 @@ test("raid-check sync commits through the shared retry-safe service", async () =
   clearUserLanguageCache();
   const commitCalls = [];
   const targetDoc = {
+    discordId: "target",
     autoManageEnabled: true,
     accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
   };
   const User = {
+    find() {
+      return { select() { return this; }, lean: async () => [targetDoc] };
+    },
     findOne({ discordId }) {
       if (discordId === "manager") {
         return {
@@ -118,14 +124,6 @@ test("raid-check sync commits through the shared retry-safe service", async () =
     },
     raidCheckSyncLimiter: { run: (operation) => operation() },
     discordUserLimiter: { run: (operation) => operation() },
-    computeRaidCheckSnapshot: async () => ({
-      pendingChars: [{
-        discordId: "target",
-        accountName: "Roster",
-        charName: "Aki",
-      }],
-      userMeta: new Map([["target", { autoManageEnabled: true }]]),
-    }),
   });
 
   await ui.handleRaidCheckSyncClick({
@@ -135,9 +133,6 @@ test("raid-check sync commits through the shared retry-safe service", async () =
     editReply: async (payload) => {
       editPayload = payload;
     },
-  }, {
-    raidKey: "act4",
-    modeKey: "normal",
   });
 
   assert.equal(commitCalls.length, 1);
@@ -199,14 +194,13 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
     },
     releaseAutoManageSyncSlot: () => events.push("release"),
     raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
-    computeRaidCheckSnapshot: () => assert.fail("All raids must not reuse a single-raid filter"),
   });
   let reply;
   await ui.handleRaidCheckSyncClick({
     user: { id: "all-manager" }, client: { users: {} },
     deferReply: async () => events.push("defer"),
     editReply: async payload => { reply = payload; },
-  }, null);
+  });
   assert.deepEqual(events, ["defer", "query", "acquire", "week", "gather", "commit", "release"]);
   assert.match(reply.embeds[0].description, /all raids/i);
   // A clean run carries only the three always-on counters: nothing was
@@ -254,7 +248,7 @@ test("sync all isolates per-user failures, rechecks consent, and releases only a
   await ui.handleRaidCheckSyncClick({
     user: { id: "failure-manager" }, client: { users: {} },
     deferReply: async () => {}, editReply: async () => {},
-  }, null);
+  });
   assert.deepEqual(gathered.sort(), ["gather-error", "ok-user"]);
   assert.deepEqual(committed, ["ok-user"]);
   assert.deepEqual(released.sort(), ["changed-to-local", "gather-error", "ok-user"]);
@@ -301,7 +295,7 @@ test("sync report adds a counter field only when that outcome happened", async (
   await ui.handleRaidCheckSyncClick({
     user: { id: "counter-manager" }, client: { users: {} },
     deferReply: async () => {}, editReply: async payload => { reply = payload; },
-  }, null);
+  });
 
   const embed = reply.embeds[0];
   const counters = embed.fields

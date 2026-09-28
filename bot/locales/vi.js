@@ -9,11 +9,6 @@
 "use strict";
 
 module.exports = {
-  language: {
-    label: "Tiếng Việt",
-    flag: "🇻🇳",
-    code: "vi",
-  },
   // Shared UI fragments rendered everywhere (pagination buttons,
   // progress rollups in footers). Migrated together because they
   // surface in /raid-status, /raid-check, raid-check/all-mode, and any
@@ -374,7 +369,6 @@ module.exports = {
   },
   "raid-schedule": {
     board: {
-      summary: "**{raid}** · cần iLvl {ilvl}+",
       startLine: "Khởi raid {rel} · {abs}",
       leadLine: "Lead: {lead}",
       roomLine: "Phòng: `{room}`",
@@ -1230,8 +1224,6 @@ module.exports = {
       eventGoneDescription: "Board này vừa bị end/hủy/xóa sau khi cậu mở /raid-check. Gõ lại /raid-check để lấy danh sách mới nha~",
     },
     staleButton: {
-      title: "Button đã hết hạn",
-      raidInvalidDescription: "Raid trong button không còn hợp lệ (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
       unsupportedActionTitle: "Button action không hỗ trợ",
       unsupportedActionDescription: "Action `{action}` không khớp với flow Artist biết. Có thể button cũ từ build trước, gõ `/raid-check` lại để refresh nha.",
     },
@@ -1242,11 +1234,6 @@ module.exports = {
       noFilterMatchesDescription: "Không roster nào có character khớp user, raid và trạng thái đang chọn. Đổi một bộ lọc để xem tiếp nhé~",
       sessionLockTitle: "Chỉ người mở mới bấm được",
       sessionLockDescription: "Component này thuộc session `/raid-check` của người khác nha cậu, Artist chỉ cho người mở session điều khiển. Cậu mở session riêng bằng `/raid-check` của mình nhé.",
-    },
-    snapshot: {
-      notEligibleLow: "_Chưa đủ điều kiện (iLvl thấp hơn min)_",
-      notEligibleHigh: "_Chưa đủ điều kiện (đã out-grown mode này)_",
-      notEligibleGeneric: "_Chưa đủ điều kiện_",
     },
     allMode: {
       rollupLine: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
@@ -1301,7 +1288,6 @@ module.exports = {
       reportLineAllIntro: "Đã kiểm tra **{users}** người bật Auto-sync · **{chars}** nhân vật trên **toàn bộ raid**.",
       reportLineAllHint: "Mở lại `/raid-check` để xem tiến độ mới của toàn bộ raid nha~",
       noOptedInTitle: "Không có user nào opt-in",
-      noOptedInDescription: "Trong list pending hiện tại không có ai đã `/raid-auto-manage action:on` cả nha, Artist không có user để sync. Nhắc các cậu trong list bật auto-manage, hoặc dùng `/raid-set` để update thủ công.",
       reportTitle: {
         variants: [
           "Sync xong",
@@ -1323,7 +1309,6 @@ module.exports = {
           "Không sync được ai cả",
         ],
       },
-      reportLineIntro: "Artist đã trigger sync cho **{users}** opted-in user (**{chars}** pending char).",
       reportFields: {
         checked: "Đã kiểm tra",
         synced: "Có data mới",
@@ -1337,8 +1322,6 @@ module.exports = {
       reportTailFailed: "⚠️ **{n}** user fail sync - xem bot log cho chi tiết nha.",
       reportTailSkipped: "⏳ **{n}** user tạm bỏ qua vì đang có lượt sync khác, đang dùng Local Sync, chưa có roster hoặc để log private nha.",
       reportHintAllFailed: "Thử lại sau vài phút, hoặc nhờ từng người dùng `/raid-set` để ghi tay nha.",
-      reportHintFailed: "Thử lại sau vài phút, hoặc nhờ mấy người còn pending ở **{raidLabel}** dùng `/raid-set` để ghi tay nha.",
-      reportLineHint: "Mở `/raid-check` rồi pick **{raidLabel}** ở dropdown filter để xem list pending mới nha~",
     },
     syncDm: {
       title: "{doneIcon} Artist vừa sync progress raid giúp cậu",
@@ -2768,9 +2751,7 @@ module.exports = {
         random: "Random lúc lưu",
       },
       assignmentLabel: "📌 Map roster",
-      fileLabel: "🖼️ File",
       dimsLabel: "📐 Kích thước",
-      sizeLabel: "💾 Lưu trữ",
       footer: "/raid-bg view để xem lại · /raid-bg edit để thay/xoá cảnh",
     },
     browse: {
@@ -2803,31 +2784,7 @@ module.exports = {
       noneTitle: "ℹ️ Cậu chưa có background nào hết á",
       noneDescription:
         "Cậu chưa upload background lần nào nha~ Chạy `/raid-bg set image:<file>` để cho Artist ảnh đầu tiên nhé!",
-      currentTitle: "🖼️ Background của cậu nè~",
-      currentDescription:
-        "Đây là ảnh Artist đang dùng cho raid card của cậu mỗi lần `/raid-status`.",
-      fileLabel: "📁 File",
-      dimsLabel: "📐 Đã lưu",
-      imagesLabel: "🖼️ Ảnh",
-      imagesValue: "{count} ảnh · {mode}",
-      uploadLabel: "🕐 Cậu upload",
-      uploadUnknown: "không rõ",
       slotsLabel: "🖼️ Slot đã lưu",
-      assignmentLabel: "📌 Map roster",
-      footer: "/raid-bg set để upload thêm · /raid-bg edit để thay/xoá cảnh",
-    },
-    remove: {
-      nothingTitle: "ℹ️ Không có gì để Artist xoá đâu",
-      nothingDescription: "Cậu chưa upload background lần nào nha~",
-      successTitle: "🗑️ Artist đã cất background đi rồi",
-      successDescription:
-        "Cậu quay về với text embed mặc định cho `/raid-status` rồi đó. Lúc nào muốn có background lại thì `/raid-bg set` Artist nhé~",
-      invalidImageTitle: "⚠️ Không thấy slot background đó",
-      invalidImageDescription:
-        "Slot #{requested} chưa được lưu. Chọn số từ **1** tới **{count}**, hoặc bỏ trống `image` để xoá hết.",
-      partialSuccessTitle: "🗑️ Đã xoá một slot background",
-      partialSuccessDescription:
-        "Artist đã xoá slot **#{index}** rồi. Những slot còn lại ở dưới đây để cậu kiểm tra lại nha.",
     },
   },
 };

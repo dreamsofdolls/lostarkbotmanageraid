@@ -26,15 +26,7 @@ function isRaidCheckVisibleRaid(raid) {
   return isRaidCheckVisibleMode(raid?.modeKey) && raid?.goldReceives !== false;
 }
 
-function filterRaidCheckRequirementMap(requirementMap) {
-  return Object.fromEntries(
-    Object.entries(requirementMap || {})
-      .filter(([, entry]) => isRaidCheckVisibleRaid(entry))
-  );
-}
-
 module.exports = {
-  filterRaidCheckRequirementMap,
   isRaidCheckVisibleCharacter,
   isRaidCheckVisibleMode,
   isRaidCheckVisibleRaid,

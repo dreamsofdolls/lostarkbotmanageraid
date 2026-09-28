@@ -4,7 +4,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  filterRaidCheckRequirementMap,
   isRaidCheckVisibleMode,
   isRaidCheckVisibleRaid,
 } = require("../bot/handlers/raid-check/visibility");
@@ -24,17 +23,4 @@ test("raid-check visibility rejects Solo and gold-locked raids", () => {
     isRaidCheckVisibleRaid({ modeKey: "hard", goldReceives: true }),
     true
   );
-});
-
-test("raid-check requirement map removes Solo entries without mutating the source", () => {
-  const source = {
-    armoche_normal: { raidKey: "armoche", modeKey: "normal" },
-    armoche_solo: { raidKey: "armoche", modeKey: "solo" },
-    armoche_hard: { raidKey: "armoche", modeKey: "hard" },
-  };
-
-  const filtered = filterRaidCheckRequirementMap(source);
-
-  assert.deepEqual(Object.keys(filtered), ["armoche_normal", "armoche_hard"]);
-  assert.ok(source.armoche_solo, "source catalog must stay intact for raid-status");
 });
