@@ -215,7 +215,6 @@ async function startBot() {
         // as someone talking to Artist.
         if (!message.mentions?.users?.has(client.user.id)) return;
 
-        const stripped = String(message.content || "").replace(/<@!?\d+>/g, " ");
         const lang = await getUserLanguage(message.author.id, { UserModel: User });
         const reply = artistPing.buildPingReply({
           content: message.content,
@@ -223,7 +222,7 @@ async function startBot() {
           mentionsArtist: true,
           // The parser owns raid updates; a clear that happens to tag Artist
           // must be recorded, not chatted at.
-          parsesAsRaidCommand: Boolean(parseRaidMessage(stripped)),
+          parsesAsRaidCommand: Boolean(parseRaidMessage(message.content)),
           lang,
         });
         if (reply) await message.reply({ content: reply });

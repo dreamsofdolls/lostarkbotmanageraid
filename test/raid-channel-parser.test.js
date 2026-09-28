@@ -17,6 +17,28 @@ test("raid-channel parser normalizes separators and act 4 spacing", () => {
   });
 });
 
+test("raid-channel parser ignores user, role and channel mentions anywhere in the post", () => {
+  const expected = {
+    raidKey: "armoche",
+    modeKey: "hard",
+    charNames: ["soulrano"],
+    gate: null,
+  };
+
+  assert.deepEqual(parseRaidMessage("<@123> act4 hm Soulrano"), expected);
+  assert.deepEqual(parseRaidMessage("act4 hm Soulrano <@123>"), expected);
+  assert.deepEqual(parseRaidMessage("act4 hm <@!123> Soulrano"), expected);
+  assert.deepEqual(parseRaidMessage("act4 hm Soulrano<@123>"), expected);
+  assert.deepEqual(parseRaidMessage("<@&456> act4 hm Soulrano <#789>"), expected);
+  assert.equal(
+    normalizeRaidChannelContent("<@123> Act 4, HM <@&456> Soulrano <#789>"),
+    "act4 HM Soulrano"
+  );
+  // A mention is not a word: tagging someone must not lift a two-word post
+  // over the three-token minimum.
+  assert.equal(parseRaidMessage("<@123> act4 hm"), null);
+});
+
 test("raid-channel parser dedupes multi-character targets", () => {
   assert.deepEqual(parseRaidMessage("kaz hm Qiylyn Qiylyn Morrah"), {
     raidKey: "kazeros",
