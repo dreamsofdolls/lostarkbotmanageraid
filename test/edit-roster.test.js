@@ -738,10 +738,39 @@ test("persistEditedRoster: throws when account vanished between command and Conf
     { charName: "X", className: "Bard", itemLevel: 1700, combatScore: "85000" },
   ];
 
+  // A coded error, so the handler shows the localized not-found notice
+  // rather than a hardcoded message inside the persist-failure card.
   await assert.rejects(
     () => factory.__test.persistEditedRoster(session, selected),
-    /không còn tồn tại/
+    { code: "ROSTER_NOT_FOUND" }
   );
+});
+
+test("edit-roster Confirm on a roster removed meanwhile shows the not-found notice in the user's language", async () => {
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Bravo", characters: [] }],
+  });
+  factory.__test.sessions.set("edit-sess-gone", {
+    ...makeEditSession({ accountName: "Alpha" }),
+    sessionId: "edit-sess-gone",
+    lang: "en",
+    chars: [{ charName: "X", className: "Bard", itemLevel: 1700, combatScore: "85000" }],
+    selectedIndices: new Set([0]),
+  });
+  const edits = [];
+  await factory.handleEditRosterButton({
+    user: { id: "user-1" },
+    customId: "edit-roster:confirm:edit-sess-gone",
+    deferUpdate: async () => {},
+    reply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  const embed = edits.at(-1).embeds[0].toJSON();
+  assert.equal(embed.title.includes(t("raid-edit-roster.notice.notFoundTitle", "en")), true);
+  assert.doesNotMatch(embed.description, /không còn tồn tại/);
 });
 
 test("persistEditedRoster: throws when user doc disappeared entirely", async () => {

@@ -24,6 +24,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Weekly gold counts at most 6 gold earners per roster, as Lost Ark pays. A roster added with more than 6 characters had every character marked as an earner, so `/raid-status`, the gold view, the Local Reader preview and `/raid-remove-roster` summed gold for all of them (1,400,000G for ten characters instead of 840,000G), and `/raid-gold-earner` opened with all of them ticked. When more than 6 are marked, the 6 highest item levels count, the same 6 `/raid-gold-earner` now preselects.
 - 🔄 Refresh roster in `/raid-status` and `/raid-check` reports a refresh that renamed the roster after the character it was found through (a roster whose name is not a character on Bible) as updated, under the new name. It used to say the roster could not be found although the refresh had saved.
 - `/raid-gold-earner` Confirm on a roster that was removed or renamed while the picker was open shows the roster-not-found notice, and it finds a roster whose stored name differs only in upper/lower case. It used to show a green "saved" card listing nothing, and save nothing.
+- `/raid-edit-roster` Confirm on a roster that was removed while the picker was open shows the roster-not-found notice in the user's language. English and Japanese users used to get a save-failure card quoting a Vietnamese error.
 
 ## 2026-09-27
 
