@@ -15,6 +15,7 @@ const {
   formatSharedResetLabel,
   normalizeName,
 } = require("./shared-tasks");
+const { findAccountByName } = require("../../user-doc");
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
@@ -141,13 +142,7 @@ function findCharacterInUser(userDoc, characterName, rosterName = null) {
 }
 
 function findAccountInUser(userDoc, rosterName) {
-  if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
-  const target = normalizeName(rosterName);
-  if (!target) return null;
-  return (
-    userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) ||
-    null
-  );
+  return findAccountByName(userDoc, rosterName, normalizeName);
 }
 
 /**

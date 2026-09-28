@@ -10,6 +10,7 @@ const {
   isModeAllowedForCompanionScope,
   resolveRequiredCompanionScope,
 } = require("../../../services/local-sync/core/scope");
+const { findAccountByName } = require("../../../utils/user-doc");
 
 function createRaidSetApplyService({
   canEditAccount,
@@ -51,10 +52,7 @@ function createRaidSetApplyService({
   }) {
     if (!executorId || executorId === discordId) return false;
 
-    const rosterTarget = rosterName ? normalizeName(rosterName) : "";
-    const account = userDoc.accounts.find(
-      (item) => normalizeName(item.accountName) === rosterTarget
-    );
+    const account = findAccountByName(userDoc, rosterName, normalizeName);
     if (!account) {
       result.authLost = true;
       return true;

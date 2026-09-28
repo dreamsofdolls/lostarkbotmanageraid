@@ -11,6 +11,7 @@ const {
   toPlainAssignedRaid,
 } = require("../../../utils/raid/common/character/assigned-raids");
 const { ensureFreshWeek } = require("../../../services/raid/schedulers/weekly-reset");
+const { findAccountByName } = require("../../../utils/user-doc");
 const {
   GOLD_RAID_CAP_PER_CHARACTER,
   getGoldOverride,
@@ -78,12 +79,8 @@ function parseGoldModeValue(value) {
 }
 
 function findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName) {
-  if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return null;
-  const accountName = normalizeName(targetAccountName);
   const charName = normalizeName(targetCharName);
-  const account = userDocFresh.accounts.find(
-    (a) => normalizeName(a?.accountName) === accountName
-  );
+  const account = findAccountByName(userDocFresh, targetAccountName, normalizeName);
   if (!account || !Array.isArray(account.characters)) return null;
 
   const character = account.characters.find(
