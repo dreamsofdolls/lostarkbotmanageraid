@@ -2,6 +2,8 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
+const { deleteBoardMessage } = require("../../../../services/raid/schedule/board-io");
+const { pingCancelledSignups, signupDiscordIds } = require("./cancel-ping");
 
 function createScheduleDeleteActions({
   boardLang,
@@ -10,21 +12,6 @@ function createScheduleDeleteActions({
   deleteConfirmPayload,
   noticeEmbed,
 }) {
-  async function deleteBoardMessage(interaction, event) {
-    if (!event.messageId || !event.channelId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      const message = await channel?.messages?.fetch(event.messageId);
-      if (message) {
-        await message.delete();
-        return true;
-      }
-    } catch (error) {
-      console.warn("[raid-schedule] board delete failed:", error?.message || error);
-    }
-    return false;
-  }
-
   async function handleDeletePrompt(interaction, event, lang) {
     if (await rejectUnlessLead(interaction, lang)) return;
     await interaction.reply(deleteConfirmPayload(event, lang));
@@ -35,7 +22,7 @@ function createScheduleDeleteActions({
     await interaction.deferUpdate();
 
     const wasActive = event.status === "open" || event.status === "locked";
-    const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
+    const ids = signupDiscordIds(event);
     const langForBoard = await boardLang(event.guildId);
 
     try {
@@ -55,7 +42,7 @@ function createScheduleDeleteActions({
       return;
     }
 
-    const boardDeleted = await deleteBoardMessage(interaction, event);
+    const boardDeleted = await deleteBoardMessage(interaction.client, event);
     await interaction.editReply({
       embeds: [
         noticeEmbed(
@@ -72,18 +59,8 @@ function createScheduleDeleteActions({
       components: [],
     }).catch(() => {});
 
-    if (wasActive && ids.length > 0 && !event.skipNotify) {
-      try {
-        const channel = await interaction.client.channels.fetch(event.channelId);
-        await channel?.send?.({
-          content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
-            users: ids.map((uid) => `<@${uid}>`).join(" "),
-            title: event.title || "",
-          }),
-        });
-      } catch (error) {
-        console.warn("[raid-schedule] delete ping failed:", error?.message || error);
-      }
+    if (wasActive) {
+      await pingCancelledSignups(interaction.client, event, langForBoard, ids, "delete ping failed");
     }
   }
 

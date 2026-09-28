@@ -1,13 +1,12 @@
 "use strict";
 
 const { getUserLanguage, getGuildLanguage } = require("../../../services/i18n");
-const {
-  getRaidRequirementMap,
-  getGatesForRaid,
-} = require("../../../domain/raid-catalog");
+const { getGatesForRaid } = require("../../../domain/raid-catalog");
+const { getRequirementFor } = require("../../../utils/raid/common/character/assigned-raids");
 const { assignSlots } = require("../../../services/raid/schedule/slots/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/lifecycle/auto-clear");
 const { shapeOwnedBoardOptions } = require("../../../services/raid/schedule/boards/owned-boards");
+const { editBoardMessage: editBoard } = require("../../../services/raid/schedule/board-io");
 
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
 
@@ -82,7 +81,7 @@ function createScheduleRuntimeHelpers({
   }
 
   function raidMetaFor(raidKey, modeKey) {
-    return getRaidRequirementMap()[`${raidKey}_${modeKey}`] || null;
+    return getRequirementFor(raidKey, modeKey);
   }
 
   function isLeadActionAllowed(interaction) {
@@ -126,18 +125,8 @@ function createScheduleRuntimeHelpers({
     if (typeof event.markModified === "function") event.markModified("turns");
   }
 
-  async function editBoardMessage(interaction, event, lang) {
-    if (!event.messageId || !event.channelId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      const message = await channel?.messages?.fetch(event.messageId);
-      if (!message) return false;
-      await message.edit(await boardPayload(event, lang));
-      return true;
-    } catch (error) {
-      logger.warn?.("[raid-schedule] board edit failed:", error?.message || error);
-      return false;
-    }
+  function editBoardMessage(interaction, event, lang) {
+    return editBoard(interaction.client, event, () => boardPayload(event, lang), { logger });
   }
 
   function isCompMember(event, discordId) {

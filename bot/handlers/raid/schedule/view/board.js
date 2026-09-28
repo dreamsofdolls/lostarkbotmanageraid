@@ -13,7 +13,7 @@
 
 const { t } = require("../../../../services/i18n");
 const { getClassEmoji, isSupportClass } = require("../../../../models/Class");
-const { getRaidRequirementMap } = require("../../../../domain/raid-catalog");
+const { getRequirementFor } = require("../../../../utils/raid/common/character/assigned-raids");
 const { assignSlots } = require("../../../../services/raid/schedule/slots/slots");
 const {
   buildSignupIndex,
@@ -58,8 +58,9 @@ function discordTime(date) {
   return { rel: `<t:${sec}:R>`, abs: `<t:${sec}:f>` };
 }
 
+// A board's raid name, or its raw keys for a raid the catalog no longer has.
 function rosterLabel(raidKey, modeKey) {
-  const meta = getRaidRequirementMap()[`${raidKey}_${modeKey}`];
+  const meta = getRequirementFor(raidKey, modeKey);
   return meta ? meta.label : `${raidKey} ${modeKey}`;
 }
 
@@ -420,5 +421,6 @@ module.exports = {
   // exported for reuse (index.js HUD panels) + unit tests
   renderRsvpLine,
   renderGauge,
+  rosterLabel,
   STATUS_CODE,
 };

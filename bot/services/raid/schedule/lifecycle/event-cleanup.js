@@ -11,6 +11,8 @@
 
 "use strict";
 
+const { deleteBoardMessage } = require("../board-io");
+
 // An event left un-finished (not "cleared") this long after its start is
 // treated as abandoned and purged early, without waiting for the weekly reset.
 const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000; // 24h
@@ -69,17 +71,9 @@ async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs, nowMs }) {
 
   let boardsDeleted = 0;
   for (const ev of deletedEvents) {
-    if (!ev.messageId || !ev.channelId || !client?.channels) continue;
-    try {
-      const channel = await client.channels.fetch(ev.channelId);
-      const message = await channel?.messages?.fetch(ev.messageId);
-      if (message) {
-        await message.delete();
-        boardsDeleted += 1;
-      }
-    } catch {
-      // Board already gone, channel deleted, or missing perms - best-effort.
-    }
+    // Board already gone, channel deleted, or missing perms - best-effort
+    // and silent.
+    if (await deleteBoardMessage(client, ev, { logLabel: null })) boardsDeleted += 1;
   }
   return { deleted, boardsDeleted };
 }

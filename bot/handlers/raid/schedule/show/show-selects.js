@@ -1,5 +1,7 @@
 "use strict";
 
+const { deleteBoardMessage } = require("../../../../services/raid/schedule/board-io");
+
 function createScheduleShowSelectActions({
   RaidEvent,
   boardLang,
@@ -9,18 +11,10 @@ function createScheduleShowSelectActions({
   noticePayload,
   turnPlanDashboardPayload,
 }) {
-  async function deleteMessageById(interaction, channelId, messageId) {
-    if (!channelId || !messageId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(channelId);
-      const message = await channel?.messages?.fetch(messageId);
-      if (!message) return false;
-      await message.delete();
-      return true;
-    } catch (error) {
-      console.warn("[raid-schedule] switch old-delete failed:", error?.message || error);
-      return false;
-    }
+  function deleteMessageById(interaction, channelId, messageId) {
+    return deleteBoardMessage(interaction.client, { channelId, messageId }, {
+      logLabel: "switch old-delete failed",
+    });
   }
 
   function isActiveBoard(event) {

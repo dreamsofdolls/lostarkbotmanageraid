@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
+const { pingCancelledSignups, signupDiscordIds } = require("./cancel-ping");
 
 function createScheduleCancelActions({
   boardLang,
@@ -9,25 +10,6 @@ function createScheduleCancelActions({
   noticeEmbed,
   ephemeralFlag,
 }) {
-  function signupDiscordIds(event) {
-    return [...new Set((event.signups || []).map((signup) => signup.discordId))];
-  }
-
-  async function pingCancelledSignups(interaction, event, langForBoard, ids) {
-    if (ids.length === 0 || event.skipNotify) return;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      await channel?.send?.({
-        content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
-          users: ids.map((id) => `<@${id}>`).join(" "),
-          title: event.title || "",
-        }),
-      });
-    } catch (error) {
-      console.warn("[raid-schedule] cancel ping failed:", error?.message || error);
-    }
-  }
-
   async function handleCancel(interaction, event, lang) {
     if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.deferUpdate();
@@ -49,13 +31,13 @@ function createScheduleCancelActions({
       flags: ephemeralFlag,
     }).catch(() => {});
 
-    await pingCancelledSignups(interaction, event, langForBoard, signupDiscordIds(event));
+    await pingCancelledSignups(
+      interaction.client, event, langForBoard, signupDiscordIds(event), "cancel ping failed"
+    );
   }
 
   return {
     handleCancel,
-    pingCancelledSignups,
-    signupDiscordIds,
   };
 }
 

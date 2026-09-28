@@ -15,6 +15,7 @@ const {
 const {
   createNonOverlappingIntervalRunner,
 } = require("../../schedulers/scheduler-runner");
+const { editBoardMessage } = require("../board-io");
 
 const RAID_SCHEDULE_AUTO_LOCK_TICK_MS = 60 * 1000;
 const RAID_SCHEDULE_AUTO_LOCK_BATCH_SIZE = 25;
@@ -47,19 +48,11 @@ function createRaidScheduleAutoLockService({
     };
   }
 
-  async function editBoard(client, event) {
-    if (!event?.channelId || !event?.messageId || !client?.channels) return false;
-    try {
-      const lang = await getGuildLanguage(event.guildId, { GuildConfigModel: GuildConfig });
-      const channel = await client.channels.fetch(event.channelId);
-      const message = await channel?.messages?.fetch(event.messageId);
-      if (!message) return false;
-      await message.edit(await lockedBoardPayload(event, lang));
-      return true;
-    } catch (error) {
-      console.warn("[raid-schedule] auto-lock board edit failed:", error?.message || error);
-      return false;
-    }
+  function editBoard(client, event) {
+    return editBoardMessage(client, event || {}, async () => lockedBoardPayload(
+      event,
+      await getGuildLanguage(event.guildId, { GuildConfigModel: GuildConfig })
+    ), { logLabel: "auto-lock board edit failed" });
   }
 
   async function runRaidScheduleAutoLockTick(client, now = new Date()) {
