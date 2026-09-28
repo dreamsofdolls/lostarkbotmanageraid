@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - The `/raid-status` gold view changes the difficulty of an older raid entry that has no stored difficulty of its own, such as one the card shows as Normal from a gate cleared at Normal. Picking Hard there used to do nothing and say nothing, because the pick was compared with the highest difficulty the character's item level allows instead of the Normal on the card.
+- On a roster shared with `view` access, the `/raid-status` Task view shows the task toggles disabled, as the Gold view already did, and a task that cannot be saved now gets a warning. Picking a task there used to do nothing and say nothing.
 
 ## 2026-09-27
 

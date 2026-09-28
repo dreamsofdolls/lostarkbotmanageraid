@@ -79,10 +79,12 @@ function createRaidStatusComponentLayout({
 
   const addTaskViewRows = (rows, disabled) => {
     addPaginatedViewHeader(rows, disabled);
-    const sharedTaskRow = buildSharedTaskToggleRow(disabled);
+    const sharedFrom = getAccounts()[getCurrentPage()]?._sharedFrom;
+    const taskToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+    const sharedTaskRow = buildSharedTaskToggleRow(taskToggleDisabled);
     const charFilterRow = buildTaskCharFilterRow(disabled);
     rows.push(...[sharedTaskRow, charFilterRow].filter(Boolean));
-    rows.push(buildTaskToggleRow(disabled));
+    rows.push(buildTaskToggleRow(taskToggleDisabled));
   };
 
   const addGoldViewRows = (rows, disabled) => {

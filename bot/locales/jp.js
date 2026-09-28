@@ -1072,6 +1072,8 @@ module.exports = {
       bulkTogglePlaceholder: "全キャラのタスクを一括トグル...",
       charNoTaskPlaceholder: "{name} にはまだタスクが無いですわ - /raid-task add で追加してね",
       charTogglePlaceholder: "{name} のタスクをトグル...",
+      toggleFailedTitle: "タスクを更新できませんでしたわ",
+      toggleFailedDescription: "このタスクを保存できませんでしたの。セッションが古いか、ロスター/キャラが更新された可能性がありますわ。`/raid-status` を開き直してもう一度試してくださいね。",
     },
     goldView: {
       embedTitle: "💰 ゴールド＆難易度 · {accountName}",

@@ -567,16 +567,42 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status side-task toggle",
         detail: `kind=${parsed.kind}`,
       });
-      if (!writeContext) return noRedraw();
+      if (!writeContext) {
+        // Task rows render disabled on a view-only share, so a pick only
+        // lands here from a card drawn before the share or roster changed.
+        const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
+        await followUpNotice(component, EmbedBuilder, sharedFrom
+          ? {
+            type: "lock",
+            title: t("raid-task.shareViewOnly.title", lang),
+            description: t("raid-task.shareViewOnly.description", lang, {
+              owner: sharedFrom.ownerLabel || "(unknown)",
+            }),
+          }
+          : {
+            type: "warn",
+            title: t("raid-status.taskView.toggleFailedTitle", lang),
+            description: t("raid-status.taskView.toggleFailedDescription", lang),
+          }).catch(() => {});
+        return noRedraw();
+      }
       const { targetAccountName, writeDiscordId } = writeContext;
 
-      await toggleParsedSideTask({
+      const toggleResult = await toggleParsedSideTask({
         User,
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
         parsed,
       });
+      if (!toggleResult.ok) {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.taskView.toggleFailedTitle", lang),
+          description: t("raid-status.taskView.toggleFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
 
       await reloadViewerAccounts();
       return redraw();
