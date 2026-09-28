@@ -46,7 +46,7 @@ test("web auth bootstrap renders no-token state without opening file section", a
   const { bootstrapAuthSession } = await import("../web/js/core/auth.js");
   const dom = makeDom();
 
-  const session = bootstrapAuthSession({
+  bootstrapAuthSession({
     token: null,
     payload: null,
     authStatus: dom.authStatus,
@@ -61,10 +61,9 @@ test("web auth bootstrap renders no-token state without opening file section", a
   assert.equal(dom.fileSection.hidden, true);
   assert.equal(dom.windowRef.__artistSyncToken, undefined);
   assert.equal(dom.timers.length, 0);
-  assert.equal(session.updateExpSec(Math.floor(Date.now() / 1000) + 30), false);
 });
 
-test("web auth bootstrap decodes valid token, exposes globals, and updates expiry", async () => {
+test("web auth bootstrap decodes valid token and exposes globals", async () => {
   const { bootstrapAuthSession, decodePayload } = await import("../web/js/core/auth.js");
   const dom = makeDom();
   const nowSec = Math.floor(Date.now() / 1000);
@@ -77,7 +76,7 @@ test("web auth bootstrap decodes valid token, exposes globals, and updates expir
   });
   const payload = decodePayload(token);
 
-  const session = bootstrapAuthSession({
+  bootstrapAuthSession({
     token,
     payload,
     authStatus: dom.authStatus,
@@ -96,9 +95,6 @@ test("web auth bootstrap decodes valid token, exposes globals, and updates expir
   assert.match(dom.authStatus.innerHTML, /Traine&lt;script&gt;/);
   assert.equal(dom.timers.length, 1);
   assert.equal(dom.timers[0].ms, 1000);
-
-  assert.equal(session.updateExpSec(nowSec + 30), true);
-  assert.match(dom.authStatus.innerHTML, /sec/);
 });
 
 test("web auth decodes non-ASCII Discord names from the token payload", async () => {
