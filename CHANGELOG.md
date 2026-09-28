@@ -51,6 +51,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-edit-roster` Confirm on a roster that was removed while the picker was open shows the roster-not-found notice in the user's language. English and Japanese users used to get a save-failure card quoting a Vietnamese error.
 - A Manager's rosters refresh from Bible on their own after 10 minutes, as the `/raid-status` "✅ Refresh ready" line already said. The automatic refresh used to wait the regular 2 hours for everyone.
 - `/raid-edit-roster` finds a saved roster on Bible when a saved name differs from Bible's only by accents (`Elise` and `Élise`), as the automatic roster refresh already did. It used to report that none of the roster's characters were found.
+- While `/raid-log` works on a pick, its card shows the character, log or tab that was picked instead of the menu placeholder, and every button and menu stays locked until the result replaces the card. A request that fails brings the controls back as they were.
 - When Chromium runs out of memory while `/raid-log` opens a support's detail view for bD%, the log now opens without bD% instead of failing twice. Later opens of that log skip the support views, so it does not crash the browser again.
 
 ## 2026-09-27
