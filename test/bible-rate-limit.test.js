@@ -8,6 +8,9 @@ const {
   createBibleHttpError,
   parseRetryAfterMs,
 } = require("../bot/services/auto-manage/bible/rate-limit");
+const {
+  createBibleCharacterNotFoundError,
+} = require("../bot/services/auto-manage/bible/error-kinds");
 
 function deferred() {
   let resolve;
@@ -99,6 +102,27 @@ test("Bible limiter caps a long Retry-After at five minutes", async () => {
 
   assert.equal(limiter.getBackoffRemainingMs(), 5 * 60 * 1000);
   assert.equal(rateLimitError.retryAfterMs, 3_600_000);
+});
+
+test("Bible limiter does not back off for a name that reads like a rate limit", async () => {
+  const limiter = new BibleRequestLimiter(1, {
+    nowMs: () => 10_000,
+    log: { warn: () => {} },
+  });
+
+  for (const error of [
+    createBibleCharacterNotFoundError("Piratelimits"),
+    createBibleHttpError('Bible roster page returned HTTP 503 for "Piratelimits"', { status: 503 }),
+  ]) {
+    await assert.rejects(limiter.run(async () => { throw error; }), (rejected) => rejected === error);
+    assert.equal(limiter.getBackoffRemainingMs(), 0);
+    assert.equal(await limiter.run(async () => "next"), "next");
+  }
+
+  await assert.rejects(limiter.run(async () => {
+    throw createBibleHttpError('Bible roster page returned HTTP 429 for "Piratelimits"', { status: 429 });
+  }));
+  assert.equal(limiter.getBackoffRemainingMs(), 60_000);
 });
 
 test("Bible HTTP errors carry Retry-After seconds or dates into the limiter", () => {

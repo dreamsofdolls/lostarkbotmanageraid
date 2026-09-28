@@ -7,7 +7,7 @@
 
 "use strict";
 
-const { isBibleRateLimitError } = require("./rate-limit");
+const { getBibleHttpStatus, isBibleRateLimitError } = require("./rate-limit");
 
 const BIBLE_ERROR_KIND = Object.freeze({
   rateLimit: "rateLimit",
@@ -17,7 +17,12 @@ const BIBLE_ERROR_KIND = Object.freeze({
   other: "other",
 });
 
-const CHARACTER_NOT_FOUND_PATTERN = /lostark\.bible has no character "/;
+// Read from the start of a message only: a message that carries a character
+// name carries it later, and a name must never decide the kind. The logs API
+// request sends no name, so its whole message is read.
+const CHARACTER_NOT_FOUND_PATTERN = /^lostark\.bible has no character "/;
+const PUBLIC_LOG_DISABLED_PATTERN =
+  /^(?:Bible logs API returned HTTP \d{3} - .*)?logs\s*not\s*enabled/i;
 
 function errorText(error) {
   return error?.message || String(error || "");
@@ -38,7 +43,7 @@ function createBibleCharacterNotFoundError(charName) {
  * @returns {boolean} true when the logs API refused a character whose Public Log is off
  */
 function isPublicLogDisabledError(error) {
-  return /logs\s*not\s*enabled/i.test(errorText(error));
+  return PUBLIC_LOG_DISABLED_PATTERN.test(errorText(error));
 }
 
 /**
@@ -46,16 +51,11 @@ function isPublicLogDisabledError(error) {
  * @returns {string} one of BIBLE_ERROR_KIND
  */
 function classifyBibleError(error) {
-  const text = errorText(error);
-  // First, because this message carries a character name that the loose
-  // rate-limit pattern can match ("Ratelimit" is a valid name).
-  if (CHARACTER_NOT_FOUND_PATTERN.test(text)) return BIBLE_ERROR_KIND.notFound;
+  if (CHARACTER_NOT_FOUND_PATTERN.test(errorText(error))) return BIBLE_ERROR_KIND.notFound;
   if (isBibleRateLimitError(error)) return BIBLE_ERROR_KIND.rateLimit;
   // Before blocked: the logs API refuses a private character with 403 too.
   if (isPublicLogDisabledError(error)) return BIBLE_ERROR_KIND.publicLogOff;
-  if (Number(error?.status) === 403 || /\bHTTP 403\b/.test(text)) {
-    return BIBLE_ERROR_KIND.blocked;
-  }
+  if (getBibleHttpStatus(error) === 403) return BIBLE_ERROR_KIND.blocked;
   return BIBLE_ERROR_KIND.other;
 }
 
