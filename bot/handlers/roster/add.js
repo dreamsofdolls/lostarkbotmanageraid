@@ -28,7 +28,7 @@ const {
 const {
   SESSION_TTL_MS,
   PICKER_MAX_OPTIONS,
-} = require("./add/constants");
+} = require("./picker/constants");
 const { createAddRosterNoticeHelpers } = require("./add/notices");
 const { createAddRosterTargetResolver } = require("./add/target");
 const {

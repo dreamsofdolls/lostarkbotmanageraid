@@ -3,10 +3,10 @@
 const {
   buildTogglePickerComponents,
 } = require("../../../utils/raid/roster-picker");
+const { BUTTONS_PER_ROW } = require("../picker/constants");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
-const BUTTONS_PER_ROW = 5;
 
 function buildSeedRosterLink(seedCharName) {
   return `https://lostark.bible/character/NA/${encodeURIComponent(seedCharName)}/roster`;

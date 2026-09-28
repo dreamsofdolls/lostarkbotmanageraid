@@ -1,10 +1,11 @@
 "use strict";
 
 const { GOLD_EARNER_CAP_PER_ACCOUNT } = require("../../../utils/raid/common/character");
-
-const SESSION_TTL_MS = 5 * 60 * 1000;
-const PICKER_MAX_OPTIONS = 20;
-const BUTTONS_PER_ROW = 5;
+const {
+  SESSION_TTL_MS,
+  PICKER_MAX_OPTIONS,
+  BUTTONS_PER_ROW,
+} = require("../picker/constants");
 
 const CHECK_ICON = "\uD83D\uDCB0";
 const UNCHECK_ICON = "\u2B1C";

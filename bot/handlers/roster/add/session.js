@@ -1,6 +1,6 @@
 "use strict";
 
-const { PICKER_MAX_OPTIONS } = require("./constants");
+const { PICKER_MAX_OPTIONS } = require("../picker/constants");
 
 function buildBibleNameSet(rosterCharacters, normalizeName) {
   return new Set(rosterCharacters.map((character) => normalizeName(character.charName)));
