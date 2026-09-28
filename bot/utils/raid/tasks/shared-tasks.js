@@ -17,6 +17,7 @@ const {
   sharedTaskCapForReset,
 } = require("./shared-tasks/state");
 const {
+  formatDiscordTimestamp,
   resolveScheduledSharedTaskState,
 } = require("./shared-tasks/schedule");
 const {
@@ -33,6 +34,7 @@ module.exports = {
   SHARED_TASK_PRESETS,
   countSharedTasksByReset,
   ensureSharedTasks,
+  formatDiscordTimestamp,
   formatSharedResetLabel,
   getNextSharedTaskTransitionMs,
   getSharedTaskDisplay,

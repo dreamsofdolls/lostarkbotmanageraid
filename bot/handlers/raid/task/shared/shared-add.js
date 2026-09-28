@@ -9,6 +9,7 @@ const {
   getSharedTaskPreset,
   ensureSharedTasks,
   countSharedTasksByReset,
+  formatDiscordTimestamp,
   sharedTaskCapForReset,
   parseSharedTaskExpiresAt,
 } = require("../../../../utils/raid/tasks/shared-tasks");
@@ -216,7 +217,7 @@ function buildSkippedSection(result, lang) {
 function buildSharedAddSuccessDescription(result, request, lang) {
   const expirySuffix = request.expiresAt
     ? t("raid-task.sharedAdd.expirySuffix", lang, {
-        date: `<t:${Math.floor(request.expiresAt / 1000)}:D>`,
+        date: formatDiscordTimestamp(request.expiresAt, "D"),
       })
     : "";
   const presetLabel = `${request.preset.emoji} ${request.preset.label}`;
