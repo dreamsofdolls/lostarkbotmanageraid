@@ -35,6 +35,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A post in the raid text channel that tags someone, such as `@Artist act4 hm Soulrano` or a mention after the names, is recorded like the same post without the tag. The mention used to be read as a raid or character name, so the post was rejected with a hint. Role and channel mentions are skipped the same way.
 - Artist answers an @-mention that uses a raid word such as "reset" or "hard" without being a raid post, like `@Artist can you reset my stuff`. Such a ping used to get no reply in any channel. In the raid text channel, where the monitor answers it with a hint, she still stays quiet so the author gets one answer.
 - Artist's "sleeping" reply to an @-mention follows the guild's `/raid-language` clock, like her bedtime and wake-up posts. A Japanese or English server used to get it on Vietnam time, so she chatted after announcing bedtime and claimed to be asleep after waking up there.
+- When a database error stops Local Reader from saving a preview, the page shows HTTP 500 "preview job failed" and the bot logs the error. It used to show HTTP 400 with the raw database error, which read like a problem with the log file. Too many party targets for one source Gate still gets HTTP 400 with its reason.
+- Local Reader reads up to 512 of the week's boss, difficulty and character groups, as many as a preview accepts, instead of 200. Rosters of about 25 characters or more silently lost their oldest clears of the week from the preview.
+- Local Reader's Sync button stays disabled until the send finishes. When the log file had just changed, the freshness check re-enabled it mid-send, and a second click sent a second preview, so the DM arrived twice.
 
 ## 2026-09-27
 

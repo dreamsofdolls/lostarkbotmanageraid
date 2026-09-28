@@ -91,6 +91,9 @@ let sqliteRuntimePromise = null;
 let previewSummaryController = null;
 let previewRetryTimer = null;
 let previewRetryAttempts = 0;
+// True from a Sync click until its POST settles. The pre-send refresh commits
+// a preview mid-click, and that commit must not re-enable the button.
+let sendInFlight = false;
 const PRE_SEND_CHANGE_SETTLE_MS = 80;
 
 function makeAbortError(message = "preview superseded") {
@@ -875,7 +878,7 @@ function commitPreviewState(state, { revision, expectedSelection }) {
   }
   renderDiffPage(previewOutput);
   syncSection.hidden = false;
-  syncBtn.disabled = lastDeltas.length === 0 || revision.writeVersion === 2;
+  syncBtn.disabled = sendInFlight || lastDeltas.length === 0 || revision.writeVersion === 2;
   if (lastDeltas.length === 0) {
     syncOutput.hidden = false;
     syncOutput.innerHTML = t("sync.nothingToSyncFull");
@@ -1049,11 +1052,13 @@ function canSendCurrentPreview() {
 }
 
 syncBtn.addEventListener("click", async () => {
+  if (sendInFlight) return;
   if (!window.__artistSyncToken) {
     syncOutput.hidden = false;
     syncOutput.innerHTML = `<span class="status-err">${t("sync.noTokenCached")}</span> ${t("sync.noTokenCachedHint")}`;
     return;
   }
+  sendInFlight = true;
   syncBtn.disabled = true;
   syncOutput.hidden = false;
   syncOutput.textContent = t("sync.verifyingFreshness");
@@ -1104,5 +1109,7 @@ syncBtn.addEventListener("click", async () => {
   } catch (err) {
     syncOutput.innerHTML = `<span class="status-err">${t("sync.networkError")}</span> ${escapeHtml(err.message || String(err))}`;
     syncBtn.disabled = !canSendCurrentPreview();
+  } finally {
+    sendInFlight = false;
   }
 });
