@@ -32,9 +32,9 @@ const {
 } = require("./gold-earner/constants");
 const {
   pickInitialSelection,
-  findAccountByRoster,
   buildPickerCharacters,
 } = require("./gold-earner/selection");
+const { findAccountByName } = require("../../utils/user-doc");
 const { createGoldEarnerRenderers } = require("./gold-earner/render");
 const { countedGoldEarners } = require("../../utils/raid/common/character");
 
@@ -105,8 +105,7 @@ function createRaidGoldEarnerCommand({
       langPromise,
       User.findOne({ discordId }),
     ]);
-    const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
-    const target = findAccountByRoster(accounts, rosterInput, normalizeName);
+    const target = findAccountByName(userDoc, rosterInput, normalizeName);
 
     if (!target) {
       await editPickerNotice(interaction, {
@@ -234,7 +233,7 @@ function createRaidGoldEarnerCommand({
       const doc = await User.findOne({ discordId: session.callerId });
       // The roster can be removed, or renamed by a background refresh, while
       // the picker is open; saving nothing must not read as a success.
-      const account = doc ? findAccountByRoster(doc.accounts, session.accountName, normalizeName) : null;
+      const account = findAccountByName(doc, session.accountName, normalizeName);
       rosterMissing = !account;
       if (!account) return;
 

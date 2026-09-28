@@ -4,6 +4,7 @@ const {
   buildPickedCharacterRecord,
   summarizeSavedCharacter,
 } = require("../picker/character-state");
+const { findAccountByName } = require("../../../utils/user-doc");
 
 function createPersistEditedRoster({
   User,
@@ -24,9 +25,7 @@ function createPersistEditedRoster({
       if (!userDoc) throw new Error("User document disappeared between command and confirm.");
       ensureFreshWeek(userDoc);
 
-      const account = userDoc.accounts.find(
-        (item) => normalizeName(item.accountName) === normalizeName(session.accountName)
-      );
+      const account = findAccountByName(userDoc, session.accountName, normalizeName);
       if (!account) {
         // Coded, so the Confirm handler can answer with the localized
         // not-found notice in the caller's language.
