@@ -14,7 +14,10 @@ const {
   formatProgressTotals,
 } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
-const { countedGoldEarners } = require("../../../utils/raid/common/character");
+const {
+  countedGoldEarners,
+  summarizeCharacterGold,
+} = require("../../../utils/raid/common/character");
 
 // pack2Columns spends 3 fields on every 2 characters, so 16 characters fill
 // 24 of Discord's 25 fields and leave one for the sync outcome line. Longer
@@ -82,28 +85,10 @@ function createRaidStatusView(deps) {
   // least one eligible raid this week. Non-earners emit no line at all:
   // the header already carries the 💰 marker (its absence signals "not
   // gold-earner"), so a second body line would duplicate that state.
-  function resolveEarnedBoundGold(raid, earnedGold) {
-    const explicitBound = numberOrZero(raid?.earnedBoundGold);
-    if (explicitBound) return explicitBound;
-    return raid?.goldBound ? earnedGold : 0;
-  }
-
   function buildCharacterGoldLine(earnsGold, raids, lang) {
     if (!Array.isArray(raids) || raids.length === 0) return [];
     if (!earnsGold) return [];
-    let earned = 0;
-    let total = 0;
-    let earnedBound = 0;
-    for (const raid of raids) {
-      const e = numberOrZero(raid?.earnedGold);
-      earned += e;
-      total += numberOrZero(raid?.totalGold);
-      // Mirror summarizeCharacterGold: a reduced-normal raid pays half its gold
-      // bound, so use the per-raid earnedBoundGold split. Falling back to the
-      // whole-raid amount only for fully-bound modes / bare test raids that
-      // predate the split field - otherwise the bound half goes uncounted.
-      earnedBound += resolveEarnedBoundGold(raid, e);
-    }
+    const { total, earnedBound, earnedUnbound } = summarizeCharacterGold(raids);
     if (total <= 0) return [];
     // Disjoint buckets: 💰 = tradeable (unbound) gold, 🔒 = roster-bound gold.
     // The two amounts never overlap (they sum to the total) so the bound part
@@ -111,7 +96,7 @@ function createRaidStatusView(deps) {
     const boundTail = earnedBound > 0
       ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(earnedBound) })
       : "";
-    return [`💰 ${formatGold(earned - earnedBound)}${boundTail}`];
+    return [`💰 ${formatGold(earnedUnbound)}${boundTail}`];
   }
 
   function buildBoundGoldTail(gold, lang) {
