@@ -260,14 +260,15 @@ function createRaidLogCapture({
     if (!Object.hasOwn(tabsForPlayer(player), tab) || typeof bracketed !== "boolean"
       || (player && (view !== "full" || !/^\d+-\d+$/.test(player.id) || typeof player.label !== "string"))) throw new RaidLogError("invalid_selection");
     const key = `${log.id}:${view}:${tab}:${bracketed}:${player ? JSON.stringify([player.id, player.label]) : "team"}`;
-    const cached = useCache && !refresh && cache.get(key);
+    const fromCache = () => useCache && !refresh && cache.get(key);
+    const cached = fromCache();
     if (cached) return { ...cached, cached: true };
     const started = Date.now();
     const deadline = started + timeoutMs;
     return queue.run(async () => {
       const queueMs = Date.now() - started;
       // Another queued request may already have rendered this exact view.
-      const ready = useCache && !refresh && cache.get(key);
+      const ready = fromCache();
       if (ready) return { ...ready, cached: true, queueMs };
       if (refresh) cache.invalidateLog(log.id);
       const attempt = () => capturePage(log, { view, tab, bracketed, player, refresh }, deadline);
