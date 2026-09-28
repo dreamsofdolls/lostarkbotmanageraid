@@ -24,13 +24,24 @@ function getLangTzOffsetMinutes(lang) {
 }
 
 /**
+ * `now` moved by the locale's UTC offset, so its getUTC* fields and
+ * toISOString() read that locale's wall clock.
+ * @param {Date} now - the instant
+ * @param {string} lang - locale code (unknown falls back to vi)
+ * @returns {Date} shifted copy
+ */
+function toLocalClock(now, lang) {
+  return new Date(now.getTime() + getLangTzOffsetMinutes(lang) * 60 * 1000);
+}
+
+/**
  * VN-local slot key for cleanup-tick dedup. Rounds down to :00 or :30.
  * Format: "YYYY-MM-DDTHH:MM" with MM ∈ {"00", "30"}.
  * @param {Date} [now=new Date()] - test clock
  * @returns {string} dedup key safe to store in GuildConfig.lastAutoCleanupKey
  */
 function getTargetCleanupSlotKey(now = new Date()) {
-  const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const vnTime = toLocalClock(now, "vi");
   const dateHour = vnTime.toISOString().slice(0, 13);
   const slotMinute = vnTime.getUTCMinutes() < 30 ? "00" : "30";
   return `${dateHour}:${slotMinute}`;
@@ -41,9 +52,7 @@ function getTargetVNDayKey(now = new Date()) {
 }
 
 function getTargetDayKeyForLang(now = new Date(), lang) {
-  const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
-  const localTime = new Date(now.getTime() + offsetMs);
-  return localTime.toISOString().slice(0, 10);
+  return toLocalClock(now, lang).toISOString().slice(0, 10);
 }
 
 function getCurrentVNHour(now = new Date()) {
@@ -51,9 +60,7 @@ function getCurrentVNHour(now = new Date()) {
 }
 
 function getCurrentHourForLang(now = new Date(), lang) {
-  const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
-  const localTime = new Date(now.getTime() + offsetMs);
-  return localTime.getUTCHours();
+  return toLocalClock(now, lang).getUTCHours();
 }
 
 function isInArtistQuietHours(now = new Date()) {
@@ -82,8 +89,7 @@ function isInArtistQuietHoursForLang(now = new Date(), lang) {
  * @returns {string} e.g. "03/06 21:00"
  */
 function formatStartShortForLang(date, lang) {
-  const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
-  const local = new Date(new Date(date).getTime() + offsetMs);
+  const local = toLocalClock(new Date(date), lang);
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
 }
@@ -100,6 +106,7 @@ module.exports = {
   ARTIST_QUIET_START_HOUR_VN,
   ARTIST_QUIET_END_HOUR_VN,
   getLangTzOffsetMinutes,
+  toLocalClock,
   getTargetCleanupSlotKey,
   getTargetVNDayKey,
   getTargetDayKeyForLang,
