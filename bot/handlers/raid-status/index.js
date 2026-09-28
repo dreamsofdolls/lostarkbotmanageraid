@@ -13,6 +13,7 @@ const { createRaidStatusGoldUi } = require("./gold/gold-ui");
 const { createRaidStatusSync } = require("./sync/sync");
 const { createRaidStatusComponentLayout } = require("./components/component-layout");
 const { createRaidStatusRenderPayload } = require("./view/render-payload");
+const { createStatusRedraw } = require("./view/redraw");
 const {
   buildRaidDropdownState,
   buildRaidFilterRow,
@@ -422,6 +423,16 @@ function createRaidStatusCommand(deps) {
       syncControls,
     });
 
+    // One redraw for every later edit of this message, so a click-driven,
+    // refresh-driven or background redraw can never overtake a newer one.
+    let attachedCollector = null;
+    const redrawMessage = createStatusRedraw({
+      interaction,
+      buildEmbedAndCanvas,
+      buildComponents,
+      isSessionEnded: () => Boolean(attachedCollector?.isEnded()),
+    });
+
     const componentRouteHandlers = createStatusComponentRouteHandlers({
       session: componentSession,
       EmbedBuilder,
@@ -439,6 +450,7 @@ function createRaidStatusCommand(deps) {
       reloadViewerAccounts,
       buildEmbedAndCanvas,
       buildComponents,
+      redrawMessage,
       runManualStatusSync,
       runManualRosterRefresh,
       formatNextCooldownRemaining,
@@ -454,7 +466,7 @@ function createRaidStatusCommand(deps) {
     const message = messageFromEdit?.createMessageComponentCollector
       ? messageFromEdit
       : await interaction.fetchReply();
-    const attachedCollector = attachRaidStatusComponentCollector({
+    attachedCollector = attachRaidStatusComponentCollector({
       EmbedBuilder,
       User,
       interaction,
@@ -470,17 +482,12 @@ function createRaidStatusCommand(deps) {
       buildComponents,
       componentRouteHandlers,
       refreshStateIfStale: () => statusState.refreshViewerAccountsIfStale(),
+      redrawMessage,
     });
 
     const backgroundRenderQueue = createLatestOnlyQueue(
       async () => {
-        if (attachedCollector.isEnded()) return;
-        const payload = await buildEmbedAndCanvas();
-        if (attachedCollector.isEnded()) return;
-        await interaction.editReply({
-          ...payload,
-          components: buildComponents(false),
-        });
+        await redrawMessage();
       },
       {
         onError: (err, labels) => {

@@ -23,6 +23,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - The `/raid-status` gold view changes the difficulty of an older raid entry that has no stored difficulty of its own, such as one the card shows as Normal from a gate cleared at Normal. Picking Hard there used to do nothing and say nothing, because the pick was compared with the highest difficulty the character's item level allows instead of the Normal on the card.
 - On a roster shared with `view` access, the `/raid-status` Task view shows the task toggles disabled, as the Gold view already did, and a task that cannot be saved now gets a warning. Picking a task there used to do nothing and say nothing.
+- Paging quickly through `/raid-status`, or a refresh finishing while you page, always leaves one roster's card with that roster's own buttons. A roster whose background was still loading could land its card last with the next roster's buttons, so the gold toggles below acted on a roster other than the one shown; a refresh finishing after the session closed also switched the expired buttons back on.
 
 ## 2026-09-27
 
