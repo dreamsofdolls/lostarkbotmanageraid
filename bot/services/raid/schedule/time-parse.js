@@ -18,7 +18,7 @@
 
 "use strict";
 
-const { getLangTzOffsetMinutes } = require("../../../utils/raid/schedule/artist-clock");
+const { getLangTzOffsetMinutes, toLocalClock } = require("../../../utils/raid/schedule/artist-clock");
 
 // "+2h" / "+90m" (whitespace already stripped before matching).
 const RELATIVE_RE = /^\+(\d{1,4})(h|m)$/;
@@ -72,7 +72,7 @@ function applyMeridiem(hh, marker) {
 
 // Lead-tz local "now" as a Date whose UTC fields read as the lead's wall clock.
 function localNowFor(lang, now) {
-  return { offsetMs: getLangTzOffsetMinutes(lang) * 60000, local: new Date(now.getTime() + getLangTzOffsetMinutes(lang) * 60000) };
+  return { offsetMs: getLangTzOffsetMinutes(lang) * 60000, local: toLocalClock(now, lang) };
 }
 
 // Resolve an (hh, mm) wall-clock in the lead's tz to the next future UTC instant.
