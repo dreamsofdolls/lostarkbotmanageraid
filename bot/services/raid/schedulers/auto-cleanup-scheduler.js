@@ -15,7 +15,7 @@ const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const {
   claimGuildState,
-  rollbackGuildState,
+  releaseGuildClaim,
 } = require("./guild-state-claim");
 
 const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000;
@@ -28,19 +28,15 @@ function isAnnouncementEnabled(announcements, key) {
 }
 
 async function rollbackPhaseClaim({ GuildConfig, cfg, claimedState, previousState, phaseName }) {
-  try {
-    await rollbackGuildState({
-      GuildConfig,
-      guildId: cfg.guildId,
-      claimedState,
-      previousState: previousState || cfg,
-    });
-  } catch (err) {
-    console.error(
-      `[raid-channel] ${phaseName} claim rollback failed guild=${cfg.guildId}:`,
-      err?.message || err
-    );
-  }
+  await releaseGuildClaim({
+    GuildConfig,
+    guildId: cfg.guildId,
+    claimedState,
+    previousState: previousState || cfg,
+  }, (err) => console.error(
+    `[raid-channel] ${phaseName} claim rollback failed guild=${cfg.guildId}:`,
+    err?.message || err
+  ));
 }
 
 async function runQuietPhase(context) {

@@ -39,7 +39,24 @@ async function rollbackGuildState({
   );
 }
 
+/**
+ * rollbackGuildState after a failed side effect, never throwing.
+ * @param {object} options - rollbackGuildState options
+ * @param {(error: Error) => void} onError - reports a failed rollback
+ * @returns {Promise<boolean>} true when this claim was released; false when a
+ *   newer claim already replaced it or the rollback failed
+ */
+async function releaseGuildClaim(options, onError) {
+  try {
+    return Boolean(await rollbackGuildState(options));
+  } catch (error) {
+    onError(error);
+    return false;
+  }
+}
+
 module.exports = {
   claimGuildState,
   rollbackGuildState,
+  releaseGuildClaim,
 };

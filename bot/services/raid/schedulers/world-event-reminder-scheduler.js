@@ -12,7 +12,7 @@ const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const {
   claimGuildState,
-  rollbackGuildState,
+  releaseGuildClaim,
 } = require("./guild-state-claim");
 
 const SUBDOC_KEY = "worldEventReminder";
@@ -107,20 +107,15 @@ function createWorldEventReminderSchedulerService({
         continue;
       }
 
-      let claimReleased = false;
-      try {
-        claimReleased = Boolean(await rollbackGuildState({
-          GuildConfig,
-          guildId: cfg.guildId,
-          claimedState: { [DEDUP_FIELD]: reminder.key },
-          previousState: claimed,
-        }));
-      } catch (rollbackError) {
-        console.error(
-          `[world-event reminder] guild=${cfg.guildId} claim rollback failed:`,
-          rollbackError?.message || rollbackError
-        );
-      }
+      const claimReleased = await releaseGuildClaim({
+        GuildConfig,
+        guildId: cfg.guildId,
+        claimedState: { [DEDUP_FIELD]: reminder.key },
+        previousState: claimed,
+      }, (rollbackError) => console.error(
+        `[world-event reminder] guild=${cfg.guildId} claim rollback failed:`,
+        rollbackError?.message || rollbackError
+      ));
 
       console.warn(
         `[world-event reminder] send failed; claim ${claimReleased ? "released" : "not released"} guild=${cfg.guildId} key=${reminder.key}:`,
