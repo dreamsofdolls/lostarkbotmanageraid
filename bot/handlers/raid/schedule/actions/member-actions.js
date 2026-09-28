@@ -8,6 +8,7 @@ const {
 } = require("../../../../services/raid/schedule/slots/signup-state");
 const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
 const { removeMembersFromTurns } = require("../../../../services/raid/schedule/turns");
+const { sendToBoardChannel } = require("../../../../services/raid/schedule/board-io");
 const {
   getSelectableCharacterRows,
   loadSelectableCharacterRow,
@@ -71,19 +72,14 @@ function createScheduleMemberActions({
       dpsSlots: event.dpsSlots,
     });
     if (promoted.length > 0 && !event.skipNotify) {
-      try {
-        const channel = await interaction.client.channels.fetch(event.channelId);
-        await channel?.send?.({
-          content: promoted
-            .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
-              user: `<@${s.discordId}>`,
-              character: s.characterName,
-            }))
-            .join("\n"),
-        });
-      } catch (error) {
-        console.warn("[raid-schedule] kick promote ping failed:", error?.message || error);
-      }
+      await sendToBoardChannel(interaction.client, event.channelId, {
+        content: promoted
+          .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
+            user: `<@${s.discordId}>`,
+            character: s.characterName,
+          }))
+          .join("\n"),
+      }, { logLabel: "kick promote ping failed" });
     }
   }
 
@@ -187,20 +183,15 @@ function createScheduleMemberActions({
     });
 
     if (event.skipNotify) return;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      await channel?.send?.({
-        content: t("raid-schedule.notice.addedPing", langForBoard, {
-          user: `<@${targetId}>`,
-          title: event.title || "",
-          character: row.name,
-          placement: boardPlacement,
-          rel: `<t:${Math.floor(new Date(event.startAt).getTime() / 1000)}:R>`,
-        }),
-      });
-    } catch (error) {
-      console.warn("[raid-schedule] add-member ping failed:", error?.message || error);
-    }
+    await sendToBoardChannel(interaction.client, event.channelId, {
+      content: t("raid-schedule.notice.addedPing", langForBoard, {
+        user: `<@${targetId}>`,
+        title: event.title || "",
+        character: row.name,
+        placement: boardPlacement,
+        rel: `<t:${Math.floor(new Date(event.startAt).getTime() / 1000)}:R>`,
+      }),
+    }, { logLabel: "add-member ping failed" });
   }
 
   return {
