@@ -8,7 +8,7 @@
 
 "use strict";
 
-const { pack2Columns } = require("../common/shared");
+const { pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
 const { t } = require("../../../services/i18n");
 
 const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
@@ -67,7 +67,7 @@ function buildAccountTaskFields(account, helpers) {
   const {
     UI,
     getClassEmoji = () => "",
-    truncateText = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s),
+    truncateText = defaultTruncateText,
     // Optional viewer-language. Defaults to "vi" so any caller that
     // hasn't been migrated yet still produces VN copy (matching the
     // pre-i18n behavior). The /raid-status Side tasks callers pass lang

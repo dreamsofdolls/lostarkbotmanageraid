@@ -5,6 +5,7 @@ const {
   bufferFromStored: normalizeStoredBuffer,
   getStoredImages,
 } = require("../../../services/raid-card/bg-loader");
+const { truncateText } = require("../../../utils/raid/common/shared");
 
 const RAID_BG_MAX_IMAGES = 6;
 const RAID_BG_ASSIGNMENT_MODES = new Set(["even", "random"]);
@@ -117,7 +118,7 @@ function formatImageSlotLines(images) {
 
 function clampEmbedTitle(value, max = 240) {
   const text = String(value || "background").replace(/\s+/g, " ").trim();
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+  return truncateText(text, max);
 }
 
 function formatInlineCodeText(value, fallback, max = 80) {

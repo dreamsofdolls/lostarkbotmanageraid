@@ -6,6 +6,7 @@ const { clearBackgroundCache } = require("../../../../services/raid-card/bg-load
 const {
   deferEphemeralReply,
   editEmbed,
+  UI,
 } = require("../../../../utils/raid/common/shared");
 const {
   RaidBgError,
@@ -34,7 +35,7 @@ async function resolveReplacement({ interaction, EmbedBuilder, replaceAttachment
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
       title: t("raidBg.set.rejectTitle", lang),
       description: t(err.key, lang, err.params),
-      color: 0xfee75c,
+      color: UI.colors.progress,
     }));
     return undefined;
   }
@@ -100,7 +101,7 @@ function createEditActionHandlers({
     await finalNotice(component, {
       title: t("raidBg.edit.clearedTitle", lang),
       description: t("raidBg.edit.clearedDescription", lang),
-      color: 0x99aab5,
+      color: UI.colors.muted,
     });
   };
 
@@ -119,7 +120,7 @@ function createEditActionHandlers({
       await finalNotice(component, {
         title: t("raidBg.edit.replacedTitle", lang),
         description: t("raidBg.edit.replacedDescription", lang, { index: index + 1 }),
-        color: 0x57f287,
+        color: UI.colors.success,
       });
     },
     "raidbg:deleteall": clearLibrary,
@@ -158,7 +159,7 @@ async function handleEdit({ interaction, deps, lang }) {
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
       title: t("raidBg.edit.nothingTitle", lang),
       description: t("raidBg.edit.nothingDescription", lang),
-      color: 0x5865f2,
+      color: UI.colors.neutral,
     }));
     return;
   }
@@ -219,7 +220,7 @@ async function handleEdit({ interaction, deps, lang }) {
         await finalNotice(component, {
           title: t("raidBg.set.saveFailedTitle", lang),
           description: t("raidBg.errors.storageFailed", lang, { message: err?.message || String(err) }),
-          color: 0xed4245,
+          color: UI.colors.danger,
         });
       } catch { /* ignore */ }
     }

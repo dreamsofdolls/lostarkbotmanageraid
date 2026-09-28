@@ -5,6 +5,7 @@ const UserBackground = require("../../../../models/userBackground");
 const {
   deferEphemeralReply,
   editEmbed,
+  UI,
 } = require("../../../../utils/raid/common/shared");
 const {
   getStoredImages,
@@ -40,7 +41,7 @@ async function handleView({ interaction, deps, lang }) {
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
       title: t("raidBg.view.noneTitle", lang),
       description: t("raidBg.view.noneDescription", lang),
-      color: 0x5865f2,
+      color: UI.colors.neutral,
     }));
     return;
   }

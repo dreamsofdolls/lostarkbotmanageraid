@@ -6,6 +6,7 @@ const { clearBackgroundCache } = require("../../../../services/raid-card/bg-load
 const {
   deferEphemeralReply,
   editEmbed,
+  UI,
 } = require("../../../../utils/raid/common/shared");
 const {
   RaidBgError,
@@ -65,7 +66,7 @@ async function replyUploadError({ interaction, EmbedBuilder, err, lang }) {
   const title = isValidation
     ? t("raidBg.set.rejectTitle", lang)
     : t("raidBg.set.downloadFailedTitle", lang);
-  const color = isValidation ? 0xfee75c : 0xed4245;
+  const color = isValidation ? UI.colors.progress : UI.colors.danger;
   const embed = new EmbedBuilder()
     .setTitle(title)
     .setDescription(t(err.key, lang, err.params))
@@ -143,7 +144,7 @@ async function handleSet({ interaction, deps, lang }) {
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
       title: t("raidBg.set.noRosterTitle", lang),
       description: t("raidBg.set.noRosterDescription", lang),
-      color: 0x5865f2,
+      color: UI.colors.neutral,
     }));
     return;
   }
@@ -162,7 +163,7 @@ async function handleSet({ interaction, deps, lang }) {
         max: RAID_BG_MAX_IMAGES,
         existing: existingImages.length,
       }),
-      color: 0xfee75c,
+      color: UI.colors.progress,
     }));
     return;
   }
@@ -190,7 +191,7 @@ async function handleSet({ interaction, deps, lang }) {
       description: t("raidBg.errors.storageFailed", lang, {
         message: err?.message || String(err),
       }),
-      color: 0xed4245,
+      color: UI.colors.danger,
     }));
     return;
   }
@@ -202,7 +203,7 @@ async function handleSet({ interaction, deps, lang }) {
     AttachmentBuilder,
     EmbedBuilder,
     namePrefix: "background-preview",
-    color: 0x57f287,
+    color: UI.colors.success,
   });
 
   await editEmbed(interaction, [
@@ -211,7 +212,7 @@ async function handleSet({ interaction, deps, lang }) {
       description: t("raidBg.set.successDescription", lang),
       fields: buildSetSuccessFields({ images, assignments, mode, lang }),
       footer: t("raidBg.set.footer", lang),
-      color: 0x57f287,
+      color: UI.colors.success,
     }),
     ...preview.embeds,
   ], { files: preview.files });
