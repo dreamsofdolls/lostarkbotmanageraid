@@ -109,11 +109,6 @@ function createAutoManageCoreService({
     reconcileCharacterFromLogs,
   });
 
-  async function syncAutoManageForUserDoc(userDoc, weekResetStart) {
-    const collected = await gatherAutoManageLogsForUserDoc(userDoc, weekResetStart);
-    return applyAutoManageCollected(userDoc, weekResetStart, collected);
-  }
-
   async function stampAutoManageAttempt(discordId) {
     try {
       await User.updateOne(
@@ -192,7 +187,6 @@ function createAutoManageCoreService({
     autoManageEntryKey,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
-    syncAutoManageForUserDoc,
     stampAutoManageAttempt,
     isPublicLogDisabledError,
     commitAutoManageOn,

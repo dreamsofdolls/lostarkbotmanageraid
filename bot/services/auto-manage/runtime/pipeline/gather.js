@@ -33,11 +33,7 @@ const {
  * @param {Function} deps.getCharacterName - saved character name accessor
  * @param {Function} deps.normalizeName - name normalizer
  * @param {Function} [deps.nowMs] - injectable clock for public-log reprobes
- * @returns {{
- *   gatherAutoManageLogsForCharacter: Function,
- *   gatherAutoManageLogsForUserDoc: Function,
- *   resolveBibleCharacterMetaViaRoster: Function,
- * }} gather operations
+ * @returns {{ gatherAutoManageLogsForUserDoc: Function }} gather operations
  */
 function createAutoManageGatherer({
   autoManageEntryKey,
@@ -79,64 +75,33 @@ function createAutoManageGatherer({
   }
 
   async function resolveBibleCharacterMetaViaRoster(
-    account,
     character,
-    rosterFallbackContext = null
+    { seeds, fetchCache, indexCache }
   ) {
-    // A raw Map is accepted for compatibility with older direct callers.
-    const context = rosterFallbackContext instanceof Map
-      ? { fetchCache: rosterFallbackContext }
-      : rosterFallbackContext;
-    const seeds = Array.isArray(context?.seeds)
-      ? context.seeds
-      : buildRosterFallbackSeeds(account);
-    const fetchCache = context?.fetchCache || null;
-    const indexCache = context?.indexCache || null;
-
     for (const seed of seeds) {
-      let fetched;
       const cacheKey = normalizeName(seed);
-      if (fetchCache) {
-        if (!fetchCache.has(cacheKey)) {
-          fetchCache.set(
-            cacheKey,
-            fetchRosterCharacters(seed).catch((err) => {
-              if (isBibleRateLimitError(err)) throw err;
-              console.warn(
-                `[auto-manage] roster fallback seed "${seed}" failed:`,
-                err?.message || err
-              );
-              return null;
-            })
-          );
-        }
-        fetched = await fetchCache.get(cacheKey);
-      } else {
-        try {
-          fetched = await fetchRosterCharacters(seed);
-        } catch (err) {
-          if (isBibleRateLimitError(err)) throw err;
-          console.warn(
-            `[auto-manage] roster fallback seed "${seed}" failed:`,
-            err?.message || err
-          );
-          continue;
-        }
+      if (!fetchCache.has(cacheKey)) {
+        fetchCache.set(
+          cacheKey,
+          fetchRosterCharacters(seed).catch((err) => {
+            if (isBibleRateLimitError(err)) throw err;
+            console.warn(
+              `[auto-manage] roster fallback seed "${seed}" failed:`,
+              err?.message || err
+            );
+            return null;
+          })
+        );
       }
+      const fetched = await fetchCache.get(cacheKey);
       if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
-      let fetchedIndexes;
-      if (indexCache) {
-        if (!indexCache.has(cacheKey)) {
-          indexCache.set(cacheKey, buildFetchedRosterIndexes(fetched));
-        }
-        fetchedIndexes = indexCache.get(cacheKey);
-      } else {
-        fetchedIndexes = buildFetchedRosterIndexes(fetched);
+      if (!indexCache.has(cacheKey)) {
+        indexCache.set(cacheKey, buildFetchedRosterIndexes(fetched));
       }
       const matchInfo = findFetchedRosterMatchForCharacter(
         character,
-        fetchedIndexes
+        indexCache.get(cacheKey)
       );
       const canonicalName = matchInfo?.match?.charName;
       if (!canonicalName) continue;
@@ -163,14 +128,13 @@ function createAutoManageGatherer({
     return null;
   }
 
-  async function resolveBibleMetaForEntry(account, character, entry, rosterFallbackContext) {
+  async function resolveBibleMetaForEntry(character, entry, rosterFallbackContext) {
     try {
       const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
       return { meta, canonicalName: null, source: "direct" };
     } catch (directErr) {
       if (isBibleRateLimitError(directErr)) throw directErr;
       const resolved = await resolveBibleCharacterMetaViaRoster(
-        account,
         character,
         rosterFallbackContext
       );
@@ -184,14 +148,12 @@ function createAutoManageGatherer({
   }
 
   async function refreshLogsForEntry({
-    account,
     character,
     entry,
     rosterFallbackContext,
     weekResetStart,
   }) {
     const resolved = await resolveBibleMetaForEntry(
-      account,
       character,
       entry,
       rosterFallbackContext
@@ -232,7 +194,6 @@ function createAutoManageGatherer({
       let rid = character.bibleRid;
       if (!serial || !cid || !rid) {
         const resolved = await resolveBibleMetaForEntry(
-          account,
           character,
           entry,
           rosterFallbackContext
@@ -277,7 +238,6 @@ function createAutoManageGatherer({
           `[auto-manage] bible metadata for "${entry.charName}" returned only other character log(s): ${filteredLogs.mismatchedNames.join(", ")}; refreshing metadata.`
         );
         entry.logs = await refreshLogsForEntry({
-          account,
           character,
           entry,
           rosterFallbackContext,
@@ -356,9 +316,7 @@ function createAutoManageGatherer({
   }
 
   return {
-    gatherAutoManageLogsForCharacter,
     gatherAutoManageLogsForUserDoc,
-    resolveBibleCharacterMetaViaRoster,
   };
 }
 
