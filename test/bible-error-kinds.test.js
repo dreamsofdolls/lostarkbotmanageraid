@@ -72,6 +72,38 @@ test("a not-found name that reads like a rate limit stays notFound", async () =>
   assertKind(error, BIBLE_ERROR_KIND.notFound);
 });
 
+test("a character name never decides the kind of a Bible error", async () => {
+  // Valid names that read like a rate limit or a private Public Log.
+  for (const name of ["Piratelimits", "Logsnotenabled"]) {
+    const missing = await captureRejection(
+      clientAnswering(200, NOT_FOUND_PAGE).fetchBibleCharacterMetaWithLimiter(name)
+    );
+    const unavailable = await captureRejection(
+      clientAnswering(503, "").fetchBibleCharacterMetaWithLimiter(name)
+    );
+    const unreadable = await captureRejection(
+      clientAnswering(200, "<html><body>maintenance</body></html>").fetchBibleCharacterMetaWithLimiter(name)
+    );
+    assertKind(missing, BIBLE_ERROR_KIND.notFound);
+    assertKind(unavailable, BIBLE_ERROR_KIND.other);
+    assertKind(unreadable, BIBLE_ERROR_KIND.other);
+    for (const error of [missing, unavailable, unreadable]) {
+      assert.equal(isPublicLogDisabledError(error), false);
+      assert.equal(isPublicLogDisabledError(error.message), false);
+    }
+  }
+
+  // Text no Bible name holds, placed where the name goes.
+  const unavailable = await captureRejection(
+    clientAnswering(503, "").fetchBibleCharacterMetaWithLimiter("HTTP 403")
+  );
+  assertKind(unavailable, BIBLE_ERROR_KIND.other);
+  const limited = await captureRejection(
+    clientAnswering(429, "").fetchBibleCharacterMetaWithLimiter('lostark.bible has no character "Kanna')
+  );
+  assertKind(limited, BIBLE_ERROR_KIND.rateLimit);
+});
+
 test("character profile reads class from the requested header, not another roster member", async () => {
   const html = '<title>Sáturn (NA) | lostark.bible</title><script>data:{header:{id:123,sn:"serial",rid:456,class:"blade"},redirectedFrom:null},roster:[{name:"Other",class:"bard"}]</script>';
   const profile = await clientAnswering(200, html).fetchBibleCharacterProfileWithLimiter("Sáturn");
