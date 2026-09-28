@@ -233,9 +233,7 @@ async function setParsedGoldRaidMode(options) {
       }
 
       const raidData = target.assignedRaids[raidKey] || {};
-      const currentMode = getAssignedRaidModeKey(raidData, raidKey)
-        || getBestEligibleModeKey(raidKey, itemLevel)
-        || "normal";
+      const currentMode = getRaidModeKey(raidKey, raidData, target);
       const hasRun = getCompletedGateKeys(raidData).length > 0;
       const plain = toPlainAssignedRaid(raidData);
 

@@ -1096,6 +1096,8 @@ module.exports = {
       bulkTogglePlaceholder: "Bulk toggle task cho mọi char...",
       charNoTaskPlaceholder: "{name} chưa có task - dùng /raid-task add",
       charTogglePlaceholder: "Toggle task của {name}...",
+      toggleFailedTitle: "Không đổi được task",
+      toggleFailedDescription: "Artist chưa lưu được task cậu vừa chọn. Session có thể đã cũ hoặc roster/character vừa được cập nhật; cậu mở lại `/raid-status` rồi thử lại nha~",
     },
     goldView: {
       embedTitle: "💰 Gold & độ khó · {accountName}",

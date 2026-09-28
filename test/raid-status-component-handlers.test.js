@@ -677,3 +677,68 @@ test("raid-status component handlers warn when gold toggle cannot be saved", asy
   assert.ok(followUpPayload, "expected warning follow-up when gold toggle is not saved");
   assert.equal(followUpPayload.flags, 64);
 });
+
+test("raid-status component handlers show the view-only lock when a task is toggled on a view-only share", async () => {
+  let queried = false;
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    session: {
+      accounts: [
+        { accountName: "Own" },
+        {
+          accountName: "Shared",
+          _sharedFrom: { ownerDiscordId: "owner-1", ownerLabel: "Mira", accessLevel: "view" },
+        },
+      ],
+      currentPage: 1,
+    },
+    User: {
+      async findOne() {
+        queried = true;
+        return null;
+      },
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.taskToggle]({
+    values: ["Aki::side-1"],
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(queried, false);
+  assert.equal(harness.reloadCount, 0);
+  assert.ok(followUpPayload, "expected the view-only lock notice");
+  assert.equal(followUpPayload.flags, 64);
+  assert.match(followUpPayload.embeds[0].title, /Share view-only$/);
+  assert.match(followUpPayload.embeds[0].description, /\*\*Mira\*\*/);
+});
+
+test("raid-status component handlers warn when a task toggle cannot be saved", async () => {
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    User: {
+      async findOne() {
+        throw new Error("write conflict");
+      },
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.taskToggle]({
+    values: ["Aki::side-1"],
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(harness.reloadCount, 0);
+  assert.ok(followUpPayload, "expected warning follow-up when the task toggle is not saved");
+  assert.equal(followUpPayload.flags, 64);
+  assert.equal(
+    followUpPayload.embeds[0].description,
+    TRANSLATIONS.vi["raid-status"].taskView.toggleFailedDescription,
+  );
+});

@@ -79,10 +79,12 @@ function createRaidStatusComponentLayout({
 
   const addTaskViewRows = (rows, disabled) => {
     addPaginatedViewHeader(rows, disabled);
-    const sharedTaskRow = buildSharedTaskToggleRow(disabled);
+    const sharedFrom = getAccounts()[getCurrentPage()]?._sharedFrom;
+    const taskToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+    const sharedTaskRow = buildSharedTaskToggleRow(taskToggleDisabled);
     const charFilterRow = buildTaskCharFilterRow(disabled);
     rows.push(...[sharedTaskRow, charFilterRow].filter(Boolean));
-    rows.push(buildTaskToggleRow(disabled));
+    rows.push(buildTaskToggleRow(taskToggleDisabled));
   };
 
   const addGoldViewRows = (rows, disabled) => {
@@ -253,6 +255,9 @@ function createRaidStatusComponentLayout({
     const rows = [];
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
+    // The last roster went away mid-session: the card is the no-roster
+    // notice, which has no controls, as when /raid-status opens without one.
+    if (accounts.length === 0) return rows;
 
     const specializedViewRows = specializedViewRowsByName.get(getCurrentView());
     if (specializedViewRows) {

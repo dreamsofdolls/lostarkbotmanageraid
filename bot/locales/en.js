@@ -1073,6 +1073,8 @@ module.exports = {
       bulkTogglePlaceholder: "Bulk toggle a task across every char...",
       charNoTaskPlaceholder: "{name} has no tasks - use /raid-task add",
       charTogglePlaceholder: "Toggle {name}'s tasks...",
+      toggleFailedTitle: "Couldn't update the task",
+      toggleFailedDescription: "Artist couldn't save this task. The session may be stale or the roster/character changed; reopen `/raid-status` and try again.",
     },
     goldView: {
       embedTitle: "💰 Gold & difficulty · {accountName}",

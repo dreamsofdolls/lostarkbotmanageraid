@@ -15,6 +15,7 @@ const {
   STATUS_COMPONENT_ACTION,
   getStatusComponentRoute,
 } = require("./component-routes");
+const { createStatusRedraw } = require("../view/redraw");
 
 const LIVE_SNAPSHOT_ACTIONS = new Set([
   STATUS_COMPONENT_ACTION.prev,
@@ -42,11 +43,19 @@ function attachRaidStatusComponentCollector({
   buildComponents,
   componentRouteHandlers,
   refreshStateIfStale,
+  // The session's shared redraw (view/redraw.js); built here when not given.
+  redrawMessage = null,
 }) {
   const collector = message.createMessageComponentCollector({ time: sessionMs });
   const sessionExpiresAtMs = Date.now() + sessionMs;
   let collectorEnded = false;
   let taskAutoRefreshTimer = null;
+  const redrawCard = redrawMessage || createStatusRedraw({
+    interaction,
+    buildEmbedAndCanvas,
+    buildComponents,
+    isSessionEnded: () => collectorEnded,
+  });
 
   const clearTaskAutoRefresh = () => {
     if (taskAutoRefreshTimer) {
@@ -72,16 +81,15 @@ function attachRaidStatusComponentCollector({
     taskAutoRefreshTimer = setTimeout(async () => {
       taskAutoRefreshTimer = null;
       if (collectorEnded || getCurrentView() !== "task") return;
+      let drawn;
       try {
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        });
+        drawn = await redrawCard();
       } catch (err) {
         console.warn("[raid-status task auto-refresh] edit failed:", err?.message || err);
         return;
       }
-      scheduleTaskAutoRefresh();
+      // A dropped redraw was overtaken by a newer one, which reschedules.
+      if (drawn) scheduleTaskAutoRefresh();
     }, delayMs);
   };
 
@@ -120,10 +128,7 @@ function attachRaidStatusComponentCollector({
     const result = await handler(component);
     if (!route.redraw || result?.redraw === false) return;
 
-    const updated = await interaction.editReply({
-      ...(await buildEmbedAndCanvas()),
-      components: buildComponents(false),
-    }).then(() => true).catch((err) => {
+    const updated = await redrawCard().catch((err) => {
       console.warn("[raid-status component] edit failed:", err?.message || err);
       return false;
     });

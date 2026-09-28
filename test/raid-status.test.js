@@ -34,6 +34,9 @@ const {
   createRaidStatusRenderPayload,
 } = require("../bot/handlers/raid-status/view/render-payload");
 const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task/task-ui");
+const {
+  createRaidStatusComponentLayout,
+} = require("../bot/handlers/raid-status/components/component-layout");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
 const {
   UI,
@@ -1682,6 +1685,77 @@ test("raid-status task view uses unique custom ids for shared and side task drop
     "status-task:toggle",
   ]);
   assert.equal(new Set(customIds).size, customIds.length);
+});
+
+test("raid-status view-only shares render the task toggles disabled, like the gold toggles", () => {
+  const sharedFrom = { ownerDiscordId: "owner-1", ownerLabel: "Mira", accessLevel: "view" };
+  const accounts = [
+    {
+      accountName: "Qilynn",
+      _sharedFrom: sharedFrom,
+      sharedTasks: [
+        { taskId: "shared-1", name: "Solo shop", reset: "weekly", completed: false },
+      ],
+      characters: [
+        {
+          name: "Qilynn",
+          class: "Artist",
+          itemLevel: 1745,
+          sideTasks: [
+            { taskId: "side-1", name: "Paradise", reset: "weekly", completed: false },
+          ],
+        },
+      ],
+    },
+  ];
+  const taskUi = createRaidStatusTaskUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "task",
+    getTaskCharFilter: () => undefined,
+  });
+  const { buildComponents } = createRaidStatusComponentLayout({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText,
+    lang: "vi",
+    buildPaginationRow: () => null,
+    buildViewToggleRow: taskUi.buildViewToggleRow,
+    buildSharedTaskToggleRow: taskUi.buildSharedTaskToggleRow,
+    buildTaskCharFilterRow: taskUi.buildTaskCharFilterRow,
+    buildTaskToggleRow: taskUi.buildTaskToggleRow,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getVisibleRosterCount: () => 1,
+    getCurrentView: () => "task",
+  });
+  const disabledByCustomId = () => Object.fromEntries(
+    buildComponents(false)
+      .map((row) => row.toJSON().components[0])
+      .map((select) => [select.custom_id, select.disabled === true])
+  );
+
+  // Picking the character to look at stays open; only the rows that write do not.
+  assert.deepEqual(disabledByCustomId(), {
+    "status-view:toggle": false,
+    "status-task:shared-toggle": true,
+    "status-task:char-filter": false,
+    "status-task:toggle": true,
+  });
+
+  sharedFrom.accessLevel = "edit";
+  assert.deepEqual(disabledByCustomId(), {
+    "status-view:toggle": false,
+    "status-task:shared-toggle": false,
+    "status-task:char-filter": false,
+    "status-task:toggle": false,
+  });
 });
 
 test("raid-status view toggle includes the received-gold screen", () => {
