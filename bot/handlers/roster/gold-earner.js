@@ -6,6 +6,7 @@ const {
   editEmbed,
   editNotice,
   normalizeName,
+  replyNotice,
 } = require("../../utils/raid/common/shared");
 const {
   authorizePickerSession,
@@ -63,17 +64,6 @@ function createRaidGoldEarnerCommand({
     t,
     buildTogglePickerComponents,
   });
-
-  function buildNotice({ type, title, description }) {
-    return buildNoticeEmbed(EmbedBuilder, { type, title, description });
-  }
-
-  async function replyNotice(interaction, { type, title, description }) {
-    await interaction.reply({
-      embeds: [buildNotice({ type, title, description })],
-      flags: MessageFlags.Ephemeral,
-    });
-  }
 
   function editPickerNotice(interaction, notice, extras = {}) {
     return editNotice(interaction, EmbedBuilder, notice, extras);
@@ -217,7 +207,7 @@ function createRaidGoldEarnerCommand({
       session.selectedIndices.delete(idx);
     } else {
       if (session.selectedIndices.size >= GOLD_EARNER_CAP_PER_ACCOUNT) {
-        await replyNotice(interaction, {
+        await replyNotice(interaction, EmbedBuilder, {
           type: "warn",
           title: t("raid-gold-earner.capWarn.title", session.lang, {
             cap: GOLD_EARNER_CAP_PER_ACCOUNT,

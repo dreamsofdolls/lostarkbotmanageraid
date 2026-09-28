@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  buildPickedCharacterRecord,
+  summarizeSavedCharacter,
+} = require("../picker/character-state");
+
 function getSessionBibleNameSet(session) {
   return session.bibleNames instanceof Set ? session.bibleNames : new Set();
 }
@@ -73,34 +78,22 @@ function buildSelectedCharacterRecords({
   getCharacterName,
   buildCharacterRecord,
   createCharacterId,
-  preserveRosterCharacterState,
 }) {
   const existingMap = buildExistingCharacterMap({ account, normalizeName, getCharacterName });
-  return selectedChars.map((character) => {
-    const existing = existingMap.get(normalizeName(character.charName));
-    const record = buildCharacterRecord(
-      {
-        ...(existing ? existing.toObject?.() ?? existing : {}),
-        name: character.charName,
-        class: character.className,
-        itemLevel: character.itemLevel,
-        combatScore: character.combatScore,
-      },
-      existing?.id || createCharacterId()
-    );
-    return preserveRosterCharacterState(record, existing);
-  });
+  return selectedChars.map((character) => buildPickedCharacterRecord(
+    character,
+    existingMap.get(normalizeName(character.charName)),
+    { buildCharacterRecord, createCharacterId }
+  ));
 }
 
 function buildSavedAccountSnapshot({ account, getCharacterName, getCharacterClass }) {
   return {
     accountName: account.accountName,
-    characters: account.characters.map((character) => ({
-      name: getCharacterName(character),
-      class: getCharacterClass(character),
-      itemLevel: Number(character.itemLevel) || 0,
-      combatScore: character.combatScore || "",
-    })),
+    characters: account.characters.map((character) => summarizeSavedCharacter(
+      character,
+      { getCharacterName, getCharacterClass }
+    )),
   };
 }
 
@@ -113,7 +106,6 @@ function createAddRosterPersistence({
   getCharacterClass,
   buildCharacterRecord,
   createCharacterId,
-  preserveRosterCharacterState,
 }) {
   async function persistSelectedRoster(session, selectedChars) {
     const rosterNameSet = new Set(selectedChars.map((c) => normalizeName(c.charName)));
@@ -163,7 +155,6 @@ function createAddRosterPersistence({
         getCharacterName,
         buildCharacterRecord,
         createCharacterId,
-        preserveRosterCharacterState,
       });
       account.lastRefreshedAt = Date.now();
       await userDoc.save();

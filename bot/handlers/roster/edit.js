@@ -18,9 +18,6 @@ const {
   loadRosterPickerButtonContext,
 } = require("./picker/button-flow");
 const {
-  preserveRosterCharacterState,
-} = require("./picker/character-state");
-const {
   buildEditRosterPickerChars: buildEditRosterPickerCharsCore,
 } = require("./edit/edit-picker-chars");
 const {
@@ -32,10 +29,11 @@ const {
 const {
   createEditRosterRenderers,
 } = require("./edit/edit-render");
-
-const SESSION_TTL_MS = 5 * 60 * 1000;
-const PICKER_MAX_OPTIONS = 20;
-const BUTTONS_PER_ROW = 5;
+const {
+  SESSION_TTL_MS,
+  PICKER_MAX_OPTIONS,
+  BUTTONS_PER_ROW,
+} = require("./picker/constants");
 
 function createEditRosterCommand({
   EmbedBuilder,
@@ -97,7 +95,6 @@ function createEditRosterCommand({
     getCharacterClass,
     getCharacterName,
     normalizeName,
-    preserveRosterCharacterState,
     saveWithRetry,
   });
 

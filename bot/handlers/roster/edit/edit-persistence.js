@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  buildPickedCharacterRecord,
+  summarizeSavedCharacter,
+} = require("../picker/character-state");
+
 function createPersistEditedRoster({
   User,
   buildCharacterRecord,
@@ -8,7 +13,6 @@ function createPersistEditedRoster({
   getCharacterClass,
   getCharacterName,
   normalizeName,
-  preserveRosterCharacterState,
   saveWithRetry,
 }) {
   return async function persistEditedRoster(session, selectedChars) {
@@ -66,30 +70,20 @@ function createPersistEditedRoster({
           summary.added.push(character.charName);
         }
 
-        const existingPlain = existing ? existing.toObject?.() ?? existing : {};
-        const record = buildCharacterRecord(
-          {
-            ...existingPlain,
-            name: character.charName,
-            class: character.className,
-            itemLevel: character.itemLevel,
-            combatScore: character.combatScore,
-          },
-          existing?.id || createCharacterId()
-        );
-        return preserveRosterCharacterState(record, existing);
+        return buildPickedCharacterRecord(character, existing, {
+          buildCharacterRecord,
+          createCharacterId,
+        });
       });
 
       account.characters = [...preservedChars, ...editedChars];
       account.lastRefreshedAt = Date.now();
       await userDoc.save();
 
-      summary.finalChars = account.characters.map((character) => ({
-        name: getCharacterName(character),
-        class: getCharacterClass(character),
-        itemLevel: Number(character.itemLevel) || 0,
-        combatScore: character.combatScore || "",
-      }));
+      summary.finalChars = account.characters.map((character) => summarizeSavedCharacter(
+        character,
+        { getCharacterName, getCharacterClass }
+      ));
     });
 
     return summary;
