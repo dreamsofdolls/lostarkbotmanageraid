@@ -24,18 +24,26 @@ function addTurn(turns, name) {
 }
 
 /**
- * Replace one turn's members (deduped); other turns untouched.
+ * Replace one turn's members (deduped); other turns untouched. Members in
+ * `unlistedIds` (signups the capped picker could not show, so the lead had
+ * no way to untick them) stay in the turn.
  * @param {Array} turns
  * @param {number} index - turn to update
  * @param {string[]} memberIds - signup discordIds to set
+ * @param {string[]} [unlistedIds=[]] - pool ids the picker did not list
  * @returns {Array} new turns array
  */
-function setTurnMembers(turns, index, memberIds) {
-  const unique = [...new Set(Array.isArray(memberIds) ? memberIds : [])];
-  return (Array.isArray(turns) ? turns : []).map((turn, i) => ({
-    name: turn.name,
-    memberIds: i === index ? unique : [...(turn.memberIds || [])],
-  }));
+function setTurnMembers(turns, index, memberIds, unlistedIds = []) {
+  const unlisted = new Set(Array.isArray(unlistedIds) ? unlistedIds : []);
+  return (Array.isArray(turns) ? turns : []).map((turn, i) => {
+    const current = [...(turn.memberIds || [])];
+    if (i !== index) return { name: turn.name, memberIds: current };
+    const kept = current.filter((id) => unlisted.has(id));
+    return {
+      name: turn.name,
+      memberIds: [...new Set([...(Array.isArray(memberIds) ? memberIds : []), ...kept])],
+    };
+  });
 }
 
 /**

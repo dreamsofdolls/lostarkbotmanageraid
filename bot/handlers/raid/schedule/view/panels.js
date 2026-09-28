@@ -18,10 +18,14 @@ const {
   STATUS_CODE,
 } = require("./board");
 const {
+  PICKER_LIMIT,
   clip,
   characterSelectOptions,
   signupSelectOptions,
 } = require("./select-options");
+
+// Discord allows 5 action rows per message: up to 5 kick selects of 25.
+const KICK_SELECT_ROWS = 5;
 
 function raidLabelFor(event) {
   const meta = getRaidRequirementMap()[`${event.raidKey}_${event.modeKey}`];
@@ -136,14 +140,27 @@ function createSchedulePanelBuilders({
     };
   }
 
+  // A select holds 25 options, so a pool past 25 spills into extra selects
+  // (like /raid-check's teams dropdowns) and every signup stays kickable.
   function kickSelectPayload(event, lang) {
-    const options = signupSelectOptions(event.signups, lang);
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`rse:kickpick:${event._id}`)
-      .setPlaceholder(t("raid-schedule.kick.placeholder", lang))
-      .setMinValues(1)
-      .setMaxValues(options.length)
-      .addOptions(options);
+    const signups = event.signups || [];
+    const chunkCount = Math.min(Math.ceil(signups.length / PICKER_LIMIT), KICK_SELECT_ROWS);
+    if (signups.length > chunkCount * PICKER_LIMIT) {
+      console.warn(`[raid-schedule] kick picker capped: ${signups.length} signups, showing ${chunkCount * PICKER_LIMIT}`);
+    }
+    const placeholder = t("raid-schedule.kick.placeholder", lang);
+    const rows = Array.from({ length: chunkCount }, (_, chunkIdx) => {
+      const start = chunkIdx * PICKER_LIMIT;
+      const options = signupSelectOptions(signups.slice(start), lang);
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(chunkIdx === 0 ? `rse:kickpick:${event._id}` : `rse:kickpick:${chunkIdx}:${event._id}`)
+          .setPlaceholder(chunkCount > 1 ? clip(`${placeholder} (${start + 1}-${start + options.length})`, 150) : placeholder)
+          .setMinValues(1)
+          .setMaxValues(options.length)
+          .addOptions(options),
+      );
+    });
     return {
       embeds: [
         noticeEmbed(
@@ -152,7 +169,7 @@ function createSchedulePanelBuilders({
           t("raid-schedule.kick.intro", lang),
         ),
       ],
-      components: [new ActionRowBuilder().addComponents(select)],
+      components: rows,
       flags: ephemeralFlag,
     };
   }

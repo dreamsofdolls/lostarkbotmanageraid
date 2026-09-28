@@ -24,6 +24,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-schedule-preview` create and Edit time no longer accept a start date that has already passed (`5/6/25 20:00`, or an earlier hour today with the year typed) or a three-digit year (`5/6/202`): they show the invalid-time notice instead of saving a board that locked within a minute and was deleted with its signups at the next weekly-reset sweep. A date without a year still rolls to next year.
 - Unlocking a `/raid-schedule-preview` board from Manage after its start time keeps it open; before, auto-lock locked it again within a minute. Unlocking such a board also turns its auto-lock off.
 - A `/raid-schedule-preview` board that auto-locks at its start time keeps the 🗓 Board khác của lead switcher; before, the auto-lock refresh dropped that row.
+- On a `/raid-schedule-preview` board with more than 25 signups, Kick shows one menu per 25 people so everyone can be kicked; before, signups after #25 were missing from it. Editing a turn no longer removes members the 25-name menu could not list, such as someone who re-joined with another character and moved to the end.
 
 ## 2026-09-27
 
