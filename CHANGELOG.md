@@ -21,6 +21,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-log` Log gần đây no longer claims a roster has no public logs when Bible failed for every character (a 429, for one): the previous card comes back with the matching notice, and nothing is cached. It asks Bible about two characters at a time and stops asking once its 45 seconds are up, so other `/raid-log` panels and Auto-sync keep their place in the queue.
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
+- A Discord error on a click in the `/raid-check` Manager view or the `/raid-bg view` scene browser (a click Discord had already expired, for one) is logged and the session carries on. It used to shut the whole bot down, taking every open panel with it.
 
 ## 2026-09-27
 

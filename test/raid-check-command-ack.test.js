@@ -231,3 +231,59 @@ test("manager Sync-check all dispatches without requiring per-raid metadata", as
   assert.equal(queries, 1);
   assert.match(report.embeds[0].toJSON().description, /No rosters have Auto-sync enabled/);
 });
+
+async function openAllModeSession({ userDoc, runManualRosterRefresh } = {}) {
+  clearUserLanguageCache();
+  const { createAllModeHandler } = require("../bot/handlers/raid-check/all-mode/all-mode");
+  const handlers = {};
+  const edits = [];
+  const User = {
+    find: () => ({ select() { return this; }, lean: async () => [userDoc] }),
+    findOne: () => ({ lean: async () => ({ language: "en" }) }),
+  };
+  const command = createAllModeHandler({
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder,
+    User, ensureFreshWeek: () => {}, truncateText: text => String(text),
+    buildAccountPageEmbed: () => new EmbedBuilder().setTitle("Roster"),
+    buildStatusFooterText: () => "Weekly progress",
+    summarizeRaidProgress: raids => ({ completed: 0, total: raids.length }),
+    getStatusRaidsForCharacter: () => [{ raidKey: "act4", modeKey: "hard", goldReceives: true, isCompleted: false }],
+    buildPaginationRow: (_page, _total, disabled) => new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("raid-check-all-page:prev").setLabel("Previous").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    ),
+    isRaidLeader: () => true, RAID_CHECK_USER_QUERY_FIELDS: "", RAID_CHECK_PAGINATION_SESSION_MS: 1000,
+    runManualRosterRefresh,
+  });
+  const message = {
+    createMessageComponentCollector: () => ({ on: (event, handler) => { handlers[event] = handler; } }),
+    edit: async payload => { edits.push(payload); },
+  };
+  await command.handleRaidCheckAllCommand({
+    user: { id: "ui-manager" }, guildId: "guild",
+    deferReply: async () => {},
+    editReply: async payload => { edits.push(payload); return message; },
+  });
+  return { handlers, edits };
+}
+
+test("a rejected Discord call in the raid-check collector is logged instead of crashing the bot", async (t) => {
+  const errors = [];
+  t.mock.method(console, "error", (...args) => { errors.push(args); });
+  const { handlers } = await openAllModeSession({
+    userDoc: {
+      discordId: "roster-user", discordDisplayName: "Roster user",
+      accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+    },
+  });
+  const unknownInteraction = Object.assign(new Error("Unknown interaction"), { code: 10062 });
+
+  // An unhandled rejection here would reach process-lifecycle and exit the bot.
+  await handlers.collect({
+    customId: "raid-check-all-teams:0", user: { id: "ui-manager" }, values: ["event-1"],
+    deferReply: async () => { throw unknownInteraction; },
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].at(-1), unknownInteraction);
+  await handlers.end();
+});
