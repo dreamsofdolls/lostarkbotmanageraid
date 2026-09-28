@@ -2,6 +2,7 @@
 
 const { buildTogglePickerComponents } = require("../../../utils/raid/roster-picker");
 const { t } = require("../../../services/i18n");
+const { buildPickerClosedEmbed, formatSavedCharacterLine } = require("../picker/render");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
@@ -122,39 +123,31 @@ function createEditRosterRenderers({
     });
   }
 
+  function buildClosedEmbed(session, state) {
+    return buildPickerClosedEmbed({
+      EmbedBuilder,
+      UI,
+      t,
+      keyPrefix: "raid-edit-roster",
+      state,
+      lang: session.lang,
+      vars: { accountName: session.accountName },
+      withFooter: true,
+    });
+  }
+
   function buildExpiredEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-edit-roster.expired.title", lang, { iconWarn: UI.icons.warn }))
-      .setDescription(
-        t("raid-edit-roster.expired.description", lang, {
-          accountName: session.accountName,
-        })
-      )
-      .setColor(UI.colors.muted)
-      .setFooter({ text: t("raid-edit-roster.expired.footerText", lang) });
+    return buildClosedEmbed(session, "expired");
   }
 
   function buildCancelledEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-edit-roster.cancelled.title", lang, { iconInfo: UI.icons.info }))
-      .setDescription(
-        t("raid-edit-roster.cancelled.description", lang, {
-          accountName: session.accountName,
-        })
-      )
-      .setColor(UI.colors.muted)
-      .setFooter({ text: t("raid-edit-roster.cancelled.footerText", lang) });
+    return buildClosedEmbed(session, "cancelled");
   }
 
   function buildSavedEmbed(session, summary) {
     const lang = session.lang;
     const { added, removed, kept, finalChars } = summary;
-    const lines = finalChars.map(
-      (character, index) =>
-        `${index + 1}. ${character.name} \u00b7 ${character.class} \u00b7 \`${character.itemLevel}\` \u00b7 \`${character.combatScore || "?"}\``
-    );
+    const lines = finalChars.map(formatSavedCharacterLine);
     const diffParts = [];
 
     if (added.length) {

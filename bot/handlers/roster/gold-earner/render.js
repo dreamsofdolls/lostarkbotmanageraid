@@ -7,6 +7,7 @@ const {
   CHECK_ICON,
   UNCHECK_ICON,
 } = require("./constants");
+const { buildPickerClosedEmbed } = require("../picker/render");
 
 function createGoldEarnerRenderers({
   EmbedBuilder,
@@ -82,24 +83,24 @@ function createGoldEarnerRenderers({
     });
   }
 
+  function buildClosedEmbed(session, state) {
+    return buildPickerClosedEmbed({
+      EmbedBuilder,
+      UI,
+      t,
+      keyPrefix: "raid-gold-earner",
+      state,
+      lang: session.lang,
+      vars: { accountName: session.accountName },
+    });
+  }
+
   function buildExpiredEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-gold-earner.expired.title", lang, { iconWarn: UI.icons.warn }))
-      .setDescription(
-        t("raid-gold-earner.expired.description", lang, { accountName: session.accountName })
-      )
-      .setColor(UI.colors.muted);
+    return buildClosedEmbed(session, "expired");
   }
 
   function buildCancelledEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-gold-earner.cancelled.title", lang, { iconInfo: UI.icons.info }))
-      .setDescription(
-        t("raid-gold-earner.cancelled.description", lang, { accountName: session.accountName })
-      )
-      .setColor(UI.colors.muted);
+    return buildClosedEmbed(session, "cancelled");
   }
 
   function buildSavedEmbed(session, savedNames) {

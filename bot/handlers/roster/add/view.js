@@ -4,6 +4,7 @@ const {
   buildTogglePickerComponents,
 } = require("../../../utils/raid/roster-picker");
 const { BUTTONS_PER_ROW } = require("../picker/constants");
+const { buildPickerClosedEmbed, formatSavedCharacterLine } = require("../picker/render");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
@@ -84,43 +85,34 @@ function createAddRosterViewBuilders({
     });
   }
 
+  function buildClosedEmbed(session, state) {
+    return buildPickerClosedEmbed({
+      EmbedBuilder,
+      UI,
+      t,
+      keyPrefix: "raid-add-roster",
+      state,
+      lang: session.lang,
+      vars: {
+        seedName: session.seedCharName,
+        link: buildSeedRosterLink(session.seedCharName),
+      },
+      withFooter: true,
+    });
+  }
+
   function buildExpiredEmbed(session) {
-    const lang = session.lang;
-    const link = buildSeedRosterLink(session.seedCharName);
-    return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.expired.title", lang, { iconWarn: UI.icons.warn }))
-      .setDescription(
-        t("raid-add-roster.expired.description", lang, {
-          seedName: session.seedCharName,
-          link,
-        })
-      )
-      .setColor(UI.colors.muted)
-      .setFooter({ text: t("raid-add-roster.expired.footerText", lang) });
+    return buildClosedEmbed(session, "expired");
   }
 
   function buildCancelledEmbed(session) {
-    const lang = session.lang;
-    const link = buildSeedRosterLink(session.seedCharName);
-    return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.cancelled.title", lang, { iconInfo: UI.icons.info }))
-      .setDescription(
-        t("raid-add-roster.cancelled.description", lang, {
-          seedName: session.seedCharName,
-          link,
-        })
-      )
-      .setColor(UI.colors.muted)
-      .setFooter({ text: t("raid-add-roster.cancelled.footerText", lang) });
+    return buildClosedEmbed(session, "cancelled");
   }
 
   function buildSavedEmbed(session, savedAccount, dmDelivery = null) {
     const lang = session.lang;
     const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map(
-      (character, index) =>
-        `${index + 1}. ${character.name} \u00b7 ${character.class} \u00b7 \`${character.itemLevel}\` \u00b7 \`${character.combatScore || "?"}\``
-    );
+    const summaryLines = savedAccount.characters.map(formatSavedCharacterLine);
     const descriptionLines = [
       t("raid-add-roster.saved.rosterLine", lang, {
         accountName: savedAccount.accountName,
@@ -176,10 +168,7 @@ function createAddRosterViewBuilders({
   function buildTargetDMEmbed(session, savedAccount, guildName, targetLang) {
     const lang = targetLang;
     const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map(
-      (character, index) =>
-        `${index + 1}. ${character.name} \u00b7 ${character.class} \u00b7 \`${character.itemLevel}\` \u00b7 \`${character.combatScore || "?"}\``
-    );
+    const summaryLines = savedAccount.characters.map(formatSavedCharacterLine);
     const guildLine = guildName
       ? t("raid-add-roster.targetDM.guildLine", lang, { guildName })
       : "";
