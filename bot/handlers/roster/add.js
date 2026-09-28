@@ -1,6 +1,6 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { buildNoticeEmbed, replyNotice: replySharedNotice } = require("../../utils/raid/common/shared");
 const {
   handlePickerSessionTimeout,
   newPickerSessionId,
@@ -26,7 +26,6 @@ const {
   SESSION_TTL_MS,
   PICKER_MAX_OPTIONS,
 } = require("./picker/constants");
-const { createAddRosterNoticeHelpers } = require("./add/notices");
 const { createAddRosterTargetResolver } = require("./add/target");
 const {
   buildAddRosterSession,
@@ -56,11 +55,7 @@ function createAddRosterCommand({
   getPrimaryManagerId,
 }) {
   const adminMention = resolveAdminMention(getPrimaryManagerId);
-  const { buildNotice, replyNotice } = createAddRosterNoticeHelpers({
-    EmbedBuilder,
-    MessageFlags,
-    buildNoticeEmbed,
-  });
+  const replyNotice = (interaction, notice) => replySharedNotice(interaction, EmbedBuilder, notice);
   // Module-level cache: sessionId -> session state. Lives in process
   // Sessions are memory-only and are discarded on restart. Users can reopen
   // the picker with /raid-add-roster. Random session IDs allow concurrent
@@ -222,7 +217,7 @@ function createAddRosterCommand({
         await interaction.editReply({
           content: null,
           embeds: [
-            buildNotice({
+            buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
               title: t("raid-add-roster.duplicate.postFetchTitle", lang),
               description: t("raid-add-roster.duplicate.postFetchDescription", lang, {
