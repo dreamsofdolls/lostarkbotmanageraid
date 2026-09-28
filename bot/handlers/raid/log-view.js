@@ -54,26 +54,33 @@ function parseSummary(summary) {
   };
 }
 
+// One MVP field per pick. The chip reads "-" while the pick lacks `figure`;
+// without a pick at all the field shows `empty` ([values key, chip]) or a bare "-".
+const HIGHLIGHT_FIELDS = [
+  { emoji: "👑", key: "mvpDamage", pick: "damage", figure: "share", chip: pick => `${pick.share}% D%` },
+  { emoji: "📈", key: "scoreDealer", pick: "dealerScore", figure: "badge",
+    chip: pick => `${badgeText(pick.badge)} · ${formatCompact(pick.ndps)} nDPS` },
+  { emoji: "🎯", key: "mvpCounter", pick: "counter", figure: "counters", empty: ["noCounter", "0"],
+    chip: (pick, lang) => [t("raid-log.values.counter", lang, { count: pick.counters }),
+      ...(pick.tied ? [`${formatCompact(pick.stagger)} STAG`] : [])].join(" · ") },
+  { emoji: "✨", key: "mvpSupport", pick: "support", figure: "share", empty: ["noSupport", "-"], chip: pick => `${pick.share}% bD%` },
+  { emoji: "🤝", key: "supportContribution", pick: "supportContribution", figure: "badge", empty: ["noSupport", "-"],
+    chip: pick => [badgeText(pick.badge), ...(pick.contribution === null ? [] : [`${pick.contribution}% rCon`])].join(" · ") },
+  { emoji: "⏱️", key: "supportUptime", pick: "supportUptime", figure: "badge", empty: ["noSupport", "-"],
+    chip: pick => badgeText(pick.badge) },
+];
+
 // Custom emoji do not render inside code spans, so the name sits above its chip.
 function highlightFields(players, bracketed, lang) {
-  const { damage, dealerScore, counter, support, supportContribution, supportUptime } = pickHighlights(players, bracketed);
+  const picks = pickHighlights(players, bracketed);
   const person = (pick, chip) => `${[getClassEmoji(pick.player.className), `**${splitLabel(pick.player.label).name}**`]
     .filter(Boolean).join(" ")}\n\`${chip}\``;
-  const noSupport = `${t("raid-log.values.noSupport", lang)}\n\`-\``;
-  const contributionChip = pick => [badgeText(pick.badge), ...(pick.contribution === null ? [] : [`${pick.contribution}% rCon`])].join(" · ");
-  return [
-    field("👑", "mvpDamage", damage ? person(damage, damage.share === null ? "-" : `${damage.share}% D%`) : "`-`", lang),
-    field("📈", "scoreDealer", dealerScore ? person(dealerScore, dealerScore.badge === null ? "-"
-      : `${badgeText(dealerScore.badge)} · ${formatCompact(dealerScore.ndps)} nDPS`) : "`-`", lang),
-    field("🎯", "mvpCounter", counter ? person(counter, counter.counters === null ? "-"
-      : [t("raid-log.values.counter", lang, { count: counter.counters }), ...(counter.tied ? [`${formatCompact(counter.stagger)} STAG`] : [])].join(" · "))
-      : `${t("raid-log.values.noCounter", lang)}\n\`0\``, lang),
-    field("✨", "mvpSupport", support ? person(support, support.share === null ? "-" : `${support.share}% bD%`) : noSupport, lang),
-    field("🤝", "supportContribution", supportContribution
-      ? person(supportContribution, supportContribution.badge === null ? "-" : contributionChip(supportContribution)) : noSupport, lang),
-    field("⏱️", "supportUptime", supportUptime
-      ? person(supportUptime, supportUptime.badge === null ? "-" : badgeText(supportUptime.badge)) : noSupport, lang),
-  ];
+  return HIGHLIGHT_FIELDS.map(({ emoji, key, pick: pickKey, figure, empty, chip }) => {
+    const pick = picks[pickKey];
+    const value = pick ? person(pick, pick[figure] === null ? "-" : chip(pick, lang))
+      : empty ? `${t(`raid-log.values.${empty[0]}`, lang)}\n\`${empty[1]}\`` : "`-`";
+    return field(emoji, key, value, lang);
+  });
 }
 
 function fightFields(summary, lang) {
@@ -90,8 +97,16 @@ function logFigures(entry, support, lang) {
   return [...figures, `⏱ ${formatClock(entry.duration)}`, ...(entry.isDead ? ["💀"] : []), ...(entry.isBus ? ["🚌"] : [])];
 }
 
+/**
+ * @param {{ catalog: object, selected: object }} state
+ * @returns {object[]} the catalog's logs of the open log's raid, newest first
+ */
+function openRaidLogs({ catalog, selected }) {
+  return catalog.logs.filter(entry => entry.raidKey === selected.raidKey);
+}
+
 function historyField(state, support) {
-  const shown = state.catalog.logs.filter(entry => entry.raidKey === state.selected.raidKey).slice(0, HISTORY_SIZE);
+  const shown = openRaidLogs(state).slice(0, HISTORY_SIZE);
   // The open log stays on the card even when it is older than the newest five.
   if (!shown.some(entry => entry.id === state.selected.id)) shown[shown.length - 1] = state.selected;
   const lines = shown.map(entry => {
@@ -136,6 +151,19 @@ const TAB_EMOJI = Object.freeze({
   tanked: "🩸", dps_average: "📈", dps_10s: "📉", damage_category: "🧩",
 });
 
+// The page offset of each previous/next entry pagedChoices adds. A Map, so a
+// log id such as "toString" is never mistaken for one.
+const PAGE_STEPS = new Map([["__prev", -1], ["__next", 1]]);
+
+/**
+ * @param {{ id: string, revision: number }} state panel session
+ * @param {string} action
+ * @returns {string} the custom id the component router hands back to /raid-log
+ */
+function raidLogCustomId(state, action) {
+  return `raid-log:${state.id}:${state.revision}:${action}`;
+}
+
 /**
  * @param {object[]} choices menu options
  * @param {number} page zero-based page
@@ -173,7 +201,7 @@ function raidOptions(state, support) {
 }
 
 function logOptions(state, support) {
-  const options = state.catalog.logs.filter(entry => entry.raidKey === state.selected.raidKey).map(entry => {
+  const options = openRaidLogs(state).map(entry => {
     const percent = headlinePercent(entry, support, state.bracketed);
     return {
       label: truncateSelectText([`${entry.gate || entry.raidLabel} ${entry.difficulty}`.trim(), formatWhen(entry.timestamp),
@@ -228,7 +256,7 @@ function tabOptions(state, tabs) {
  * @returns {ActionRowBuilder[]} the button row, then the raid, log, player and tab menus
  */
 function buildLogComponents(state, disabled = false) {
-  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
+  const id = action => raidLogCustomId(state, action);
   const support = isSupportClass(state.catalog.profile.className);
   const tabs = tabsForPlayer(state.player, state.result);
   const tabKeys = Object.keys(tabs);
@@ -253,4 +281,7 @@ function buildLogComponents(state, disabled = false) {
   ];
 }
 
-module.exports = { buildLogComponents, buildLogEmbeds, parseSummary, headlinePercent, pagedChoices, PAGE_SIZE };
+module.exports = {
+  buildLogComponents, buildLogEmbeds, parseSummary, headlinePercent, openRaidLogs,
+  raidLogCustomId, pagedChoices, PAGE_STEPS, PAGE_SIZE,
+};

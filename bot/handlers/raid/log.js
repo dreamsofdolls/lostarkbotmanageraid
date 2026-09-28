@@ -5,7 +5,7 @@ const { getUserLanguage, t } = require("../../services/i18n");
 const { parseRaidLogSource, normalizeCharacterName } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
-const { buildLogComponents, buildLogEmbeds, PAGE_SIZE } = require("./log-view");
+const { buildLogComponents, buildLogEmbeds, openRaidLogs, PAGE_SIZE, PAGE_STEPS } = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
 const { buildRaidLogNotice, buildRevokedNotice } = require("./log-notices");
@@ -19,6 +19,13 @@ const LOG_ACTION_TYPES = {
 };
 // Each stage accepts only its own controls.
 const ACTION_TYPES = { picker: PICKER_ACTION_TYPES, recent: RECENT_ACTION_TYPES, log: LOG_ACTION_TYPES };
+// Errors meaning the character stopped sharing logs: the panel becomes a lock card.
+const REVOKING_CODES = new Set(["logs_private", "no_logs", "character_mismatch"]);
+
+// A menu value must be one the card offered.
+function requireOption(options, value) {
+  if (!options.some(option => option.value === value)) throw new RaidLogError("invalid_selection");
+}
 
 function createRaidLogCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User, captureRaidLog, logCatalog, recentLogs,
@@ -31,7 +38,8 @@ function createRaidLogCommand({
   sessionMs = 15 * 60_000, maxSessions = 64, now = Date.now, log = console,
 }) {
   const sessions = new Map();
-  const embeds = (state, result) => buildLogEmbeds(state, result, { EmbedBuilder, UI });
+  const builders = { EmbedBuilder, UI };
+  const embeds = (state, result) => buildLogEmbeds(state, result, builders);
   function remember(state) {
     for (const [id, entry] of sessions) if (entry.expires <= now() && !entry.busy) sessions.delete(id);
     if (sessions.size >= maxSessions) {
@@ -66,6 +74,21 @@ function createRaidLogCommand({
     }
   }
 
+  // The session takes the change only once `show` has put its card on screen;
+  // a failed edit leaves the session on the card still showing.
+  async function advance(state, changes, show) {
+    const next = { ...state, ...changes, revision: state.revision + 1 };
+    await show(next);
+    Object.assign(state, next);
+  }
+
+  // Resolve against the owner's latest saved roster, never another member's
+  // shared/manager-accessible accounts or a stale array index.
+  async function requireSavedCharacter(state, matches) {
+    const fresh = await loadCaller(state.ownerId);
+    if (!rosterChoices(fresh?.accounts).some(matches)) throw new RaidLogError("roster_changed");
+  }
+
   async function handleRaidLogCommand(interaction) {
     await interaction.deferReply({});
     let rosterUnavailable = false;
@@ -84,7 +107,7 @@ function createRaidLogCommand({
         choices: rosterChoices(userDoc?.accounts), rosterUnavailable,
       };
       remember(state);
-      const message = await interaction.editReply(buildLogPicker(state, { EmbedBuilder, UI }));
+      const message = await interaction.editReply(buildLogPicker(state, builders));
       state.messageId = message.id;
     } catch (error) {
       if (state) sessions.delete(state.id);
@@ -104,18 +127,11 @@ function createRaidLogCommand({
     }
     if (action === "submit") return openLog(interaction, state, interaction.fields.getTextInputValue("character"));
     const value = interaction.values?.[0];
-    if (!pickerOptions(state).some(option => option.value === value)) throw new RaidLogError("invalid_selection");
-    if (value === "__prev" || value === "__next") {
-      const next = { ...state, page: state.page + (value === "__next" ? 1 : -1), revision: state.revision + 1 };
-      await interaction.editReply(buildLogPicker(next, { EmbedBuilder, UI }));
-      Object.assign(state, next);
-      return;
-    }
+    requireOption(pickerOptions(state), value);
+    const step = PAGE_STEPS.get(value);
+    if (step) return advance(state, { page: state.page + step }, next => interaction.editReply(buildLogPicker(next, builders)));
     const choice = state.choices[Number(value)];
-    // Resolve against the owner's latest saved roster, never another member's
-    // shared/manager-accessible accounts or a stale array index.
-    const fresh = await loadCaller(state.ownerId);
-    if (!rosterChoices(fresh?.accounts).some(entry => entry.key === choice.key)) throw new RaidLogError("roster_changed");
+    await requireSavedCharacter(state, entry => entry.key === choice.key);
     await openLog(interaction, state, choice.name);
   }
 
@@ -125,28 +141,24 @@ function createRaidLogCommand({
     const catalog = await logCatalog.open(source.character, { logId });
     const selected = logId ? catalog.logs.find(entry => entry.id === logId) : catalog.logs[0];
     if (!selected) throw new RaidLogError("invalid_selection");
-    const logIndex = catalog.logs.filter(entry => entry.raidKey === selected.raidKey).findIndex(entry => entry.id === selected.id);
-    const next = {
-      ...state, stage: "log", revision: state.revision + 1, expires: now() + sessionMs, catalog, selected,
-      tab: "damage", player: null, bracketed: true, raidPage: 0, logPage: Math.floor(logIndex / PAGE_SIZE), choices: [], recent: null,
-    };
-    await render(interaction, next);
-    Object.assign(state, next);
+    const logIndex = openRaidLogs({ catalog, selected }).findIndex(entry => entry.id === selected.id);
+    await advance(state, {
+      stage: "log", expires: now() + sessionMs, catalog, selected, tab: "damage", player: null, bracketed: true,
+      raidPage: 0, logPage: Math.floor(logIndex / PAGE_SIZE), choices: [], recent: null,
+    }, next => render(interaction, next));
   }
 
   async function showRecent(interaction, state, refresh) {
     const accounts = (await loadCaller(state.ownerId))?.accounts;
     // The loading card has no controls; busy stays held until the result replaces it.
-    await interaction.editReply(buildRecentLoading(state, recentLogs.countCandidates(accounts), { EmbedBuilder, UI }));
+    await interaction.editReply(buildRecentLoading(state, recentLogs.countCandidates(accounts), builders));
     try {
       const recent = await recentLogs.load(state.ownerId, accounts, { refresh });
-      const next = { ...state, stage: "recent", recent, revision: state.revision + 1, expires: now() + sessionMs };
-      await interaction.editReply(buildRecentView(next, { EmbedBuilder, UI }));
-      Object.assign(state, next);
+      await advance(state, { stage: "recent", recent, expires: now() + sessionMs },
+        next => interaction.editReply(buildRecentView(next, builders)));
     } catch (error) {
       // Put the card the loading card replaced back, controls included, before the notice.
-      const previous = state.stage === "recent" ? buildRecentView(state, { EmbedBuilder, UI }) : buildLogPicker(state, { EmbedBuilder, UI });
-      await interaction.editReply(previous);
+      await interaction.editReply(state.stage === "recent" ? buildRecentView(state, builders) : buildLogPicker(state, builders));
       throw error;
     }
   }
@@ -154,20 +166,14 @@ function createRaidLogCommand({
   async function handleRecent(interaction, state, action) {
     if (action === "recent_refresh") return showRecent(interaction, state, true);
     if (action === "picker") {
-      const next = { ...state, stage: "picker", recent: null, revision: state.revision + 1 };
-      await interaction.editReply(buildLogPicker(next, { EmbedBuilder, UI }));
-      Object.assign(state, next);
-      return;
+      return advance(state, { stage: "picker", recent: null }, next => interaction.editReply(buildLogPicker(next, builders)));
     }
     const value = interaction.values?.[0];
-    if (!recentOptions(state).some(option => option.value === value)) throw new RaidLogError("invalid_selection");
+    requireOption(recentOptions(state), value);
     const entry = state.recent.entries[Number(value)];
     // As with the roster menu, the character must still be in the caller's saved roster.
-    const fresh = await loadCaller(state.ownerId);
     const name = normalizeCharacterName(entry.character);
-    if (!rosterChoices(fresh?.accounts).some(choice => normalizeCharacterName(choice.name) === name)) {
-      throw new RaidLogError("roster_changed");
-    }
+    await requireSavedCharacter(state, choice => normalizeCharacterName(choice.name) === name);
     await openLog(interaction, state, entry.character, entry.id);
   }
 
@@ -184,31 +190,48 @@ function createRaidLogCommand({
     player: (state, value) => ({ player: state.result.players?.find(entry => entry.id === value) || null, tab: "damage" }),
   };
 
+  // The session fields a log-panel control changes.
   async function applySelection(state, action, value) {
-    const next = { ...state, revision: state.revision + 1 };
     const control = buildLogComponents(state).flatMap(row => row.toJSON().components)
       .find(component => component.custom_id.endsWith(`:${action}`));
-    if (!control || control.disabled || (control.options && !control.options.some(option => option.value === value))) throw new RaidLogError("invalid_selection");
-    if (Object.hasOwn(viewSelections, action)) return { ...next, ...viewSelections[action](state, value) };
+    if (!control || control.disabled) throw new RaidLogError("invalid_selection");
+    if (control.options) requireOption(control.options, value);
+    if (Object.hasOwn(viewSelections, action)) return viewSelections[action](state, value);
     if (value === "__refresh") {
       const catalog = await logCatalog.refresh(state.catalog);
       // Keep the active historical log selectable even at the history limit.
       if (!catalog.logs.some(entry => entry.id === state.selected.id)) catalog.logs = [...catalog.logs.slice(0, -1), state.selected];
       const selected = catalog.logs.find(entry => entry.id === state.selected.id);
-      return { ...next, catalog, selected, raidPage: 0, logPage: 0 };
+      return { catalog, selected, raidPage: 0, logPage: 0 };
     }
-    if (value === "__more") return { ...next, catalog: await logCatalog.more(state.catalog) };
+    if (value === "__more") return { catalog: await logCatalog.more(state.catalog) };
     const pageKey = action === "raid" ? "raidPage" : "logPage";
-    if (value === "__prev" || value === "__next") return { ...next, [pageKey]: state[pageKey] + (value === "__next" ? 1 : -1) };
+    const step = PAGE_STEPS.get(value);
+    if (step) return { [pageKey]: state[pageKey] + step };
     const selected = action === "raid"
       ? state.catalog.logs.find(entry => entry.raidKey === value)
-      : state.catalog.logs.find(entry => entry.id === value && entry.raidKey === state.selected.raidKey);
+      : openRaidLogs(state).find(entry => entry.id === value);
     if (!selected) throw new RaidLogError("invalid_selection");
-    next.selected = selected;
-    if (selected.id !== state.selected.id) { next.player = null; next.tab = "damage"; }
-    if (action === "raid") next.logPage = 0;
-    return next;
+    const changes = { selected };
+    if (selected.id !== state.selected.id) Object.assign(changes, { player: null, tab: "damage" });
+    if (action === "raid") changes.logPage = 0;
+    return changes;
   }
+
+  async function changeView(interaction, state, action) {
+    const value = interaction.values?.[0];
+    // Refresh re-reads the log list itself, so it skips the separate privacy check.
+    const refreshing = action === "raid" && value === "__refresh";
+    if (!refreshing) await logCatalog.verify(state.catalog);
+    const changes = await applySelection(state, action, value);
+    await advance(state, changes, next => {
+      const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id || next.player?.id !== state.player?.id;
+      if (changed || refreshing) return render(interaction, next, refreshing);
+      return interaction.editReply({ content: null, embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
+    });
+  }
+
+  const stages = { picker: selectCharacter, recent: handleRecent, log: changeView };
 
   async function handleRaidLogComponent(interaction) {
     const [, id, revision, action] = String(interaction.customId).split(":");
@@ -232,24 +255,15 @@ function createRaidLogCommand({
     try {
       if (action !== "search") {
         // Acknowledge and show progress in one request, before any DB/Bible work.
-        await interaction.update({ content: t("raid-log.waiting", state.lang), allowedMentions: { parse: [] } });
+        const waiting = `${t("raid-log.waiting", state.lang)}\n-# ${t("raid-log.waitingHint", state.lang)}`;
+        await interaction.update({ content: waiting, allowedMentions: { parse: [] } });
         waitingShown = true;
       }
-      if (state.stage === "picker") return await selectCharacter(interaction, state, action);
-      if (state.stage === "recent") return await handleRecent(interaction, state, action);
-      const value = interaction.values?.[0];
-      // Refresh re-reads the log list itself, so it skips the separate privacy check.
-      const refreshing = action === "raid" && value === "__refresh";
-      if (!refreshing) await logCatalog.verify(state.catalog);
-      const next = await applySelection(state, action, value);
-      const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id || next.player?.id !== state.player?.id;
-      if (changed || refreshing) await render(interaction, next, refreshing);
-      else await interaction.editReply({ content: null, embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
-      Object.assign(state, next);
+      await stages[state.stage](interaction, state, action);
     } catch (error) {
       const code = raidLogErrorCode(error);
       log.warn(`[raid-log] ${code}: ${error.message}`);
-      if (state.stage === "log" && ["logs_private", "no_logs", "character_mismatch"].includes(code)) {
+      if (state.stage === "log" && REVOKING_CODES.has(code)) {
         sessions.delete(id);
         await interaction.editReply({
           content: null, embeds: [buildRevokedNotice(code, { EmbedBuilder, lang: state.lang, character: state.catalog.profile.name })],

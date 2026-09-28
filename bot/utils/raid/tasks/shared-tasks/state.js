@@ -5,6 +5,7 @@ const {
   SHARED_TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_SCHEDULED,
 } = require("./config");
+const { getLangTzOffsetMinutes } = require("../../schedule/artist-clock");
 
 function ensureSharedTasks(account) {
   if (!account || typeof account !== "object") return [];
@@ -29,9 +30,11 @@ function sharedTaskCapForReset(reset) {
 
 /**
  * Parse a YYYY-MM-DD expiry-date string from the /raid-task add modal
- * into an end-of-day UTC ms timestamp.
+ * into the UTC ms of that day's last millisecond in the lead's language
+ * timezone (artist-clock.getLangTzOffsetMinutes), so `<t:..:D>` shows the
+ * typed day and the task expires at the lead's local midnight.
  */
-function parseSharedTaskExpiresAt(value) {
+function parseSharedTaskExpiresAt(value, lang) {
   const raw = String(value || "").trim();
   if (!raw) return null;
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -48,7 +51,7 @@ function parseSharedTaskExpiresAt(value) {
   ) {
     return NaN;
   }
-  return ms;
+  return ms - getLangTzOffsetMinutes(lang) * 60 * 1000;
 }
 
 function isSharedTaskArchived(task) {

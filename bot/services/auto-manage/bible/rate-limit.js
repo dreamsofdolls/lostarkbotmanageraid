@@ -44,13 +44,30 @@ function createBibleHttpError(message, response, nowMs = Date.now()) {
   return error;
 }
 
+// Every Bible HTTP error message starts with one of these and its status. A
+// character name only ever comes after the status, so it is never read.
+const BIBLE_HTTP_STATUS_PATTERN =
+  /^(?:LostArk Bible|Bible roster page returned|Bible logs API returned) HTTP (\d{3})\b/;
+
+/**
+ * Reports keep only the error message, so a message without a `status` is
+ * read for the status at its start.
+ * @param {unknown} error - an Error or an error message
+ * @returns {number|null} the HTTP status Bible answered with, or null
+ */
+function getBibleHttpStatus(error) {
+  const status = Number(error?.status);
+  if (status) return status;
+  const match = BIBLE_HTTP_STATUS_PATTERN.exec(error?.message || String(error || ""));
+  return match ? Number(match[1]) : null;
+}
+
 /**
  * @param {unknown} error - an Error or an error message
- * @returns {boolean} true for an HTTP 429 status or a rate-limit message
+ * @returns {boolean} true for an HTTP 429, including the limiter's backoff
  */
 function isBibleRateLimitError(error) {
-  return Number(error?.status) === 429 ||
-    /\bHTTP 429\b|rate.?limit/i.test(error?.message || String(error || ""));
+  return getBibleHttpStatus(error) === 429;
 }
 
 /**
@@ -187,6 +204,7 @@ class BibleRequestLimiter {
 module.exports = {
   BibleRequestLimiter,
   createBibleHttpError,
+  getBibleHttpStatus,
   isBibleRateLimitError,
   parseRetryAfterMs,
 };
