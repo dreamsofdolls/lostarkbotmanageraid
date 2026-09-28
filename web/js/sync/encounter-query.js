@@ -1,6 +1,9 @@
 "use strict";
 
 const SOLO_DIFFICULTIES = new Set(["solo", "solo mode"]);
+// Each group becomes at most one delta. Matches MAX_PREVIEW_DELTAS in
+// bot/services/local-sync/core/preview-jobs.js; a test keeps them equal.
+const MAX_ENCOUNTER_GROUPS = 512;
 
 function isSoloDifficulty(value) {
   return SOLO_DIFFICULTIES.has(String(value || "").trim().toLowerCase());
@@ -51,6 +54,6 @@ export function buildEncounterPreviewSql({
       ${soloWhere}
     GROUP BY boss, difficulty, cleared, char_name
     ORDER BY last_ms DESC
-    LIMIT 200;
+    LIMIT ${MAX_ENCOUNTER_GROUPS};
   `;
 }

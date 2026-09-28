@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - When a database error stops Local Reader from saving a preview, the page shows HTTP 500 "preview job failed" and the bot logs the error. It used to show HTTP 400 with the raw database error, which read like a problem with the log file. Too many party targets for one source Gate still gets HTTP 400 with its reason.
+- Local Reader reads up to 512 of the week's boss, difficulty and character groups, as many as a preview accepts, instead of 200. Rosters of about 25 characters or more silently lost their oldest clears of the week from the preview.
 
 ## 2026-09-27
 

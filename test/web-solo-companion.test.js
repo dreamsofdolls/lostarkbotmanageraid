@@ -24,7 +24,7 @@ test("Solo encounter query requires difficulty and filters before grouping and l
   const filterAt = sql.indexOf("LOWER(TRIM(COALESCE");
   assert.ok(filterAt > sql.indexOf("WHERE"));
   assert.ok(filterAt < sql.indexOf("GROUP BY"));
-  assert.ok(filterAt < sql.indexOf("LIMIT 200"));
+  assert.ok(filterAt < sql.indexOf("LIMIT 512"));
   assert.match(sql, /IN \('solo', 'solo mode'\)/);
   assert.doesNotMatch(sql, /AS difficulty,\s*'Normal'/);
 });
@@ -58,6 +58,25 @@ test("encounter query takes party members from the same latest row as last_ms", 
   assert.match(sql, /MAX\("timestamp"\) AS last_ms/);
   assert.match(sql, /COALESCE\("players", ''\) AS players/);
   assert.doesNotMatch(sql, /MAX\("players"\)/);
+});
+
+test("encounter query keeps as many groups as a preview job accepts deltas", async () => {
+  const { buildEncounterPreviewSql } = await import("../web/js/sync/encounter-query.js");
+  const { normalizePreviewDeltas } = require("../bot/services/local-sync/core/preview-jobs");
+  const sql = buildEncounterPreviewSql({
+    tableSql: '"encounter_preview"',
+    bossSql: '"boss"',
+    tsSql: '"timestamp"',
+  });
+  const limit = Number(/LIMIT (\d+);/.exec(sql)?.[1]);
+
+  // Each group becomes at most one delta, so a smaller limit drops the
+  // oldest groups of large rosters while the server would take them.
+  assert.doesNotThrow(() => normalizePreviewDeltas(Array(limit).fill(null)));
+  assert.throws(
+    () => normalizePreviewDeltas(Array(limit + 1).fill(null)),
+    /too many deltas/
+  );
 });
 
 test("Solo row defense accepts only explicit Solo labels", async () => {
