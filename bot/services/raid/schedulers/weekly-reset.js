@@ -27,7 +27,7 @@ const {
 } = require("./scheduler-runner");
 const {
   claimGuildState,
-  rollbackGuildState,
+  releaseGuildClaim,
 } = require("./guild-state-claim");
 const {
   weeklyResetStartMs,
@@ -271,19 +271,15 @@ async function postWeeklyResetAnnouncements(client, targetKey, {
       setTimeoutFn(() => sent.delete().catch(() => {}), WEEKLY_ANNOUNCEMENT_TTL_MS);
     } catch (err) {
       if (claimPrevious && !sentSuccessfully) {
-        try {
-          await rollbackGuildState({
-            GuildConfig: GuildConfigModel,
-            guildId: cfg.guildId,
-            claimedState,
-            previousState: claimPrevious,
-          });
-        } catch (rollbackError) {
-          console.warn(
-            `[weekly-reset] announcement claim rollback failed guild=${cfg.guildId}:`,
-            rollbackError?.message || rollbackError
-          );
-        }
+        await releaseGuildClaim({
+          GuildConfig: GuildConfigModel,
+          guildId: cfg.guildId,
+          claimedState,
+          previousState: claimPrevious,
+        }, (rollbackError) => console.warn(
+          `[weekly-reset] announcement claim rollback failed guild=${cfg.guildId}:`,
+          rollbackError?.message || rollbackError
+        ));
       }
       console.warn(
         `[weekly-reset] announcement post failed guild=${cfg.guildId}:`,

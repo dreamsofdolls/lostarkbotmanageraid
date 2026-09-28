@@ -10,7 +10,7 @@ const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const {
   claimGuildState,
-  rollbackGuildState,
+  releaseGuildClaim,
 } = require("./guild-state-claim");
 const { sleep } = require("../../../utils/async");
 const { toLocalClock } = require("../../../utils/raid/schedule/artist-clock");
@@ -89,20 +89,15 @@ async function postClaimedMaintenance({
     }
   }
 
-  let claimReleased = false;
-  try {
-    claimReleased = Boolean(await rollbackGuildState({
-      GuildConfig,
-      guildId: cfg.guildId,
-      claimedState: { [groupConfig.dedupField]: tickKey },
-      previousState: claimPrevious,
-    }));
-  } catch (rollbackError) {
-    console.error(
-      `[maintenance] guild=${cfg.guildId} slot=${slot.key} claim rollback failed:`,
-      rollbackError?.message || rollbackError
-    );
-  }
+  const claimReleased = await releaseGuildClaim({
+    GuildConfig,
+    guildId: cfg.guildId,
+    claimedState: { [groupConfig.dedupField]: tickKey },
+    previousState: claimPrevious,
+  }, (rollbackError) => console.error(
+    `[maintenance] guild=${cfg.guildId} slot=${slot.key} claim rollback failed:`,
+    rollbackError?.message || rollbackError
+  ));
 
   console.warn(
     `[maintenance] send failed after retry; claim ${claimReleased ? "released" : "not released"} guild=${cfg.guildId} slot=${slot.key}:`,

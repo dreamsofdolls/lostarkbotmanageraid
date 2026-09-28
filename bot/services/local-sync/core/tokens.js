@@ -50,12 +50,11 @@ function getSecret() {
 }
 
 function base64url(buf) {
-  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return Buffer.from(buf).toString("base64url");
 }
 
 function fromBase64url(str) {
-  const pad = str.length % 4 === 2 ? "==" : str.length % 4 === 3 ? "=" : "";
-  return Buffer.from(str.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
+  return Buffer.from(str, "base64url");
 }
 
 function sign(payloadB64) {

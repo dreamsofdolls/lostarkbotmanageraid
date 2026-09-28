@@ -19,6 +19,7 @@ const {
   setGuildLanguage,
   SUPPORTED_LANGUAGES,
 } = require("../../services/i18n");
+const { createAutocompleteDispatcher } = require("../../utils/raid/common/autocomplete");
 const {
   buildRaidChannelActionChoices,
 } = require("./channel/action-options");
@@ -65,13 +66,8 @@ function createRaidChannelCommand({
    * Autocomplete for `/raid-channel config action:*`. Returns the full action
    * catalog filtered by the typed prefix and current schedule state.
    */
-  async function handleRaidChannelAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name !== "action") {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
+  const handleRaidChannelAutocomplete = createAutocompleteDispatcher("raid-channel", {
+    async action(interaction, focused) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       let autoCleanupEnabled = false;
       if (interaction.guildId) {
@@ -90,11 +86,8 @@ function createRaidChannelCommand({
         normalizeName,
       });
       await interaction.respond(choices).catch(() => {});
-    } catch (err) {
-      console.error("[autocomplete] raid-channel error:", err?.message || err);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+    },
+  });
 
   const {
     handleSetChannel,

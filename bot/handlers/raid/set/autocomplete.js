@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  createAutocompleteDispatcher,
   buildCharacterAutocompleteChoices,
   getRosterMatches,
   getCharacterMatches,
@@ -287,20 +288,7 @@ function createRaidSetAutocompleteService({
     gate: autocompleteGate,
   });
 
-  async function handleRaidSetAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      const handler = AUTOCOMPLETE_HANDLERS[focused?.name];
-      if (!handler) {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
-      await handler(interaction, focused);
-    } catch (error) {
-      console.error("[autocomplete] raid-set error:", error?.message || error);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+  const handleRaidSetAutocomplete = createAutocompleteDispatcher("raid-set", AUTOCOMPLETE_HANDLERS);
 
   return {
     handleRaidSetAutocomplete,
