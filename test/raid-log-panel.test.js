@@ -35,7 +35,7 @@ test("the caller can change tabs and Bracketed, with immediate ACK before privac
   const old = f.owner("tab_next");
   f.events.length = 0;
   await f.click(old);
-  assert.deepEqual(f.events.slice(0, 2), ["ack-update", "verify"]);
+  assert.deepEqual(f.events.slice(0, 3), ["ack-update", "edit", "verify"]);
   assert.equal(captures(f)[0][2].tab, "party_buffs");
   assert.equal(captures(f)[0][2].useCache, true);
   assert.equal(control(f, "tab_label").label, "Party Buffs · 2/12");
@@ -163,8 +163,41 @@ test("simultaneous clicks do not overlap; capture and Discord failures leave com
   await f.click(retry);
   assert.equal(control(f, "bracketed").label, current);
   f.failEdit = false;
+  f.failUpload = true;
+  await f.click(retry);
+  assert.equal(f.payload.content, null);
+  assert.equal(control(f, "bracketed").label, current);
+  f.failUpload = false;
   await f.click(retry);
   assert.notEqual(control(f, "bracketed").label, current);
+});
+
+test("acknowledgement visibly shows waiting before Bible work and preserves the current images and controls", async () => {
+  const f = fixture();
+  await f.run();
+  const previous = { embeds: f.payload.embeds, components: f.payload.components, files: f.payload.files };
+  let release, enter;
+  const entered = new Promise(resolve => { enter = resolve; });
+  f.beforeVerify = () => new Promise(resolve => { release = resolve; enter(); });
+  const action = f.owner("tab_next");
+  const pending = f.click(action);
+  await entered;
+  assert.equal(action.replied, true);
+  assert.match(f.payload.content, /⏳.*Đã nhận yêu cầu/);
+  assert.deepEqual({ embeds: f.payload.embeds, components: f.payload.components, files: f.payload.files }, previous);
+  release();
+  await pending;
+  assert.equal(f.payload.content, null);
+  f.beforeVerify = null;
+  f.failure = new RaidLogError("timeout");
+  const controlsBeforeFailure = f.payload.components;
+  await f.click(f.owner("tab_next"));
+  assert.equal(f.payload.content, null, "failed requests must not leave an indefinite waiting notice");
+  assert.deepEqual(f.payload.components, controlsBeforeFailure);
+  assert.match(noticeText(f.events.at(-1)[1]), /lâu|thời gian|timeout/i);
+  f.failure = null;
+  await f.click(f.owner("tab_next"));
+  assert.equal(f.payload.content, null);
 });
 
 test("expired and evicted panels retain their explicit limits", async () => {

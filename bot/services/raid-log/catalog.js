@@ -49,44 +49,44 @@ function mergeLogs(previous, incoming) {
     .sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id));
 }
 
-function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bibleLimiter }) }) {
-  const read = (profile, page) => client.fetchBibleLogsWithLimiter({
+function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bibleLimiter }), timeoutMs = 30_000 }) {
+  const read = (profile, page, signal = AbortSignal.timeout(timeoutMs)) => client.fetchBibleLogsWithLimiter({
     serial: profile.sn, cid: profile.cid, rid: profile.rid, className: profile.className, page,
-  });
+  }, { signal });
   const catalog = {
-    async open(input, { logId } = {}) {
+    async open(input, { logId, signal = AbortSignal.timeout(timeoutMs) } = {}) {
       const { character } = parseRaidLogSource({ character: input });
-      const profile = await client.fetchBibleCharacterProfileWithLimiter(character);
+      const profile = await client.fetchBibleCharacterProfileWithLimiter(character, { signal });
       if (normalizeCharacterName(profile.name) !== normalizeCharacterName(character)) throw new RaidLogError("character_mismatch");
-      const rows = await read(profile, 1);
+      const rows = await read(profile, 1, signal);
       const logs = mergeLogs([], normalizeCatalogLogs(rows, profile.name));
       if (!logs.length) throw new RaidLogError("no_logs");
       let result = { profile, logs, page: 1, hasMore: rows.length === 25 };
       // A Recent selection may have moved beyond page 1 since that list was read.
       while (logId && !result.logs.some(entry => entry.id === logId) && result.hasMore) {
-        result = await catalog.more(result);
+        result = await catalog.more(result, { signal });
       }
       return result;
     },
     // Do this before serving even a cached image. A newly private character
     // must revoke the panel instead of continuing from a stale screenshot.
-    async verify(catalog) {
-      const rows = await read(catalog.profile, 1);
+    async verify(catalog, { signal } = {}) {
+      const rows = await read(catalog.profile, 1, signal);
       const logs = normalizeCatalogLogs(rows, catalog.profile.name);
       if (!logs.length) throw new RaidLogError("no_logs");
     },
-    async refresh(catalog) {
-      const rows = await read(catalog.profile, 1);
+    async refresh(catalog, { signal } = {}) {
+      const rows = await read(catalog.profile, 1, signal);
       const fresh = normalizeCatalogLogs(rows, catalog.profile.name);
       if (!fresh.length) throw new RaidLogError("no_logs");
       const logs = mergeLogs(catalog.logs, fresh).slice(0, MAX_LOG_PAGES * 25);
       return { ...catalog, logs, hasMore: logs.length < MAX_LOG_PAGES * 25
         && (catalog.page === 1 ? rows.length === 25 : catalog.hasMore) };
     },
-    async more(catalog) {
+    async more(catalog, { signal } = {}) {
       if (!catalog.hasMore || catalog.page >= MAX_LOG_PAGES) throw new RaidLogError("invalid_selection");
       const page = catalog.page + 1;
-      const rows = await read(catalog.profile, page);
+      const rows = await read(catalog.profile, page, signal);
       const logs = mergeLogs(catalog.logs, normalizeCatalogLogs(rows, catalog.profile.name)).slice(0, MAX_LOG_PAGES * 25);
       return { ...catalog, logs, page,
         hasMore: rows.length === 25 && page < MAX_LOG_PAGES && logs.length < MAX_LOG_PAGES * 25 && logs.length > catalog.logs.length };

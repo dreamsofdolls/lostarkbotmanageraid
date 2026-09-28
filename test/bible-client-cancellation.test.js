@@ -23,10 +23,11 @@ for (const [name, request] of Object.entries(requests)) {
     const queued = request(client, controller.signal);
     const reason = new DOMException("expired", "TimeoutError");
     controller.abort(reason);
-    const rejected = assert.rejects(queued, error => error === reason);
+    await assert.rejects(queued, error => error === reason);
+    assert.equal(limiter.queue.length, 0);
+    assert.equal(limiter.active, 1, "the unrelated request remains active while the expired job is removed");
     release();
     await held;
-    await rejected;
     await assert.rejects(request(client, controller.signal), error => error === reason);
     assert.equal(fetches, 0);
     assert.equal(limiter.getBackoffRemainingMs(), 0);

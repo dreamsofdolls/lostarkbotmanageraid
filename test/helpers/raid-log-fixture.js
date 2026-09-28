@@ -34,6 +34,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
   const events = [];
   let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure, recentResult;
   let failEdit = false;
+  let failUpload = false;
   let userDoc = { language: lang, accounts };
   const edits = [];
   const catalog = { profile, logs, page: 1, hasMore };
@@ -44,7 +45,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     refresh: async current => { events.push("refresh"); if (verifyFailure) throw verifyFailure; return { ...current, logs: [logEntry("latest", "kazeros", 200), ...current.logs] }; },
   };
   const editReply = async next => {
-    events.push("edit"); if (failEdit) throw new Error("Discord unavailable");
+    events.push("edit"); if (failEdit || (failUpload && next.files?.length)) throw new Error("Discord unavailable");
     edits.push(next);
     payload = { ...payload, ...next }; return { id: "message" };
   };
@@ -88,7 +89,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
       isModalSubmit: () => action === "submit",
       fields: { getTextInputValue: name => { assert.equal(name, "character"); return value; } },
       showModal: async next => { modal = next.toJSON(); events.push(["modal", modal]); },
-      deferUpdate: async () => { events.push("ack-update"); interaction.deferred = true; }, editReply,
+      update: async next => { events.push("ack-update"); await editReply(next); interaction.replied = true; }, editReply,
       reply: async reply => events.push(["reply", reply]), followUp: async reply => events.push(["followUp", reply]),
       ...overrides,
     };
@@ -104,6 +105,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     set recentResult(value) { recentResult = value; },
     set failure(error) { failure = error; }, set verifyFailure(error) { verifyFailure = error; },
     set beforeVerify(fn) { beforeVerify = fn; }, set failEdit(value) { failEdit = value; },
+    set failUpload(value) { failUpload = value; },
     set beforeOpen(fn) { beforeOpen = fn; },
     set userDoc(value) { userDoc = value; }, set loadFailure(value) { loadFailure = value; },
   };

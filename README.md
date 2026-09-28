@@ -120,6 +120,11 @@ Discord's 25-option limit. Only the original caller can operate the panel, for 1
 minutes; other members can view it or open their own. Player choices follow the
 Damage table's party and row order, keeping anonymous names.
 
+Selections acknowledge immediately with a waiting line on the existing message,
+before roster lookup or Bible access. It clears on success or failure; the previous
+images and controls remain available while the next view is prepared. Repeated
+clicks on the same panel do not start another job.
+
 Team navigation includes Damage, Party/Self Buffs (offensive or all), Shields
 (Given, Received, Total Blocked, Blocked Breakdown), Tanked, Average DPS and 10s DPS.
 Player navigation includes Skill Damage, Party/Self Buffs (offensive or all), and
@@ -191,8 +196,13 @@ Only HTTPS public log URLs on `lostark.bible` are accepted, without query string
 or fragments. Captures use an isolated unsigned-in browser, allow only same-origin
 requests plus image assets from `cdn.ags.lol`. Failed captures close their browser;
 successful interactive captures close after the idle timeout. One capture runs
-per process; it shares Bible's existing request limiter/backoff. Attempts share
-a 60-second deadline, including the time already spent waiting for the limiter.
+per process, with up to four queued jobs. Capture attempts and both queue waits
+share a 60-second deadline; expired jobs are removed without starting later.
+Only page loading uses Bible's existing limiter/backoff; local tab changes and
+PNG encoding leave its slots available. Identical queued views reuse a completed
+cached image. Catalog operations have a separate 30-second budget covering queued
+requests and, for an exact-log lookup, its profile and history pages together.
+The render log records queue, capture (including queue) and Discord upload times.
 Captures over 8 MiB, missing assets, clipped
 tables and inaccessible logs are reported as errors. This experiment depends on
 Bible's current layout and access policy; local success does not establish Railway

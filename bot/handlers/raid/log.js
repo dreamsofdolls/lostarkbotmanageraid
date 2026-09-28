@@ -1,7 +1,7 @@
 "use strict";
 
 const { randomBytes } = require("node:crypto");
-const { getUserLanguage } = require("../../services/i18n");
+const { getUserLanguage, t } = require("../../services/i18n");
 const { parseRaidLogSource, normalizeCharacterName } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
@@ -43,18 +43,21 @@ function createRaidLogCommand({
   }
   async function render(interaction, state, refresh = false) {
     try {
+      const captureStarted = now();
       const result = await captureRaidLog(state.selected.url, {
         view: "full", tab: state.tab, bracketed: state.bracketed, player: state.player, useCache: true, refresh,
       });
+      const captureMs = now() - captureStarted;
       const limit = interaction.attachmentSizeLimit || MAX_IMAGE_BYTES;
       if (result.images.some(image => image.buffer.length > limit)) throw new RaidLogError("too_large");
       const { images, ...metadata } = result;
       state.result = { ...metadata, images: images.map(image => ({ filename: image.filename })) };
+      const uploadStarted = now();
       const message = await interaction.editReply({
         content: null, embeds: embeds(state, state.result), components: buildLogComponents(state),
         attachments: [], files: images.map(image => new AttachmentBuilder(image.buffer, { name: image.filename })), allowedMentions: { parse: [] },
       });
-      log.info(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
+      log.info(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)} queueMs=${result.queueMs || 0} captureMs=${captureMs} uploadMs=${now() - uploadStarted}`);
       return message;
     } catch (error) {
       // The notice links the log being opened; the session still points at the previous one.
@@ -99,7 +102,6 @@ function createRaidLogCommand({
       if (!state.choices.length) throw new RaidLogError("invalid_selection");
       return showRecent(interaction, state, false);
     }
-    await interaction.deferUpdate();
     if (action === "submit") return openLog(interaction, state, interaction.fields.getTextInputValue("character"));
     const value = interaction.values?.[0];
     if (!pickerOptions(state).some(option => option.value === value)) throw new RaidLogError("invalid_selection");
@@ -133,7 +135,6 @@ function createRaidLogCommand({
   }
 
   async function showRecent(interaction, state, refresh) {
-    await interaction.deferUpdate();
     const accounts = (await loadCaller(state.ownerId))?.accounts;
     // The loading card has no controls; busy stays held until the result replaces it.
     await interaction.editReply(buildRecentLoading(state, recentLogs.countCandidates(accounts), { EmbedBuilder, UI }));
@@ -152,7 +153,6 @@ function createRaidLogCommand({
 
   async function handleRecent(interaction, state, action) {
     if (action === "recent_refresh") return showRecent(interaction, state, true);
-    await interaction.deferUpdate();
     if (action === "picker") {
       const next = { ...state, stage: "picker", recent: null, revision: state.revision + 1 };
       await interaction.editReply(buildLogPicker(next, { EmbedBuilder, UI }));
@@ -228,10 +228,15 @@ function createRaidLogCommand({
     // The public message is controlled by its caller throughout. Claim before any await.
     state.busy = true;
     const started = now();
+    let waitingShown = false;
     try {
+      if (action !== "search") {
+        // Acknowledge and show progress in one request, before any DB/Bible work.
+        await interaction.update({ content: t("raid-log.waiting", state.lang), allowedMentions: { parse: [] } });
+        waitingShown = true;
+      }
       if (state.stage === "picker") return await selectCharacter(interaction, state, action);
       if (state.stage === "recent") return await handleRecent(interaction, state, action);
-      await interaction.deferUpdate();
       const value = interaction.values?.[0];
       // Refresh re-reads the log list itself, so it skips the separate privacy check.
       const refreshing = action === "raid" && value === "__refresh";
@@ -239,9 +244,8 @@ function createRaidLogCommand({
       const next = await applySelection(state, action, value);
       const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id || next.player?.id !== state.player?.id;
       if (changed || refreshing) await render(interaction, next, refreshing);
-      else await interaction.editReply({ embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
+      else await interaction.editReply({ content: null, embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
       Object.assign(state, next);
-      log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
     } catch (error) {
       const code = raidLogErrorCode(error);
       log.warn(`[raid-log] ${code}: ${error.message}`);
@@ -252,14 +256,20 @@ function createRaidLogCommand({
           attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] },
         });
       } else {
+        if (waitingShown) await interaction.editReply({ content: null }).catch(cleanupError => {
+          log.warn(`[raid-log] waiting notice cleanup: ${cleanupError.message}`);
+        });
         const payload = {
           embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang: state.lang, logUrl: error.logUrl })],
           flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] },
         };
-        if (interaction.deferred) await interaction.followUp(payload);
+        if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
         else await interaction.reply(payload);
       }
-    } finally { state.busy = false; }
+    } finally {
+      state.busy = false;
+      log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
+    }
   }
   return { handleRaidLogCommand, handleRaidLogComponent };
 }

@@ -13,6 +13,7 @@ const { createRaidLogCommand } = require("../bot/handlers/raid/log");
 const { createRaidLogCommandDefinition } = require("../bot/handlers/commands/command-definitions/public-log");
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 const { silentLog } = require("./helpers/silent-log");
+const { captureAssetsReady } = require("../bot/services/raid-log/assets");
 const { noticeText } = require("./helpers/raid-log-fixture");
 const URL = "https://lostark.bible/logs/S9NbBTM";
 
@@ -203,6 +204,7 @@ test("a crashed renderer is closed before one retry, holding the busy slot throu
   const healthy = fakeBrowser();
   let launches = 0;
   capture = createRaidLogCapture({
+    maxPending: 0,
     log: { warn: message => warnings.push(message) },
     launchBrowser: async () => {
       if (++launches === 1) return failed.launchBrowser();
@@ -277,7 +279,7 @@ test("capture rejects overlap before launching and releases its slot after timeo
   t.mock.timers.enable({ apis: ["setTimeout"] });
   let entered;
   const fake = fakeBrowser({ holdNavigation: true, onNavigate: () => entered() });
-  const capture = createRaidLogCapture({ ...fake, timeoutMs: 25 });
+  const capture = createRaidLogCapture({ ...fake, timeoutMs: 25, maxPending: 0 });
   for (let attempt = 1; attempt <= 2; attempt++) {
     const navigating = new Promise(resolve => { entered = resolve; });
     const pending = capture(URL);
@@ -310,6 +312,70 @@ test("invalid input never launches a browser and unavailable browser has a typed
   assert.equal(fake.state.launches, 0);
   await assert.rejects(createRaidLogCapture({ launchBrowser: async () => { throw new Error("Missing executable"); } })(URL),
     { code: "browser_unavailable" });
+});
+
+test("capture deadline cancels a queued Bible request before a slot opens or a browser launches", async t => {
+  t.mock.method(Date, "now", () => 0);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const limiter = new BibleRequestLimiter(1, { log: silentLog });
+  let release;
+  const held = limiter.run(() => new Promise(resolve => { release = resolve; }));
+  await new Promise(resolve => setImmediate(resolve));
+  let entered;
+  const queued = new Promise(resolve => { entered = resolve; });
+  const run = limiter.run.bind(limiter);
+  t.mock.method(limiter, "run", (...args) => { const result = run(...args); entered(); return result; });
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, bibleLimiter: limiter, timeoutMs: 25 });
+  try {
+    const rejected = assert.rejects(capture(URL), { code: "timeout" });
+    await queued;
+    t.mock.timers.tick(25);
+    await rejected;
+    assert.equal(limiter.queue.length, 0);
+    assert.equal(limiter.active, 1);
+    assert.equal(fake.state.launches, 0);
+  } finally { release(); await held; }
+  await capture(URL);
+  assert.equal(fake.state.launches, 1);
+});
+
+test("local screenshot leaves both shared Bible slots available", async () => {
+  const limiter = new BibleRequestLimiter(2, { log: silentLog });
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  const fake = fakeBrowser({ onScreenshot: async () => { enter(); await held; } });
+  const capture = createRaidLogCapture({ ...fake, bibleLimiter: limiter });
+  const rendering = capture(URL);
+  await entered;
+  let started = 0, release;
+  const http = new Promise(resolve => { release = resolve; });
+  const requests = [1, 2].map(() => limiter.run(() => { started++; return http; }));
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(started, 2);
+    assert.equal(limiter.queue.length, 0);
+  } finally { finish(); release(); await rendering; await Promise.all(requests); await capture.close(); }
+});
+
+test("concurrent requests for the same image reuse the first result without a second render", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser({ onScreenshot: async () => { screenshots++; enter(); await held; } });
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45000 });
+  const first = capture(URL, { useCache: true });
+  await entered;
+  const second = capture(URL, { useCache: true });
+  finish();
+  try {
+    await first;
+    assert.equal((await second).cached, true);
+    assert.equal(screenshots, 1);
+    assert.equal(fake.state.launches, 1);
+  } finally { await capture.close(); }
 });
 
 function damageFixture(players = 8) {
@@ -359,6 +425,28 @@ test("real DOM inspection includes every party row for 4/8 players and rejects c
   }
 });
 
+test("capture waits only for its own images and eagerly loads its below-viewport images", async () => {
+  const { dom, document } = damageFixture();
+  try {
+    dom.window.requestAnimationFrame = callback => callback();
+    const outside = document.body.appendChild(document.createElement("img"));
+    Object.defineProperty(outside, "complete", { value: false });
+    outside.decode = () => assert.fail("unrelated image was decoded");
+    const ready = () => dom.window.eval(`(${captureAssetsReady.toString()})()`);
+    assert.equal(await ready(), true);
+    const inside = document.querySelector("section").appendChild(document.createElement("img"));
+    inside.loading = "lazy";
+    Object.defineProperty(inside, "complete", { value: false, configurable: true });
+    assert.equal(await ready(), false);
+    assert.equal(inside.loading, "eager");
+    Object.defineProperty(inside, "complete", { value: true });
+    let decoded = false;
+    inside.decode = async () => { decoded = true; };
+    assert.equal(await ready(), true);
+    assert.equal(decoded, true);
+  } finally { dom.window.close(); }
+});
+
 function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit } = {}) {
   const calls = [];
   let payload;
@@ -366,7 +454,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
   const interaction = {
     user: { id: "caller" }, guildId: "guild", channelId: "channel", attachmentSizeLimit,
     deferReply: async options => calls.push(["defer", options]),
-    editReply: async next => { payload = next; calls.push([next.files ? "edit" : "picker", next]); return { id: "message" }; },
+    editReply: async next => { payload = { ...payload, ...next }; calls.push([next.files ? "edit" : next.embeds ? "picker" : "content", next]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
     EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log: silentLog,
@@ -396,7 +484,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
     });
     const submit = { ...base, customId: modal.custom_id, isModalSubmit: () => true,
       fields: { getTextInputValue: () => character },
-      deferUpdate: async () => { calls.push(["ack-update"]); submit.deferred = true; },
+      update: async next => { calls.push(["ack-update", next]); submit.replied = true; },
     };
     await handler.handleRaidLogComponent(submit);
   } };
@@ -466,7 +554,7 @@ test("missing/invalid names reject privately before lookup and private character
     const fixture = handlerFixture({ character });
     await fixture.run();
     assert.equal(fixture.calls.at(-1)[1].flags, MessageFlags.Ephemeral);
-    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "error"]);
+    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "content", "error"]);
     assert.doesNotMatch(noticeText(fixture.calls.at(-1)[1]), /`(?:url|view):/);
   }
   for (const code of ["character_not_found", "character_mismatch", "logs_private", "no_logs"]) {

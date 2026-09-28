@@ -70,7 +70,7 @@ test("refresh reloads history and bypasses PNG cache without changing the curren
   await f.click(f.owner("player", "1-0")); await f.click(f.owner("bracketed"));
   f.events.length = 0;
   await f.click(f.owner("raid", "__refresh"));
-  assert.deepEqual(f.events.slice(0, 2), ["ack-update", "refresh"]);
+  assert.deepEqual(f.events.slice(0, 3), ["ack-update", "edit", "refresh"]);
   assert.ok(!f.events.includes("verify"));
   const [, url, options] = captures(f)[0];
   assert.equal(url, "https://lostark.bible/logs/old");

@@ -88,16 +88,27 @@ class BibleRequestLimiter {
   /**
    * @template T
    * @param {() => Promise<T>} fn - the Bible request
+   * @param {{signal?: AbortSignal}} [options] - cancel a request while it is queued
    * @returns {Promise<T>} its result, or a backoff error while the backoff is active
    */
-  run(fn) {
+  run(fn, { signal } = {}) {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const remainingMs = this.getBackoffRemainingMs();
     if (remainingMs > 0) {
       return Promise.reject(this._createBackoffError(remainingMs));
     }
 
     return new Promise((resolve, reject) => {
-      this.queue.push({ fn, resolve, reject });
+      const item = { fn, resolve, reject, signal, detach: () => signal?.removeEventListener("abort", abort) };
+      const abort = () => {
+        const index = this.queue.indexOf(item);
+        if (index < 0) return;
+        this.queue.splice(index, 1);
+        item.detach();
+        reject(signal.reason);
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      this.queue.push(item);
       this._dispatch();
     });
   }
@@ -143,6 +154,7 @@ class BibleRequestLimiter {
   _rejectQueued(remainingMs) {
     const queued = this.queue.splice(0);
     for (const item of queued) {
+      item.detach();
       item.reject(this._createBackoffError(remainingMs));
     }
   }
@@ -155,10 +167,11 @@ class BibleRequestLimiter {
     }
 
     while (this.active < this.max && this.queue.length > 0) {
-      const { fn, resolve, reject } = this.queue.shift();
+      const { fn, resolve, reject, signal, detach } = this.queue.shift();
+      detach();
       this.active += 1;
       Promise.resolve()
-        .then(fn)
+        .then(() => { signal?.throwIfAborted(); return fn(); })
         .then(resolve, (error) => {
           if (isBibleRateLimitError(error)) this._openCircuit(error);
           reject(error);

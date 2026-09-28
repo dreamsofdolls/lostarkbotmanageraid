@@ -144,7 +144,7 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
       // A caller can expire while its request waits behind other Bible work.
       signal?.throwIfAborted();
       return request({ fetchImpl, signal });
-    });
+    }, { signal });
   }
 
   function fetchBibleLogsWithLimiter(args, options) {

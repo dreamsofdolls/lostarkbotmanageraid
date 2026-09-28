@@ -7,6 +7,7 @@ const { raidLogErrorCode } = require("../bot/services/raid-log/errors");
 const { createImageCache } = require("../bot/services/raid-log/image-cache");
 const { createBibleClient } = require("../bot/services/auto-manage/bible/client");
 const { createBibleCharacterNotFoundError } = require("../bot/services/auto-manage/bible/error-kinds");
+const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 
 const row = (id, boss = "Death Incarnate Kazeros", timestamp = 100) => ({ id, boss, timestamp, name: "Qiylyn", difficulty: "Hard" });
 
@@ -82,6 +83,52 @@ test("opening an exact Recent log searches later pages, stopping as soon as it i
   assert.equal(found.page, 2);
   assert.equal(found.logs.at(-1).id, "target");
   assert.deepEqual(reads, [1, 2]);
+});
+
+test("catalog lookup shares one timeout across profile and history pages", async t => {
+  const controller = new AbortController();
+  let timeouts = 0;
+  t.mock.method(AbortSignal, "timeout", ms => {
+    assert.equal(ms, 30000); timeouts++; return controller.signal;
+  });
+  const seen = [];
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async (_, { signal }) => { seen.push(signal); return { name: "Qiylyn" }; },
+    fetchBibleLogsWithLimiter: async ({ page }, { signal }) => {
+      seen.push(signal);
+      return page === 1 ? Array.from({ length: 25 }, (_, i) => row(`p${i}`)) : [row("target")];
+    },
+  } });
+  await catalog.open("Qiylyn", { logId: "target" });
+  assert.equal(timeouts, 1);
+  assert.deepEqual(seen, [controller.signal, controller.signal, controller.signal]);
+});
+
+test("catalog operations expire while queued without waiting for unrelated Bible work", async t => {
+  const limiter = new BibleRequestLimiter(1, { log: {} });
+  let release;
+  const held = limiter.run(() => new Promise(resolve => { release = resolve; }));
+  await new Promise(resolve => setImmediate(resolve));
+  const client = createBibleClient({ bibleLimiter: limiter, fetchImpl: () => assert.fail("expired catalog request reached HTTP") });
+  const service = createRaidLogCatalog({ client });
+  const current = { profile: { name: "Qiylyn", sn: "s", cid: 1, rid: 2 }, page: 1, hasMore: true };
+  let controller;
+  t.mock.method(AbortSignal, "timeout", ms => {
+    assert.equal(ms, 30000);
+    controller = new AbortController();
+    return controller.signal;
+  });
+  try {
+    for (const run of [() => service.open("Qiylyn"), () => service.verify(current), () => service.refresh(current), () => service.more(current)]) {
+      const result = run();
+      assert.equal(limiter.queue.length, 1);
+      const rejected = assert.rejects(result, error => raidLogErrorCode(error) === "timeout");
+      controller.abort(new DOMException("expired", "TimeoutError"));
+      await rejected;
+      assert.equal(limiter.queue.length, 0);
+      assert.equal(limiter.active, 1);
+    }
+  } finally { release(); await held; }
 });
 
 test("exact-log lookup preserves page, duplicate and privacy guards", async () => {

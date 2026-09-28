@@ -9,6 +9,8 @@ const { createImageCache } = require("./image-cache");
 const { inspectPlayerPage, selectPlayer } = require("./detail");
 const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview } = require("./page-controls");
 const { collectTeamMetrics } = require("./team-metrics");
+const { captureAssetsReady } = require("./assets");
+const { createRenderQueue } = require("./render-queue");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -90,9 +92,10 @@ function createRaidLogCapture({
   launchBrowser = options => require("playwright").chromium.launch(options),
   timeoutMs = 60_000,
   idleMs = 0,
+  maxPending = 4,
   log: logger = console,
 } = {}) {
-  let busy = false;
+  const queue = createRenderQueue({ maxPending });
   let warm;
   let idleTimer;
   let disposing = Promise.resolve();
@@ -107,16 +110,6 @@ function createRaidLogCapture({
     return disposing;
   }
 
-  async function waitForAssets(page) {
-    await page.waitForFunction(() => document.fonts.status === "loaded"
-      && Array.from(document.images).every(img => img.complete));
-    await page.evaluate(async () => {
-      await document.fonts.ready;
-      await Promise.all(Array.from(document.images).map(img => img.decode().catch(() => {})));
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    });
-  }
-
   async function capturePage(log, { view, tab, bracketed, player, refresh }, deadline) {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw new RaidLogError("timeout");
@@ -127,9 +120,11 @@ function createRaidLogCapture({
     let expired = false;
     let stage = "launch";
     let clip;
+    const controller = new AbortController();
     const memoryBefore = await readCaptureMemory();
     const timer = setTimeout(() => {
       expired = true;
+      controller.abort(new RaidLogError("timeout"));
       void closeResource(resource);
     }, Math.max(1, deadline - Date.now()));
     timer.unref?.();
@@ -137,54 +132,66 @@ function createRaidLogCapture({
       await disposing;
       if (expired || Date.now() >= deadline) throw new RaidLogError("timeout");
       if (resource?.crashed) { await closeResource(resource); resource = null; }
-      if (!resource) {
-        try {
-          const browser = await launchBrowser({ headless: true, channel: "chromium", timeout: Math.min(remainingMs, 15_000) });
-          resource = { browser, url: log.url, crashed: false };
-        } catch (error) {
-          throw new RaidLogError("browser_unavailable", error);
-        }
-        if (expired) throw new RaidLogError("timeout");
-        const opened = resource;
-        opened.browser.on("disconnected", () => { opened.crashed = true; });
-        const context = await opened.browser.newContext({
-          // Keep the desktop layout at one pixel per CSS pixel.
-          viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1,
-          locale: "en-GB", timezoneId: "Asia/Ho_Chi_Minh",
-          serviceWorkers: "block", acceptDownloads: false,
-        });
-        await context.route("**/*", route => {
-          const request = route.request();
-          return isAllowedRequest(request.url(), request.isNavigationRequest(), opened.url, request.resourceType())
-            ? route.continue() : route.abort();
-        });
-        opened.page = await context.newPage();
-        opened.page.on("crash", () => { opened.crashed = true; });
-      }
-      if (expired) throw new RaidLogError("timeout");
-      const page = resource.page;
-      page.setDefaultTimeout(12_000);
-      await page.setViewportSize({ width: 1600, height: 1200 });
-      await page.evaluate(() => {
-        for (const container of document.querySelectorAll(".max-w-7xl")) container.style.maxWidth = "";
-      });
-      if (refresh || resource.url !== log.url || !resource.baseline) {
-        resource.url = log.url;
-        resource.baseline = null;
-        resource.player = null;
-        stage = "navigation";
-        const response = await page.goto(log.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-        if (!response?.ok()) {
-          if (response?.status() === 429) {
-            throw createBibleHttpError("LostArk Bible HTTP 429", {
-              status: 429, headers: { get: name => response.headers()[name] },
-            });
+      const needsNavigation = refresh || !resource || resource.url !== log.url || !resource.baseline;
+      async function preparePage() {
+        controller.signal.throwIfAborted();
+        if (!resource) {
+          try {
+            const browser = await launchBrowser({ headless: true, channel: "chromium", timeout: Math.min(deadline - Date.now(), 15_000) });
+            resource = { browser, url: log.url, crashed: false };
+          } catch (error) {
+            throw new RaidLogError("browser_unavailable", error);
           }
-          throw new RaidLogError("unavailable");
+          if (expired) throw new RaidLogError("timeout");
+          const opened = resource;
+          opened.browser.on("disconnected", () => { opened.crashed = true; });
+          const context = await opened.browser.newContext({
+            // Keep the desktop layout at one pixel per CSS pixel.
+            viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1,
+            locale: "en-GB", timezoneId: "Asia/Ho_Chi_Minh",
+            serviceWorkers: "block", acceptDownloads: false,
+          });
+          await context.route("**/*", route => {
+            const request = route.request();
+            return isAllowedRequest(request.url(), request.isNavigationRequest(), opened.url, request.resourceType())
+              ? route.continue() : route.abort();
+          });
+          opened.page = await context.newPage();
+          opened.page.on("crash", () => { opened.crashed = true; });
         }
+        controller.signal.throwIfAborted();
+        const page = resource.page;
+        page.setDefaultTimeout(12_000);
+        await page.setViewportSize({ width: 1600, height: 1200 });
+        await page.evaluate(() => {
+          for (const container of document.querySelectorAll(".max-w-7xl")) container.style.maxWidth = "";
+        });
+      }
+      if (needsNavigation) {
+        const navigate = async () => {
+          await preparePage();
+          resource.url = log.url;
+          resource.baseline = null;
+          resource.player = null;
+          stage = "navigation";
+          const response = await resource.page.goto(log.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+          if (!response?.ok()) {
+            if (response?.status() === 429) {
+              throw createBibleHttpError("LostArk Bible HTTP 429", {
+                status: 429, headers: { get: name => response.headers()[name] },
+              });
+            }
+            throw new RaidLogError("unavailable");
+          }
+        };
+        // Only page loading uses a Bible slot; local tabs and PNG encoding do not.
+        await (bibleLimiter ? bibleLimiter.run(navigate, { signal: controller.signal }) : navigate());
+      } else await preparePage();
+      const page = resource.page;
+      if (needsNavigation) {
         await page.getByRole("button", { name: "Damage", exact: true }).click();
         await page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
-        await waitForAssets(page);
+        await page.waitForFunction(captureAssetsReady, false);
         resource.baseline = await page.evaluate(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
         resource.baseline.players = await collectTeamMetrics(page, resource.baseline.players, { deadline, log: logger });
@@ -206,7 +213,7 @@ function createRaidLogCapture({
         throw new RaidLogError("unavailable", error);
       }
       stage = "assets";
-      await waitForAssets(page);
+      await page.waitForFunction(captureAssetsReady, Boolean(player));
       await waitForCharts(page);
       await page.mouse.move(0, 0);
       const evidence = player
@@ -255,31 +262,27 @@ function createRaidLogCapture({
     const key = `${log.id}:${view}:${tab}:${bracketed}:${player ? JSON.stringify([player.id, player.label]) : "team"}`;
     const cached = useCache && !refresh && cache.get(key);
     if (cached) return { ...cached, cached: true };
-    if (busy) throw new RaidLogError("busy");
-    // Claim synchronously, before launch or waiting on the shared Bible limiter.
-    busy = true;
-    if (refresh) cache.invalidateLog(log.id);
-    const deadline = Date.now() + timeoutMs;
-    const attempt = async () => {
-      const options = { view, tab, bracketed, player, refresh };
-      const result = await (bibleLimiter
-        ? bibleLimiter.run(() => capturePage(log, options, deadline)) : capturePage(log, options, deadline));
-      if (useCache) cache.set(key, result);
-      return result;
-    };
-    try {
+    const started = Date.now();
+    const deadline = started + timeoutMs;
+    return queue.run(async () => {
+      const queueMs = Date.now() - started;
+      // Another queued request may already have rendered this exact view.
+      const ready = useCache && !refresh && cache.get(key);
+      if (ready) return { ...ready, cached: true, queueMs };
+      if (refresh) cache.invalidateLog(log.id);
+      const attempt = () => capturePage(log, { view, tab, bracketed, player, refresh }, deadline);
+      let result;
       try {
-        return await attempt();
+        result = await attempt();
       } catch (error) {
         if (error.code !== "browser_crashed") throw error;
-        // One fresh browser only; keep the original deadline, busy slot and
-        // shared Bible backoff. capturePage has already closed the failed one.
+        // One retry within the original budget; the failed browser is closed.
         logger.warn(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`);
-        return await attempt();
+        result = await attempt();
       }
-    } finally {
-      busy = false;
-    }
+      if (useCache) cache.set(key, result);
+      return { ...result, queueMs };
+    }, deadline);
   }
   captureRaidLog.close = () => {
     clearTimeout(idleTimer);

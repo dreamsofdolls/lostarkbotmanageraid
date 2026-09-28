@@ -36,7 +36,7 @@ function fixture({ accounts, rowsByName = {}, errors = {}, hang = [], held = [] 
   };
   let now = NOW;
   const warnings = [];
-  const recent = createRecentRaidLogs({ client, now: () => now, deadlineMs: 50,
+  const recent = createRecentRaidLogs({ client, now: () => now, deadlineMs: 45_000,
     log: { ...silentLog, warn: message => warnings.push(message) } });
   return { calls, warnings, recent, accounts, advance: ms => { now += ms; }, release: name => releases[name](),
     get maxInFlight() { return maxInFlight; } };
@@ -103,9 +103,13 @@ test("only the 24 highest item levels are read", async () => {
   assert.equal(f.recent.countCandidates([{ accountName: "Main", characters }]), 24);
 });
 
-test("a character that never answers does not hold the rest past the deadline", async () => {
+test("a character that never answers does not hold the rest past the deadline", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const f = fixture({ hang: ["Slow"], rowsByName: { Qiylyn: [bibleRow("q1", "Qiylyn", NOW - HOUR)] } });
-  const result = await f.recent.load("owner", [{ accountName: "Main", characters: [character("Slow"), character("Qiylyn")] }]);
+  const pending = f.recent.load("owner", [{ accountName: "Main", characters: [character("Slow"), character("Qiylyn")] }]);
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(45_000);
+  const result = await pending;
   assert.equal(result.timedOut, true);
   assert.deepEqual(result.entries.map(entry => entry.id), ["q1"]);
 });
@@ -118,11 +122,14 @@ test("Bible is asked about two characters at a time, as Auto-sync does", async (
   assert.equal(f.maxInFlight, 2);
 });
 
-test("once the deadline passes, a character still waiting its turn is never asked", async () => {
+test("once the deadline passes, a character still waiting its turn is never asked", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const f = fixture({ hang: ["Alpha"], held: ["Bravo"] });
-  await assert.rejects(f.recent.load("owner", [{ accountName: "Main", characters: [
+  const rejected = assert.rejects(f.recent.load("owner", [{ accountName: "Main", characters: [
     character("Alpha", { itemLevel: 1780 }), character("Bravo", { itemLevel: 1770 }), character("Charlie", { itemLevel: 1760 }),
   ] }]), { code: "timeout" });
+  t.mock.timers.tick(45_000);
+  await rejected;
   f.release("Bravo");
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(f.calls.map(call => call[1]), ["Alpha", "Bravo"]);
