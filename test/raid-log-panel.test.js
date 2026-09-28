@@ -172,10 +172,11 @@ test("simultaneous clicks do not overlap; capture and Discord failures leave com
   assert.notEqual(control(f, "bracketed").label, current);
 });
 
-test("acknowledgement visibly shows waiting before Bible work and preserves the current images and controls", async () => {
+test("acknowledgement visibly shows waiting before Bible work, keeps the images and locks every control", async () => {
   const f = fixture();
   await f.run();
   const previous = { embeds: f.payload.embeds, components: f.payload.components, files: f.payload.files };
+  const flat = rows => rows.flatMap(row => row.toJSON().components);
   let release, enter;
   const entered = new Promise(resolve => { enter = resolve; });
   f.beforeVerify = () => new Promise(resolve => { release = resolve; enter(); });
@@ -184,10 +185,13 @@ test("acknowledgement visibly shows waiting before Bible work and preserves the 
   await entered;
   assert.equal(action.replied, true);
   assert.match(f.payload.content, /⏳.*Đã nhận yêu cầu/);
-  assert.deepEqual({ embeds: f.payload.embeds, components: f.payload.components, files: f.payload.files }, previous);
+  assert.deepEqual({ embeds: f.payload.embeds, files: f.payload.files }, { embeds: previous.embeds, files: previous.files });
+  assert.deepEqual(flat(f.payload.components).map(c => c.custom_id), flat(previous.components).map(c => c.custom_id));
+  assert.ok(flat(f.payload.components).every(c => c.disabled), "every control is locked while the request runs");
   release();
   await pending;
   assert.equal(f.payload.content, null);
+  assert.ok(flat(f.payload.components).some(c => !c.disabled), "the new panel's controls are live again");
   f.beforeVerify = null;
   f.failure = new RaidLogError("timeout");
   const controlsBeforeFailure = f.payload.components;

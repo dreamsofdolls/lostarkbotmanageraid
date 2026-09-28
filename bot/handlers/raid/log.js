@@ -5,7 +5,9 @@ const { getUserLanguage, t } = require("../../services/i18n");
 const { parseRaidLogSource, normalizeCharacterName } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
-const { buildLogComponents, buildLogEmbeds, openRaidLogs, PAGE_SIZE, PAGE_STEPS } = require("./log-view");
+const {
+  buildLogComponents, buildLogEmbeds, buildWaitingComponents, openRaidLogs, PAGE_SIZE, PAGE_STEPS,
+} = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
 const { buildRaidLogNotice, buildRevokedNotice } = require("./log-notices");
@@ -233,6 +235,13 @@ function createRaidLogCommand({
 
   const stages = { picker: selectCharacter, recent: handleRecent, log: changeView };
 
+  // The controls of the card the session is showing.
+  function cardComponents(state) {
+    if (state.stage === "picker") return buildLogPicker(state, builders).components;
+    if (state.stage === "recent") return buildRecentView(state, builders).components;
+    return buildLogComponents(state);
+  }
+
   async function handleRaidLogComponent(interaction) {
     const [, id, revision, action] = String(interaction.customId).split(":");
     const state = sessions.get(id);
@@ -255,8 +264,13 @@ function createRaidLogCommand({
     try {
       if (action !== "search") {
         // Acknowledge and show progress in one request, before any DB/Bible work.
+        // The card's controls stay locked until the result replaces them.
         const waiting = `${t("raid-log.waiting", state.lang)}\n-# ${t("raid-log.waitingHint", state.lang)}`;
-        await interaction.update({ content: waiting, allowedMentions: { parse: [] } });
+        await interaction.update({
+          content: waiting,
+          components: buildWaitingComponents(cardComponents(state), interaction),
+          allowedMentions: { parse: [] },
+        });
         waitingShown = true;
       }
       await stages[state.stage](interaction, state, action);
@@ -270,7 +284,8 @@ function createRaidLogCommand({
           attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] },
         });
       } else {
-        if (waitingShown) await interaction.editReply({ content: null }).catch(cleanupError => {
+        // The session stayed on the card it showed, so its controls come back as they were.
+        if (waitingShown) await interaction.editReply({ content: null, components: cardComponents(state) }).catch(cleanupError => {
           log.warn(`[raid-log] waiting notice cleanup: ${cleanupError.message}`);
         });
         const payload = {
