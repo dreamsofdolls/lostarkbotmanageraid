@@ -27,8 +27,25 @@ function createRaidScheduleAutoLockService({
   ButtonBuilder,
   ButtonStyle,
   UI,
+  // The /raid-schedule handlers' boardPayload(event, lang), so an auto-locked
+  // board keeps the lead's board-switcher row. Without it the board is rebuilt
+  // bare (status + utility rows only).
+  boardPayload = null,
 }) {
   let interval = null;
+
+  async function lockedBoardPayload(event, lang) {
+    if (typeof boardPayload === "function") return boardPayload(event, lang);
+    return {
+      embeds: [buildScheduleEmbed(event, { EmbedBuilder, UI, lang })],
+      components: buildScheduleComponents(event, {
+        ActionRowBuilder,
+        ButtonBuilder,
+        ButtonStyle,
+        lang,
+      }),
+    };
+  }
 
   async function editBoard(client, event) {
     if (!event?.channelId || !event?.messageId || !client?.channels) return false;
@@ -37,15 +54,7 @@ function createRaidScheduleAutoLockService({
       const channel = await client.channels.fetch(event.channelId);
       const message = await channel?.messages?.fetch(event.messageId);
       if (!message) return false;
-      await message.edit({
-        embeds: [buildScheduleEmbed(event, { EmbedBuilder, UI, lang })],
-        components: buildScheduleComponents(event, {
-          ActionRowBuilder,
-          ButtonBuilder,
-          ButtonStyle,
-          lang,
-        }),
-      });
+      await message.edit(await lockedBoardPayload(event, lang));
       return true;
     } catch (error) {
       console.warn("[raid-schedule] auto-lock board edit failed:", error?.message || error);

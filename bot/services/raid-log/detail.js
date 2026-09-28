@@ -1,5 +1,7 @@
 "use strict";
 
+const { bibleButton, OVERVIEW_BUTTON } = require("./page-controls");
+
 // Runs in the browser. Capture the whole selected-player section, including
 // the analysis cards and charts below the skill table, in two ordered images.
 function inspectPlayerPage({ player, playerCount, partyCount }) {
@@ -58,7 +60,7 @@ function inspectPlayerPage({ player, playerCount, partyCount }) {
 }
 
 async function selectPlayer(page, player) {
-  await page.getByRole("button", { name: "Damage", exact: true }).click();
+  await bibleButton(page, "Damage").click();
   const parties = page.locator("table").filter({ hasText: /^Party\s+\d+/ });
   const cell = parties.nth(player.party - 1).locator("tbody tr").nth(player.row).locator("td").nth(1);
   // Validate the displayed label at the slot; never reveal a hidden name or
@@ -67,7 +69,7 @@ async function selectPlayer(page, player) {
   // Names open a hover card with profile links. Dispatch on the validated
   // table cell itself so pointer placement cannot follow one of those links.
   await cell.dispatchEvent("click");
-  await page.getByRole("button", { name: "Return to Overview", exact: true }).waitFor({ state: "visible" });
+  await bibleButton(page, OVERVIEW_BUTTON).waitFor({ state: "visible" });
   return true;
 }
 
