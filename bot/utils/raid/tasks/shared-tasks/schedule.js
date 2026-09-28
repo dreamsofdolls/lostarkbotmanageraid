@@ -166,6 +166,55 @@ function resolveActiveScheduleWindow(preset, parts) {
   return null;
 }
 
+// The current slot of an open schedule window, as UTC ms.
+function resolveActiveSlot(preset, activeWindow) {
+  const slotMinutes = getScheduleSlotMinutes(preset);
+  const slotOffset = Math.floor(activeWindow.elapsedMinutes / slotMinutes) * slotMinutes;
+  const atWindowMinute = (minute) => utcMsFromAnchorRelativeMinute(
+    activeWindow.anchor,
+    preset.startMinute + minute,
+    preset.timeZone
+  );
+  return {
+    slotStartAtMs: atWindowMinute(slotOffset),
+    slotEndAtMs: atWindowMinute(Math.min(slotOffset + slotMinutes, activeWindow.windowDuration)),
+    windowEndAtMs: atWindowMinute(activeWindow.windowDuration),
+  };
+}
+
+// When the next window opens after the local time `parts`, as UTC ms.
+function nextWindowStartMs(preset, parts) {
+  const minuteOfDay = parts.hour * 60 + parts.minute;
+  let next = null;
+  if (
+    preset.activeDays.includes(parts.weekday) &&
+    minuteOfDay < preset.startMinute
+  ) {
+    next = parts;
+  } else {
+    for (let delta = 1; delta <= 7; delta += 1) {
+      const candidate = shiftLocalDate(parts, delta);
+      if (preset.activeDays.includes(candidate.weekday)) {
+        next = candidate;
+        break;
+      }
+    }
+  }
+  if (!next) return null;
+  return zonedDateTimeToUtcMs(
+    next,
+    Math.floor(preset.startMinute / 60),
+    preset.startMinute % 60,
+    preset.timeZone
+  );
+}
+
+const NO_ACTIVE_SLOT = Object.freeze({
+  slotStartAtMs: null,
+  slotEndAtMs: null,
+  windowEndAtMs: null,
+});
+
 function resolveScheduledSharedTaskState(task, now = new Date()) {
   const preset = getSharedTaskPreset(task?.preset);
   if (preset.kind !== "scheduled") {
@@ -178,78 +227,16 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   }
 
   const parts = getZonedParts(now, preset.timeZone);
-  const minuteOfDay = parts.hour * 60 + parts.minute;
   const activeWindow = resolveActiveScheduleWindow(preset, parts);
   const anchor = activeWindow?.anchor || null;
   const active = !!activeWindow;
-  const slotMinutes = getScheduleSlotMinutes(preset);
-  const slotOffset = activeWindow
-    ? Math.floor(activeWindow.elapsedMinutes / slotMinutes) * slotMinutes
-    : 0;
-  const slotStartRelativeMinute = active
-    ? preset.startMinute + slotOffset
-    : null;
-  const slotEndRelativeMinute = active
-    ? preset.startMinute + Math.min(
-        slotOffset + slotMinutes,
-        activeWindow.windowDuration
-      )
-    : null;
-  const windowEndRelativeMinute = active
-    ? preset.startMinute + activeWindow.windowDuration
-    : null;
-  const slotStartAtMs = active
-    ? utcMsFromAnchorRelativeMinute(
-        anchor,
-        slotStartRelativeMinute,
-        preset.timeZone
-      )
-    : null;
-  const slotEndAtMs = active
-    ? utcMsFromAnchorRelativeMinute(
-        anchor,
-        slotEndRelativeMinute,
-        preset.timeZone
-      )
-    : null;
-  const windowEndAtMs = active
-    ? utcMsFromAnchorRelativeMinute(
-        anchor,
-        windowEndRelativeMinute,
-        preset.timeZone
-      )
-    : null;
+  const { slotStartAtMs, slotEndAtMs, windowEndAtMs } = active
+    ? resolveActiveSlot(preset, activeWindow)
+    : NO_ACTIVE_SLOT;
   const key = active ? scheduledTaskKey(task, slotStartAtMs) : null;
   const completed = active && task?.completedForKey === key;
-
-  let nextLabel = "";
-  let nextAtMs = null;
-  if (!active) {
-    let next = null;
-    if (
-      preset.activeDays.includes(parts.weekday) &&
-      minuteOfDay < preset.startMinute
-    ) {
-      next = parts;
-    } else {
-      for (let delta = 1; delta <= 7; delta += 1) {
-        const candidate = shiftLocalDate(parts, delta);
-        if (preset.activeDays.includes(candidate.weekday)) {
-          next = candidate;
-          break;
-        }
-      }
-    }
-    if (next) {
-      nextAtMs = zonedDateTimeToUtcMs(
-        next,
-        Math.floor(preset.startMinute / 60),
-        preset.startMinute % 60,
-        preset.timeZone
-      );
-      nextLabel = formatVietnamSourceScheduleLabel(nextAtMs);
-    }
-  }
+  const nextAtMs = active ? null : nextWindowStartMs(preset, parts);
+  const nextLabel = nextAtMs ? formatVietnamSourceScheduleLabel(nextAtMs) : "";
 
   return {
     active,

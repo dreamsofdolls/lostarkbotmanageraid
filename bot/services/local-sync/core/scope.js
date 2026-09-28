@@ -7,6 +7,22 @@ const COMPANION_SCOPE = Object.freeze({
 
 const SCOPE_NOT_ALLOWED_REASON = "scope_not_allowed";
 
+// Why a companion write was refused because its sync mode is off.
+const SCOPE_DISABLED_REASON = Object.freeze({
+  [COMPANION_SCOPE.full]: "local_sync_disabled",
+  [COMPANION_SCOPE.solo]: "auto_sync_disabled",
+});
+
+function companionScopeDisabledReason(scope) {
+  return scope === COMPANION_SCOPE.solo
+    ? SCOPE_DISABLED_REASON[COMPANION_SCOPE.solo]
+    : SCOPE_DISABLED_REASON[COMPANION_SCOPE.full];
+}
+
+function isScopeDisabledReason(reason) {
+  return Object.values(SCOPE_DISABLED_REASON).includes(reason);
+}
+
 function normalizeCompanionScope(value, { legacyDefault = true } = {}) {
   if (value === undefined || value === null || value === "") {
     return legacyDefault ? COMPANION_SCOPE.full : null;
@@ -50,6 +66,9 @@ function buildCompanionStateFilter(discordId, scope) {
 module.exports = {
   COMPANION_SCOPE,
   SCOPE_NOT_ALLOWED_REASON,
+  SCOPE_DISABLED_REASON,
+  companionScopeDisabledReason,
+  isScopeDisabledReason,
   normalizeCompanionScope,
   getTokenCompanionScope,
   isCompanionScopeEnabledForUser,

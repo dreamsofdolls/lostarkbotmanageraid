@@ -6,6 +6,7 @@ const {
 } = require("../../../utils/raid/common/character/assigned-raids");
 const {
   COMPANION_SCOPE,
+  companionScopeDisabledReason,
   isCompanionScopeEnabledForUser,
   isModeAllowedForCompanionScope,
   resolveRequiredCompanionScope,
@@ -143,9 +144,7 @@ function createRaidSetApplyService({
     }
     if (companionScope && !isCompanionScopeEnabledForUser(userDoc, companionScope)) {
       result.syncDisabled = true;
-      result.syncDisabledReason = companionScope === COMPANION_SCOPE.solo
-        ? "auto_sync_disabled"
-        : "local_sync_disabled";
+      result.syncDisabledReason = companionScopeDisabledReason(companionScope);
       return { blocked: true, companionScope };
     }
     if (companionScope && !isModeAllowedForCompanionScope(companionScope, raidMeta?.modeKey)) {

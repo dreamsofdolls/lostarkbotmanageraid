@@ -8,7 +8,9 @@ const {
 } = require("../../../domain/raid-catalog");
 const {
   COMPANION_SCOPE,
+  companionScopeDisabledReason,
   isCompanionScopeEnabledForUser,
+  isScopeDisabledReason,
 } = require("./scope");
 const { applyLocalSyncDeltas } = require("./apply/apply");
 const {
@@ -44,9 +46,7 @@ async function loadApplyUser(discordId, UserModel) {
 }
 
 function findDisabledWrite(summary) {
-  return (summary?.rejected || []).find((item) =>
-    item?.reason === "local_sync_disabled" || item?.reason === "auto_sync_disabled"
-  );
+  return (summary?.rejected || []).find((item) => isScopeDisabledReason(item?.reason));
 }
 
 function hasWriteError(summary) {
@@ -98,9 +98,7 @@ async function rejectDisabledCompanionScope({
   leaseDeps,
 }) {
   if (isCompanionScopeEnabledForUser(userDoc, job.scope)) return null;
-  const reason = job.scope === COMPANION_SCOPE.solo
-    ? "auto_sync_disabled"
-    : "local_sync_disabled";
+  const reason = companionScopeDisabledReason(job.scope);
   const failed = await failPreviewJob(jobId, discordId, reason, null, leaseDeps);
   return { ok: false, state: "failed", job: failed || job };
 }

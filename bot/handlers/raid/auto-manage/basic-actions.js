@@ -2,6 +2,7 @@
 
 const { t } = require("../../../services/i18n");
 const {
+  setBibleAutoSyncEnabled,
   setLocalSyncEnabled,
   getSyncStatus,
   issueLocalSyncAccessUrl,
@@ -17,18 +18,7 @@ function createAutoManageBasicActionHandlers({
   User,
 }) {
   async function handleOff({ discordId, lang, replyAutoEmbed }) {
-    await User.findOneAndUpdate(
-      { discordId },
-      {
-        $set: {
-          autoManageEnabled: false,
-          lastLocalSyncToken: null,
-          lastLocalSyncTokenExpAt: null,
-        },
-        $inc: { __v: 1 },
-      },
-      { upsert: true, setDefaultsOnInsert: true }
-    );
+    await setBibleAutoSyncEnabled(discordId, false, {}, { UserModel: User });
     const embed = new EmbedBuilder()
       .setColor(UI.colors.muted)
       .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.disable.title", lang)}`)

@@ -275,37 +275,31 @@ function createSchedulingHelpers({
     const dedupLine = `**Dedup:** ${entry?.dedup || "*(none)*"}`;
     const ttlLine = `**Message TTL:** ${entry?.messageTtl || "*(permanent until manual delete)*"}`;
     const effectiveDestinationId = current?.channelId || guildCfg?.raidChannelId || null;
-    const lines = [triggerLine];
+    // Every variant opens with the trigger and ends with the dedup and TTL lines.
+    const finish = (...body) => [triggerLine, ...body, dedupLine, ttlLine].join("\n");
   
     if (current?.enabled === false) {
-      lines.push("**Next check:** Disabled (`/raid-announce action:on` to re-enable)");
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
+      return finish("**Next check:** Disabled (`/raid-announce action:on` to re-enable)");
     }
   
     if (!effectiveDestinationId) {
-      lines.push(
+      return finish(
         entry?.channelOverridable
           ? "**Next check:** Waiting for a destination channel (`set-channel` here or `/raid-channel config action:set`)"
           : "**Next check:** Waiting for `/raid-channel config action:set` (monitor channel not configured)"
       );
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
     }
   
     const scheduleRule = announcementScheduleRules[typeKey];
     if (scheduleRule?.onDemand) {
-      lines.push("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
+      return finish("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
     }
 
     if (scheduleRule?.disabledWhen?.({ guildCfg, autoManageDisabled })) {
-      lines.push(`**Next check:** ${scheduleRule.disabledText}`);
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
+      return finish(`**Next check:** ${scheduleRule.disabledText}`);
     }
   
+    const lines = [];
     const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(typeKey, now);
     if (eligibleBoundaryMs) {
       lines.push(`**Next eligible boundary:** ${formatDiscordTimestampPair(eligibleBoundaryMs)}`);
@@ -322,8 +316,7 @@ function createSchedulingHelpers({
       lines.push(`**Note:** ${scheduleRule.note}`);
     }
   
-    lines.push(dedupLine, ttlLine);
-    return lines.join("\n");
+    return finish(...lines);
   }
 
   return {

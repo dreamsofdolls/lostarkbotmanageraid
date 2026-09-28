@@ -1,5 +1,7 @@
 "use strict";
 
+const { SCOPE_DISABLED_REASON, COMPANION_SCOPE } = require("../scope");
+
 const RESULT_CLASSIFIERS = Object.freeze([
   {
     matches: (result) => !result || typeof result !== "object",
@@ -45,7 +47,7 @@ const RESULT_CLASSIFIERS = Object.freeze([
     matches: (result) => result.syncDisabled,
     append: ({ result, bucket, effectiveGates, rejected }) => rejected.push({
       charName: bucket.charName,
-      reason: result.syncDisabledReason || "local_sync_disabled",
+      reason: result.syncDisabledReason || SCOPE_DISABLED_REASON[COMPANION_SCOPE.full],
       raidKey: bucket.raidKey,
       modeKey: bucket.modeKey,
       gates: effectiveGates,
