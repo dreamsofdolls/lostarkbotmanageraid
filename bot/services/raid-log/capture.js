@@ -98,6 +98,7 @@ function createRaidLogCapture({
   idleMs = 0,
   maxPending = 4,
   log: logger = console,
+  readMemory = readCaptureMemory,
 } = {}) {
   const queue = createRenderQueue({ maxPending });
   let warm;
@@ -132,7 +133,7 @@ function createRaidLogCapture({
     let stage = "launch";
     let clip;
     const controller = new AbortController();
-    const memoryBefore = await readCaptureMemory();
+    const memoryBefore = await readMemory();
     const timer = setTimeout(() => {
       expired = true;
       controller.abort(new RaidLogError("timeout"));
@@ -208,7 +209,7 @@ function createRaidLogCapture({
         // Opening each support's detail view for bD% is the heaviest part of a capture.
         stage = "team-metrics";
         resource.baseline.players = await collectTeamMetrics(page, resource.baseline.players, {
-          deadline, log: logger, supportShares,
+          deadline, log: logger, supportShares, readMemory,
         });
         stage = "navigation";
       }
@@ -255,7 +256,7 @@ function createRaidLogCapture({
       if (resource?.crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
         logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
           id: log.id, view, tab, bracketed, stage, clip, deviceScaleFactor: 1,
-          memoryBefore, memoryAfter: await readCaptureMemory(), cause: error.cause?.message || error.message,
+          memoryBefore, memoryAfter: await readMemory(), cause: error.cause?.message || error.message,
         })}`);
         const crashed = new RaidLogError("browser_crashed", error);
         crashed.stage = stage;

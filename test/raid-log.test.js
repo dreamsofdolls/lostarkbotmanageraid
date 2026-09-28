@@ -103,7 +103,8 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
       if (closeError) throw closeError;
     },
   });
-  return { state, page, log: silentLog, launchBrowser: async () => { state.launches++; return browser; } };
+  return { state, page, log: silentLog, readMemory: async () => ({ max: "max" }),
+    launchBrowser: async () => { state.launches++; return browser; } };
 }
 
 test("warm capture switches tabs/modes without navigation, caches variants and resets on another log", async () => {
@@ -271,6 +272,7 @@ test("a crash in a support's detail view retries without support views, and the 
   } });
   let launches = 0;
   const capture = createRaidLogCapture({ log: { warn: message => warnings.push(message) },
+    readMemory: crashing.readMemory,
     launchBrowser: () => (++launches === 1 ? crashing : healthy()).launchBrowser() });
   const first = await capture(URL);
   assert.equal(first.playerCount, 8);

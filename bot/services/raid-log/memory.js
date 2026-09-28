@@ -11,4 +11,18 @@ async function readCaptureMemory(read = readFile) {
     ? [[names[index], result.value.trim().replace(/\s*\n\s*/g, "; ")]] : []));
 }
 
-module.exports = { readCaptureMemory };
+// Automatic support-detail reads have exhausted 512 MB containers before the
+// screenshot stage. On larger containers, reserve room for another detail
+// render as well as the final screenshot; this is not an OOM guarantee.
+const SUPPORT_DETAIL_MIN_LIMIT = 512 * 1024 * 1024;
+const SUPPORT_DETAIL_HEADROOM = 256 * 1024 * 1024;
+
+function canCollectSupportShares(memory) {
+  const limit = Number(memory.max);
+  if (!Number.isFinite(limit) || limit <= 0) return true;
+  const current = Number(memory.current);
+  return limit > SUPPORT_DETAIL_MIN_LIMIT
+    && (!Number.isFinite(current) || limit - current >= SUPPORT_DETAIL_HEADROOM);
+}
+
+module.exports = { readCaptureMemory, canCollectSupportShares };

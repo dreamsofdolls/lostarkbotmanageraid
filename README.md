@@ -162,6 +162,11 @@ Capture reuses one browser/page for up to 45 idle seconds, then closes it.
 When it first opens a log it also reads every player's figures and percentile
 badges from the Damage table in both modes, and each support's bD% from their
 detail view; a support page that fails leaves only that figure empty.
+Automatic support-detail reads are skipped on containers capped at 512 MiB or
+less, or when a finite container limit leaves less than 256 MiB free before the
+next support. Only bD% stays empty; overview figures still load, and selecting a
+player still opens their detail on demand. Missing/unlimited cgroup readings
+retain the usual collection and crash fallback.
 Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
 5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
 tables expand the capture container/viewport, up to 3200px, without hiding columns.

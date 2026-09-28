@@ -11,6 +11,7 @@
 const { isSupportClass } = require("../../models/Class");
 const { readPartyMetrics, readSupportShare } = require("./metrics");
 const { selectPlayer } = require("./detail");
+const { readCaptureMemory, canCollectSupportShares } = require("./memory");
 const { setNormalized, returnToOverview, bibleButton, OVERVIEW_BUTTON } = require("./page-controls");
 
 // Opening a support takes a second or two; with less time than this left the
@@ -20,13 +21,13 @@ const SUPPORT_READ_RESERVE_MS = 5_000;
 /**
  * @param {object} page Playwright page on the team Damage overview
  * @param {object[]} players baseline players ({ id, party, row, label, className })
- * @param {{ deadline: number, now?: () => number, log: object, openPlayer?: Function, supportShares?: boolean }} options
+ * @param {{ deadline: number, now?: () => number, log: object, openPlayer?: Function, supportShares?: boolean, readMemory?: Function }} options
  *   `openPlayer` is `selectPlayer`; tests pass a fake. `supportShares: false`
  *   skips the supports' detail views, leaving bD% null
  * @returns {Promise<object[]>} players with badges, figures and buffedShare
  */
 async function collectTeamMetrics(page, players, {
-  deadline, now = Date.now, log, openPlayer = selectPlayer, supportShares = true,
+  deadline, now = Date.now, log, openPlayer = selectPlayer, supportShares = true, readMemory = readCaptureMemory,
 }) {
   if (!players.length) return players;
   await setNormalized(page, false);
@@ -46,6 +47,11 @@ async function collectTeamMetrics(page, players, {
   });
   for (const player of supportShares ? merged.filter(entry => isSupportClass(entry.className)) : []) {
     if (deadline - now() < SUPPORT_READ_RESERVE_MS) break;
+    const memory = await readMemory();
+    if (!canCollectSupportShares(memory)) {
+      log.info?.(`[raid-log] support details skipped: memory budget max=${memory.max} current=${memory.current ?? "unknown"}`);
+      break;
+    }
     try {
       if (await openPlayer(page, player)) player.buffedShare = await page.evaluate(readSupportShare);
     } catch (error) {

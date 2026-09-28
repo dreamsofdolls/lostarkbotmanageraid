@@ -184,6 +184,11 @@ const CLASS_EMOJI_MAP = {
   Dimensionalist: '',
 };
 
+// Bible's log pages use e.g. "Shadowhunter", while roster data uses
+// "Shadow Hunter". Resolve both to the same slot populated by the bootstrap.
+const emojiNameKey = name => String(name || '').replace(/\s+/g, '').toLowerCase();
+const CLASS_EMOJI_KEYS = new Map(Object.keys(CLASS_EMOJI_MAP).map(name => [emojiNameKey(name), name]));
+
 /**
  * @param {string} className - Display name (e.g., "Bard", "Berserker").
  * @returns {string} Discord custom emoji string `<:name:id>` for the class,
@@ -191,7 +196,7 @@ const CLASS_EMOJI_MAP = {
  *   safe no-op when prepended to a char name template literal.
  */
 function getClassEmoji(className) {
-  return CLASS_EMOJI_MAP[String(className || '').trim()] || '';
+  return CLASS_EMOJI_MAP[CLASS_EMOJI_KEYS.get(emojiNameKey(className))] || '';
 }
 
 module.exports = {

@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const { collectTeamMetrics } = require("../bot/services/raid-log/team-metrics");
 const { readPartyMetrics, readSupportShare } = require("../bot/services/raid-log/metrics");
 const { silentLog } = require("./helpers/silent-log");
+const readUnrestrictedMemory = async () => ({ max: "max" });
 
 const PLAYERS = [
   { id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" },
@@ -43,7 +44,9 @@ function fakePage({ startNormalized = false, shares = { "1-3": 31.8, "2-3": 14.3
 
 test("figures merge by slot with both badge sets and each support's bD%, ending on the Bracketed overview", async () => {
   const { page, state, openPlayer } = fakePage({ startNormalized: true });
-  const players = await collectTeamMetrics(page, PLAYERS, { deadline: Date.now() + 60_000, log: silentLog, openPlayer });
+  const players = await collectTeamMetrics(page, PLAYERS, {
+    deadline: Date.now() + 60_000, log: silentLog, openPlayer, readMemory: readUnrestrictedMemory,
+  });
   assert.deepEqual(players[0].badges, { bracketed: [99], normalized: [98] });
   assert.equal(players[0].damageShare, 4);
   assert.equal(players[0].buffedShare, null);
@@ -57,6 +60,7 @@ test("a support whose detail view fails keeps bD% empty and the rest still read"
   const warnings = [];
   const { page, state, openPlayer } = fakePage({ failOpen: ["1-3"] });
   const players = await collectTeamMetrics(page, PLAYERS, { deadline: Date.now() + 60_000, openPlayer,
+    readMemory: readUnrestrictedMemory,
     log: { ...silentLog, warn: message => warnings.push(message) } });
   assert.deepEqual(players.map(p => p.buffedShare), [null, null, 14.3]);
   assert.match(warnings[0], /support share unavailable player=1-3/);
@@ -81,10 +85,40 @@ test("close to the deadline no support page is opened", async () => {
   assert.deepEqual(players.map(p => p.buffedShare), [null, null, null]);
 });
 
+test("a 512 MB container skips support detail before the first attempt while retaining team figures", async () => {
+  const { page, state, openPlayer } = fakePage();
+  const messages = [];
+  const players = await collectTeamMetrics(page, PLAYERS, {
+    deadline: Date.now() + 60_000, openPlayer,
+    readMemory: async () => ({ max: "512000000", current: "82161664" }),
+    log: { ...silentLog, info: message => messages.push(message) },
+  });
+  assert.deepEqual(state.opened, []);
+  assert.deepEqual(players.map(player => player.buffedShare), [null, null, null]);
+  assert.equal(players[1].contribution, 3);
+  assert.deepEqual(players[1].badges, { bracketed: [82, 91], normalized: [82, 91] });
+  assert.equal(state.normalized, false);
+  assert.match(messages[0], /support details skipped.*512000000/);
+});
+
+test("support collection checks remaining memory again before opening the next support", async () => {
+  const { page, state, openPlayer } = fakePage();
+  const snapshots = [{ max: "1073741824", current: "209715200" }, { max: "1073741824", current: "943718400" }];
+  const players = await collectTeamMetrics(page, PLAYERS, {
+    deadline: Date.now() + 60_000, openPlayer, log: silentLog,
+    readMemory: async () => snapshots.shift(),
+  });
+  assert.deepEqual(state.opened, ["1-3"]);
+  assert.deepEqual(players.map(player => player.buffedShare), [null, 31.8, null]);
+  assert.equal(state.detail, null);
+});
+
 test("a slot whose name changed since the baseline gets no figures", async () => {
   const { page, openPlayer } = fakePage();
   const moved = PLAYERS.map(p => (p.id === "1-0" ? { ...p, label: "1760 Someoneelse" } : p));
-  const [first] = await collectTeamMetrics(page, moved, { deadline: Date.now() + 60_000, log: silentLog, openPlayer });
+  const [first] = await collectTeamMetrics(page, moved, {
+    deadline: Date.now() + 60_000, log: silentLog, openPlayer, readMemory: readUnrestrictedMemory,
+  });
   assert.deepEqual(first.badges, { bracketed: [], normalized: [] });
   assert.equal(first.damageShare, undefined);
 });

@@ -7,6 +7,18 @@ const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
 const { fixture, logEntry, captures, control, noticeText, withClassIcons } = require("./helpers/raid-log-fixture");
 
+test("Bible's Shadowhunter spelling resolves the registered Shadow Hunter emoji in the player menu", async t => {
+  withClassIcons(t, { "Shadow Hunter": "<:demonic:123456789012345678>" });
+  const f = fixture({ transformCapture: result => ({ ...result, players: result.players.map((player, index) => index === 0
+    ? { ...player, label: "1770 Witsune", className: "Shadowhunter" } : player) }) });
+  await f.run();
+  const option = control(f, "player").options.find(entry => entry.value === "1-0");
+  assert.equal(option.emoji?.id, "123456789012345678");
+  assert.equal(option.emoji?.name, "demonic");
+  assert.match(option.description, /Shadowhunter/);
+  assert.match(f.payload.embeds[0].toJSON().fields[0].value, /<:demonic:123456789012345678>/);
+});
+
 test("public panel puts one button row above the raid, log, player and tab menus in every locale", async () => {
   for (const lang of ["vi", "en", "jp"]) {
     const f = fixture({ lang });
