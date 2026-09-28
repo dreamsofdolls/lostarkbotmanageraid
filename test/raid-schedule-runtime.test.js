@@ -142,6 +142,21 @@ test("schedule runtime auto-clear writer groups targets by owner and counts resu
   assert.deepEqual(calls[0].entries[0].effectiveGates, ["G1", "G2"]);
 });
 
+test("schedule runtime auto-clear writer counts an already-complete raid as cleared, not failed", async () => {
+  // An End retried after a lost save finds the clears it already wrote.
+  const { runtime } = makeRuntime({
+    applyRaidSetBatchForDiscordId: async (call) =>
+      call.entries.map(() => ({ updated: false, alreadyComplete: true })),
+  });
+
+  const result = await runtime.writeAutoClears(
+    { user: { id: "lead" } },
+    makeAutoClearEvent()
+  );
+
+  assert.deepEqual(result, { targets: 2, updated: 2, failed: 0 });
+});
+
 test("schedule runtime guards non-leads and closed events", async () => {
   const { runtime, notices } = makeRuntime();
 

@@ -6,6 +6,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentTyp
 const { createAutoManageEnableHandler } = require("../bot/handlers/raid/auto-manage/core/enable");
 const { createAutoManageResetHandler } = require("../bot/handlers/raid/auto-manage/core/reset");
 const { t } = require("../bot/services/i18n");
+const { UI } = require("../bot/utils/raid/common/shared");
 
 for (const action of ["enable", "reset"]) {
   const decisions = action === "enable" ? ["confirm", "cancel", "timeout", "no hidden logs"] : ["confirm", "cancel", "timeout"];
@@ -96,3 +97,21 @@ for (const [label, doc] of [["missing user", null], ["empty roster", { accounts:
     assert.equal(reply.description, t("raid-auto-manage.enable.noRosterDescription", "en"));
   });
 }
+
+test("reset asks for confirmation in the danger color", async () => {
+  let confirm;
+  const handler = createAutoManageResetHandler({
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, UI,
+  });
+  await handler({
+    discordId: "owner", lang: "en",
+    interaction: {
+      fetchReply: async () => ({
+        async awaitMessageComponent() { throw new Error("Collector expired"); },
+      }),
+    },
+    replyAutoEmbed: async embed => { confirm = embed.toJSON(); },
+    editAutoEmbed: async () => {},
+  });
+  assert.equal(confirm.color, UI.colors.danger);
+});

@@ -16,7 +16,7 @@ const { parseCustomEmoji } = require("../../utils/discord/emoji");
 const { truncateSelectText } = require("../../utils/discord/select-options");
 const { normalizeCharacterName } = require("../../services/raid-log/source");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
-const { pagedChoices, PAGE_SIZE } = require("./log-view");
+const { raidLogCustomId, pagedChoices, PAGE_SIZE } = require("./log-view");
 
 /**
  * @param {object[]} [accounts] the caller's saved accounts
@@ -55,22 +55,21 @@ function pickerOptions(state) {
  * @returns {object} message payload
  */
 function buildLogPicker(state, { EmbedBuilder, UI }) {
-  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
+  const id = action => raidLogCustomId(state, action);
   const key = state.rosterUnavailable ? "unavailable" : state.choices.length ? "withRoster" : "withoutRoster";
   const buttons = [new ButtonBuilder().setCustomId(id("search")).setEmoji("🔎")
     .setLabel(t("raid-log.picker.search", state.lang)).setStyle(ButtonStyle.Primary)];
-  // Recent logs read the saved roster, so the button needs saved characters.
+  const menus = [];
+  // Recent logs read the saved roster, so that button and the roster menu need saved characters.
   if (state.choices.length) {
     buttons.push(new ButtonBuilder().setCustomId(id("recent_open")).setEmoji("🕘")
       .setLabel(t("raid-log.picker.recent", state.lang)).setStyle(ButtonStyle.Secondary));
-  }
-  const components = [new ActionRowBuilder().addComponents(...buttons)];
-  if (state.choices.length) {
     const pages = Math.ceil(state.choices.length / PAGE_SIZE);
-    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(id("character"))
+    menus.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(id("character"))
       .setPlaceholder(pages > 1 ? t("raid-log.picker.selectPage", state.lang, { page: state.page + 1, pages }) : t("raid-log.picker.select", state.lang))
       .addOptions(pickerOptions(state))));
   }
+  const components = [new ActionRowBuilder().addComponents(...buttons), ...menus];
   return {
     content: null,
     embeds: [new EmbedBuilder().setColor(UI.colors.neutral).setTitle(`📜 ${t("raid-log.picker.title", state.lang)}`)
@@ -84,7 +83,7 @@ function buildLogPicker(state, { EmbedBuilder, UI }) {
  * @returns {ModalBuilder}
  */
 function buildLogSearchModal(state) {
-  return new ModalBuilder().setCustomId(`raid-log:${state.id}:${state.revision}:submit`)
+  return new ModalBuilder().setCustomId(raidLogCustomId(state, "submit"))
     .setTitle(t("raid-log.picker.modalTitle", state.lang)).addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder()
         .setCustomId("character").setLabel(t("raid-log.picker.name", state.lang))
