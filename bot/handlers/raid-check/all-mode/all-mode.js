@@ -39,6 +39,9 @@ const {
 const {
   createLatestOnlyQueue,
 } = require("../../../utils/async/latest-only-queue");
+const {
+  guardCollectorListener,
+} = require("../../../utils/discord/collector-listener");
 
 function createAllModeHandler({
   ActionRowBuilder,
@@ -182,7 +185,16 @@ function createAllModeHandler({
       getStatusRaidsForCharacter,
       lang,
     });
-    const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
+    const {
+      applyRefreshedUserDoc: applyRefreshedPageDocs,
+    } = createAllModeRefreshIndex(users, pagesData);
+    // The embed reads the refreshed doc, so the auto-sync button's maps follow it.
+    const applyRefreshedUserDoc = (userDoc) => {
+      if (!applyRefreshedPageDocs(userDoc)) return false;
+      autoManageStateByDiscordId.set(userDoc.discordId, !!userDoc.autoManageEnabled);
+      localSyncStateByDiscordId.set(userDoc.discordId, !!userDoc.localSyncEnabled);
+      return true;
+    };
     const { buildRaidPage } = createAllModePageRenderers({
       authorMeta,
       buildAccountPageEmbed,
@@ -305,7 +317,7 @@ function createAllModeHandler({
     const collector = followup.createMessageComponentCollector({
       time: RAID_CHECK_PAGINATION_SESSION_MS,
     });
-    collector.on("collect", async (component) => {
+    collector.on("collect", guardCollectorListener("[raid-check all] component", async (component) => {
       const route = getRaidCheckAllComponentRoute(component.customId, {
         teamsSelectPrefix: teamsView.TEAMS_SELECT_PREFIX,
       });
@@ -327,14 +339,14 @@ function createAllModeHandler({
       if (!route) return;
       const handler = allModeComponentHandlers[route.action];
       if (handler) await handler(component, route);
-    });
-    collector.on("end", async () => {
+    }));
+    collector.on("end", guardCollectorListener("[raid-check all] session end", async () => {
       state.sessionEnded = true;
       await backgroundRenderQueue.flush();
       await followup
         .edit({ components: buildComponents(true) })
         .catch(() => {});
-    });
+    }));
 
     void refreshIncompleteAuthorMeta()
       .then((refreshed) => {

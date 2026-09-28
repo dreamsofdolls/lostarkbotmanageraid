@@ -13,7 +13,7 @@ const { truncateSelectText } = require("../../utils/discord/select-options");
 const { parseTier } = require("../../services/raid-log/parse-tiers");
 const { formatCompact, percentOf, formatPercent, formatShare, formatClock, formatWhen } = require("../../services/raid-log/format");
 const { MAX_RECENT_CHARACTERS } = require("../../services/raid-log/recent");
-const { headlinePercent } = require("./log-view");
+const { headlinePercent, raidLogCustomId } = require("./log-view");
 
 const CARD_ENTRIES = 10;
 const MAX_PRIVATE_NAMES = 10;
@@ -36,16 +36,20 @@ function recentDetail(entry) {
     ...(entry.isDead ? ["💀"] : [])].join(" · ");
 }
 
+// The first MAX_PRIVATE_NAMES names, then "+N" for the rest.
+function privateNames(names) {
+  const shown = names.slice(0, MAX_PRIVATE_NAMES).join(", ");
+  const rest = names.length - MAX_PRIVATE_NAMES;
+  return rest > 0 ? `${shown} +${rest}` : shown;
+}
+
 function footerLine(recent, lang) {
-  const parts = [];
-  if (recent.private.length) {
-    const rest = recent.private.length - MAX_PRIVATE_NAMES;
-    const names = recent.private.slice(0, MAX_PRIVATE_NAMES).join(", ");
-    parts.push(t("raid-log.recent.private", lang, { names: rest > 0 ? `${names} +${rest}` : names }));
-  }
-  if (recent.entries.length) parts.push(t("raid-log.recent.summary", lang, { logs: recent.logs, characters: recent.characters }));
-  if (recent.capped) parts.push(t("raid-log.recent.capped", lang, { count: MAX_RECENT_CHARACTERS }));
-  if (recent.timedOut) parts.push(t("raid-log.recent.timedOut", lang));
+  const parts = [
+    recent.private.length && t("raid-log.recent.private", lang, { names: privateNames(recent.private) }),
+    recent.entries.length && t("raid-log.recent.summary", lang, { logs: recent.logs, characters: recent.characters }),
+    recent.capped && t("raid-log.recent.capped", lang, { count: MAX_RECENT_CHARACTERS }),
+    recent.timedOut && t("raid-log.recent.timedOut", lang),
+  ].filter(Boolean);
   return parts.length ? `-# ${parts.join(" · ")}` : "";
 }
 
@@ -83,7 +87,7 @@ function buildRecentLoading(state, count, { EmbedBuilder, UI }) {
  */
 function buildRecentView(state, { EmbedBuilder, UI }) {
   const { recent, lang } = state;
-  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
+  const id = action => raidLogCustomId(state, action);
   const lines = recent.entries.length
     ? recent.entries.slice(0, CARD_ENTRIES).flatMap(entry => [
       [[`${tierOf(entry).emoji} **${fightName(entry)}**`, entry.difficulty].filter(Boolean).join(" "),

@@ -25,6 +25,17 @@ test("setTurnMembers replaces one turn (deduped), leaves others, allows overlap"
   assert.deepEqual(turns[0].memberIds, ["a", "b"]); // turn 1 untouched
 });
 
+test("setTurnMembers keeps turn members the picker could not list", () => {
+  // "late" sits past the 25-option picker; "gone" already left the pool.
+  const turns = [
+    { name: "Turn 1", memberIds: ["a", "late", "gone"] },
+    { name: "Turn 2", memberIds: ["late"] },
+  ];
+  const next = setTurnMembers(turns, 0, ["b"], ["late", "other"]);
+  assert.deepEqual(next[0].memberIds, ["b", "late"]);
+  assert.deepEqual(next[1].memberIds, ["late"]);
+});
+
 test("removeMembersFromTurns drops kicked ids from every turn", () => {
   const turns = [
     { name: "Turn 1", memberIds: ["a", "b", "c"] },

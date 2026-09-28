@@ -13,6 +13,12 @@
 
 "use strict";
 
+const {
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+  getLangTzOffsetMinutes,
+} = require("../../../utils/raid/schedule/artist-clock");
+
 /** Every bucket the responder can render, in match order. */
 const PING_BUCKETS = Object.freeze([
   "spam",
@@ -65,6 +71,40 @@ const CONTENT_BUCKET_ORDER = Object.freeze([
 ]);
 
 /**
+ * Whether the raid text parser, not Artist, answers this message. A parsed
+ * clear is never chatter, wherever it was posted. A parse error comes back as
+ * a truthy `{error}` object, but the monitor only answers it (with a hint) in
+ * the guild's monitored raid channel; anywhere else nothing answers it, so it
+ * must not cost the pinger a reply.
+ *
+ * @param {Object} input
+ * @param {null|Object} input.parsed - parseRaidMessage result for the message
+ * @param {boolean} [input.inRaidChannel=false] - posted in the guild's
+ *   monitored raid channel
+ * @returns {boolean} value for classifyArtistPing's parsesAsRaidCommand
+ */
+function isClaimedByRaidParser({ parsed, inRaidChannel = false } = {}) {
+  if (!parsed) return false;
+  if (parsed.error) return Boolean(inRaidChannel);
+  return true;
+}
+
+/**
+ * Whether Artist is asleep at this Vietnam hour in a guild of this language.
+ * Her bedtime and wake-up posts fire at 03:00 and 08:00 on the clock of the
+ * guild's language (artist-clock), so the hour is moved onto that clock
+ * before the quiet window is checked. Every offset there is whole hours.
+ * @param {number} vietnamHour - 0-23
+ * @param {string} guildLang
+ * @returns {boolean}
+ */
+function isArtistAsleep(vietnamHour, guildLang) {
+  const shiftHours = (getLangTzOffsetMinutes(guildLang) - getLangTzOffsetMinutes("vi")) / 60;
+  const localHour = (vietnamHour + shiftHours + 24) % 24;
+  return localHour >= ARTIST_QUIET_START_HOUR_VN && localHour < ARTIST_QUIET_END_HOUR_VN;
+}
+
+/**
  * Decide which response bucket an @Artist mention falls into.
  *
  * @param {Object} input
@@ -76,8 +116,9 @@ const CONTENT_BUCKET_ORDER = Object.freeze([
  *   already claimed this message; chatter must not steal it
  * @param {boolean} [input.recentlyAnswered=false] - this user was answered
  *   inside the cooldown window
- * @param {number} [input.vietnamHour] - 0-23 local Vietnam hour; Artist sleeps
- *   03:00-07:59 to stay consistent with the bedtime announcement lore
+ * @param {number} [input.vietnamHour] - 0-23 local Vietnam hour
+ * @param {string} [input.guildLang='vi'] - the guild's language; Artist sleeps
+ *   03:00-07:59 in its time zone, matching her bedtime and wake-up posts there
  * @returns {string|null} a bucket from PING_BUCKETS, or null to stay silent
  */
 function classifyArtistPing({
@@ -87,6 +128,7 @@ function classifyArtistPing({
   parsesAsRaidCommand = false,
   recentlyAnswered = false,
   vietnamHour,
+  guildLang = "vi",
 } = {}) {
   if (!mentionsArtist || fromBot) return null;
   // The parser owns raid updates. `@Artist Act4 HM Soulrano` is a clear post
@@ -94,7 +136,7 @@ function classifyArtistPing({
   if (parsesAsRaidCommand) return null;
 
   if (recentlyAnswered) return "spam";
-  if (Number.isInteger(vietnamHour) && vietnamHour >= 3 && vietnamHour < 8) return "sleeping";
+  if (Number.isInteger(vietnamHour) && isArtistAsleep(vietnamHour, guildLang)) return "sleeping";
 
   // Strip the mention markup, then any leftover punctuation-only noise.
   const stripped = String(content || "")
@@ -113,4 +155,5 @@ function classifyArtistPing({
 module.exports = {
   PING_BUCKETS,
   classifyArtistPing,
+  isClaimedByRaidParser,
 };
