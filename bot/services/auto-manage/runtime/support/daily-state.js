@@ -7,6 +7,7 @@ const {
   classifyBibleError,
 } = require("../../bible/error-kinds");
 const {
+  getAutoManageEntries,
   hasSuccessfulAutoManageReport,
 } = require("../../reports/utils");
 
@@ -182,7 +183,7 @@ function scheduleAutoManageDailyRetry({
 }
 
 function classifyAutoManageDailyReport(report) {
-  const entries = Array.isArray(report?.perChar) ? report.perChar : [];
+  const entries = getAutoManageEntries(report);
   if (entries.length === 0) {
     return AUTO_MANAGE_DAILY_OUTCOME.noActionable;
   }
