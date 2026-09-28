@@ -11,27 +11,17 @@
 
 const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../domain/raid-catalog");
 const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../models/Class");
+const {
+  CORE_MODE_ALIASES,
+  LOA_LOGS_MODE_ALIASES,
+  buildModeAliasMap,
+} = require("../../../domain/difficulty-aliases");
 
 // Mapping between LOA Logs encounters.db `difficulty` values and RaidManage
 // mode keys. Shared by the server apply path and web companion catalog.
-const DIFFICULTY_TO_MODE_KEY = Object.freeze({
-  normal: "normal",
-  solo: "solo",
-  "solo mode": "solo",
-  "level 1": "normal",
-  level1: "normal",
-  l1: "normal",
-  hard: "hard",
-  "level 2": "hard",
-  level2: "hard",
-  l2: "hard",
-  nightmare: "nightmare",
-  "level 3": "nightmare",
-  level3: "nightmare",
-  l3: "nightmare",
-  trial: "nightmare",
-  inferno: "nightmare",
-});
+const DIFFICULTY_TO_MODE_KEY = Object.freeze(Object.fromEntries(
+  buildModeAliasMap(CORE_MODE_ALIASES, LOA_LOGS_MODE_ALIASES)
+));
 
 /**
  * Map a LOA Logs `difficulty` value to a RaidManage mode key.

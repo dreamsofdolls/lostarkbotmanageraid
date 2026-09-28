@@ -1,3 +1,9 @@
+const {
+  CORE_MODE_ALIASES,
+  SHORTHAND_MODE_ALIASES,
+  buildModeAliasMap,
+} = require("../../../domain/difficulty-aliases");
+
 const UI = {
   colors: {
     success: 0x57f287,
@@ -94,21 +100,10 @@ function toModeLabel(modeKey) {
   return MODE_LABELS[lower] || "Normal";
 }
 
-const MODE_KEYS = Object.freeze({
-  hard: "hard",
-  hm: "hard",
-  nightmare: "nightmare",
-  "9m": "nightmare",
-  solo: "solo",
-  "solo mode": "solo",
-});
+const MODE_KEYS = buildModeAliasMap(CORE_MODE_ALIASES, SHORTHAND_MODE_ALIASES);
 
 function toModeKey(modeLabel) {
-  const lower = normalizeName(modeLabel);
-  // `nm` moved from nightmare to normal per Traine's alias preference: in
-  // this VN community `nm` reads as "nor-mal" more naturally than "9m".
-  // Nightmare keeps `9m` as the sole shorthand.
-  return MODE_KEYS[lower] || "normal";
+  return MODE_KEYS.get(normalizeName(modeLabel)) || "normal";
 }
 
 function getCharacterName(character) {

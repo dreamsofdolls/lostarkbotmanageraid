@@ -7,6 +7,13 @@
 
 "use strict";
 
+const {
+  CORE_MODE_ALIASES,
+  SHORTHAND_MODE_ALIASES,
+  JP_MODE_ALIASES,
+  buildModeAliasMap,
+} = require("../../../domain/difficulty-aliases");
+
 const RAID_ALIASES = new Map([
   ["armoche", "armoche"],
   ["act4", "armoche"],
@@ -25,27 +32,13 @@ const RAID_ALIASES = new Map([
   ["セルカ", "serca"],
 ]);
 
-const DIFFICULTY_ALIASES = new Map([
-  ["solo", "solo"],
-  ["nightmare", "nightmare"],
-  ["9m", "nightmare"],
-  ["level3", "nightmare"],
-  ["l3", "nightmare"],
-  ["hard", "hard"],
-  ["hm", "hard"],
-  ["level2", "hard"],
-  ["l2", "hard"],
-  ["normal", "normal"],
-  ["nor", "normal"],
-  ["level1", "normal"],
-  ["l1", "normal"],
-  // VN-community preference: nm reads as normal. Nightmare shorthand is 9m.
-  ["nm", "normal"],
-  ["ノーマル", "normal"],
-  ["ソロ", "solo"],
-  ["ハード", "hard"],
-  ["ナイトメア", "nightmare"],
-]);
+// Tokens never hold a space, so the spaced forms ("level 1", "solo mode")
+// never match here; normalizeRaidChannelContent folds "level 1" into "level1".
+const DIFFICULTY_ALIASES = buildModeAliasMap(
+  CORE_MODE_ALIASES,
+  SHORTHAND_MODE_ALIASES,
+  JP_MODE_ALIASES
+);
 
 const ACTION_ALIASES = new Map([
   ["reset", "reset"],
