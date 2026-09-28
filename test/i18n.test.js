@@ -7,6 +7,13 @@ const { TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync");
 const {
   createRaidLanguageCommandDefinition,
 } = require("../bot/handlers/commands/command-definitions/social");
+const {
+  createRaidCommandDefinitions,
+} = require("../bot/handlers/commands/command-definitions");
+const {
+  announcementTypeEntry,
+  announcementTypeKeys,
+} = require("../bot/utils/raid/schedule/announcements");
 
 function leafKeys(value, prefix = "", out = []) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -243,4 +250,45 @@ test("/raid-language names every supported language in each description", () => 
       assert.ok(description.includes(label), `"${description}" should name ${label}`);
     }
   }
+});
+
+test("slash command defaults are English for clients outside vi and ja", () => {
+  const commands = createRaidCommandDefinitions({
+    announcementTypeKeys,
+    announcementTypeEntry,
+  }).map((command) => command.toJSON());
+  // Accented Latin letters mean Vietnamese copy leaked into a default. The
+  // language names and quoted input examples ('thứ 4 20:00') are the only
+  // accented text a default may carry.
+  const ACCENTED = /[À-ɏḀ-ỿ]/;
+  const offenders = [];
+  const check = (path, text) => {
+    let rest = String(text || "").replace(/'[^']*'/g, "");
+    for (const { label } of SUPPORTED_LANGUAGES) rest = rest.split(label).join("");
+    if (ACCENTED.test(rest)) offenders.push(`${path}: ${text}`);
+  };
+  const walk = (node, trail) => {
+    const path = [...trail, node.name];
+    check(`${path.join(" > ")} [name]`, node.name);
+    check(`${path.join(" > ")} [description]`, node.description);
+    for (const choice of node.choices || []) {
+      check(`${path.join(" > ")} choice ${choice.value}`, choice.name);
+    }
+    for (const option of node.options || []) walk(option, path);
+  };
+  for (const command of commands) walk(command, []);
+  assert.deepEqual(offenders, []);
+
+  // The Vietnamese and Japanese copy stays as the localizations.
+  const roster = commands
+    .find((command) => command.name === "raid-set")
+    .options.find((option) => option.name === "roster");
+  assert.equal(
+    roster.description_localizations.vi,
+    "Roster (account) chứa character - autocomplete"
+  );
+  assert.equal(
+    roster.description_localizations.ja,
+    "キャラを含むロスター（アカウント）- オートコンプリート"
+  );
 });
