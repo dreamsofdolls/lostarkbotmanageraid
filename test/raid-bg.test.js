@@ -678,6 +678,55 @@ test("raid-bg view clears stale attachments when paging scenes", async (t) => {
   assert.equal(updatePayload.files[0].name, "raid-bg-scene.jpg");
 });
 
+test("raid-bg view logs a failed scene page instead of crashing the bot", async (t) => {
+  const pngA = makePngBuffer(1200, 720, "#112233");
+  const pngB = makePngBuffer(1200, 720, "#445566");
+  const originalFindOne = UserBackground.findOne;
+  UserBackground.findOne = () => ({
+    lean: async () => ({
+      mode: "even",
+      images: [
+        { imageData: pngA, width: 1200, height: 720, originalFilename: "stored-a.png" },
+        { imageData: pngB, width: 1200, height: 720, originalFilename: "stored-b.png" },
+      ],
+      assignments: [],
+      updatedAt: new Date(),
+    }),
+  });
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+  });
+  const errors = [];
+  t.mock.method(console, "error", (...args) => { errors.push(args); });
+
+  const harness = makeCollectorHarness();
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+    ...COMPONENT_DEPS,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-view-expired" },
+    options: { getSubcommand: () => "view" },
+    deferReply: async () => {},
+    editReply: async () => harness.message,
+  });
+
+  const unknownInteraction = Object.assign(new Error("Unknown interaction"), { code: 10062 });
+  // An unhandled rejection here would reach process-lifecycle and exit the bot.
+  await harness.handlers.collect({
+    customId: "raidbg:next",
+    update: async () => { throw unknownInteraction; },
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].at(-1), unknownInteraction);
+});
+
 test("raid-bg edit (no image) opens the delete picker", async (t) => {
   const pngA = makePngBuffer(1200, 720, "#112233");
   const pngB = makePngBuffer(1200, 720, "#445566");

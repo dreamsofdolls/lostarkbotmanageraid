@@ -24,6 +24,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - `/raid-task shared-add expires_at` ends the typed day at midnight in the lead's `/raid-language` timezone (UTC+7 vi, UTC+9 jp, UTC en). A vi or jp lead who typed `2026-10-05` used to see "expires 6 October" and keep the task until 06:59 (vi) or 08:59 (jp) the next morning. Tasks already saved keep their expiry.
 - Only a real HTTP 429 from Bible pauses Bible requests now. Looking up a name Bible does not know that contains "ratelimit" (`Piratelimits`, say) used to pause every Bible request for every user for a minute, and anyone could repeat it; a character named like "Logsnotenabled" could also be reported as Public Log off when Bible failed for another reason.
+- A Discord error on a click in the `/raid-check` Manager view or the `/raid-bg view` scene browser (a click Discord had already expired, for one) is logged and the session carries on. It used to shut the whole bot down, taking every open panel with it.
+- A `/raid-check` 🔄 Refresh roster that finishes after the 5-minute session has closed shows the refreshed roster with the controls still disabled. It used to switch the expired buttons back on, and clicking one ended in "This interaction failed".
+- The `/raid-check` Enable / Disable auto-sync button follows the user's auto-sync state once 🔄 Refresh roster or the opening background refresh reloads them, as the roster card already did. It used to keep the label from when the view opened, so a Manager who had just turned auto-sync off was still offered Disable.
 
 ## 2026-09-27
 
