@@ -14,9 +14,6 @@ const {
   loadRosterPickerButtonContext,
 } = require("./picker/button-flow");
 const {
-  preserveRosterCharacterState,
-} = require("./picker/character-state");
-const {
   createAddRosterViewBuilders,
 } = require("./add/view");
 const {
@@ -104,7 +101,6 @@ function createAddRosterCommand({
     getCharacterClass,
     buildCharacterRecord,
     createCharacterId,
-    preserveRosterCharacterState,
   });
   async function handleAddRosterCommand(interaction) {
     const callerId = interaction.user.id;

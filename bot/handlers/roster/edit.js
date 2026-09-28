@@ -17,9 +17,6 @@ const {
   loadRosterPickerButtonContext,
 } = require("./picker/button-flow");
 const {
-  preserveRosterCharacterState,
-} = require("./picker/character-state");
-const {
   buildEditRosterPickerChars: buildEditRosterPickerCharsCore,
 } = require("./edit/edit-picker-chars");
 const {
@@ -97,7 +94,6 @@ function createEditRosterCommand({
     getCharacterClass,
     getCharacterName,
     normalizeName,
-    preserveRosterCharacterState,
     saveWithRetry,
   });
 
