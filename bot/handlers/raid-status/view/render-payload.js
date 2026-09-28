@@ -29,6 +29,9 @@ function createRaidStatusRenderPayload({
   buildGoldViewEmbed,
   buildTaskViewEmbed,
   buildLocalSyncViewEmbeds = () => [],
+  // The no-roster notice, for a session whose last roster went away (removed
+  // or unshared) after it opened.
+  buildEmptyRosterEmbed = null,
   lang,
 }) {
   const backgroundBufferCache = new Map();
@@ -54,6 +57,7 @@ function createRaidStatusRenderPayload({
     const currentPage = getCurrentPage();
     const currentView = getCurrentView();
     const filterRaidId = getFilterRaidId();
+    if (!accounts[currentPage] && buildEmptyRosterEmbed) return buildEmptyRosterEmbed();
 
     const accountViewEmbed = accountViewEmbedByName.get(currentView);
     if (accountViewEmbed) return accountViewEmbed(accounts[currentPage]);
@@ -153,6 +157,7 @@ function createRaidStatusRenderPayload({
     const view = getCurrentView();
     if (view === "task" || view === "sync") return payload;
     const account = getAccounts()[getCurrentPage()];
+    if (!account) return payload;
     const bgBuffer = await resolveBackgroundBuffer(account);
     if (!bgBuffer) return payload;
     return attachBackgroundToStatusEmbed(bgBuffer);

@@ -24,6 +24,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The `/raid-status` gold view changes the difficulty of an older raid entry that has no stored difficulty of its own, such as one the card shows as Normal from a gate cleared at Normal. Picking Hard there used to do nothing and say nothing, because the pick was compared with the highest difficulty the character's item level allows instead of the Normal on the card.
 - On a roster shared with `view` access, the `/raid-status` Task view shows the task toggles disabled, as the Gold view already did, and a task that cannot be saved now gets a warning. Picking a task there used to do nothing and say nothing.
 - Paging quickly through `/raid-status`, or a refresh finishing while you page, always leaves one roster's card with that roster's own buttons. A roster whose background was still loading could land its card last with the next roster's buttons, so the gold toggles below acted on a roster other than the one shown; a refresh finishing after the session closed also switched the expired buttons back on.
+- A `/raid-status` card whose last roster was removed, or whose only shared roster was unshared, while it was open shows the no-roster notice on the next click. It used to fail on every click with "This button did not run" and keep its buttons until the session ran out.
 
 ## 2026-09-27
 

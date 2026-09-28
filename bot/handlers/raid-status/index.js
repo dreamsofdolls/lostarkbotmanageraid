@@ -338,6 +338,12 @@ function createRaidStatusCommand(deps) {
       buildGoldViewEmbed,
       buildTaskViewEmbed,
       buildLocalSyncViewEmbeds: buildSyncViewEmbeds,
+      // The same notice /raid-status opens with when there is no roster.
+      buildEmptyRosterEmbed: () => buildNoticeEmbed(EmbedBuilder, {
+        type: "info",
+        title: t("raid-status.notice.noRosterTitle", lang),
+        description: t("raid-status.notice.noRosterDescription", lang),
+      }),
       lang,
     });
 

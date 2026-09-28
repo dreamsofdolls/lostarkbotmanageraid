@@ -255,6 +255,9 @@ function createRaidStatusComponentLayout({
     const rows = [];
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
+    // The last roster went away mid-session: the card is the no-roster
+    // notice, which has no controls, as when /raid-status opens without one.
+    if (accounts.length === 0) return rows;
 
     const specializedViewRows = specializedViewRowsByName.get(getCurrentView());
     if (specializedViewRows) {
