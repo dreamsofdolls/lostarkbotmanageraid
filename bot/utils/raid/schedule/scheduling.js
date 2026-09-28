@@ -4,17 +4,50 @@
  * bot/commands.js. Factory pattern because some calculations depend on
  * scheduler state (auto-cleanup tick, auto-manage daily tick) that's
  * only known after the scheduler service is wired at compose-root boot.
- * Resolver getters close over the lazy `let` bindings so lookups defer
- * to call-time. Used by: bot/commands.js, handlers/raid/announce.js,
+ * The announcement-config reader has no such dependency, so it has its own
+ * factory and the schedulers can use it before these helpers exist.
+ * Used by: bot/commands.js, handlers/raid/announce.js,
  * handlers/raid/channel.js (via re-export from commands).
  */
 
 const { weeklyResetStartMs } = require("./reset-windows");
 
 /**
+ * Build the reader that normalizes a guild's `announcements` subdoc.
+ * @param {{announcementSubdocKeys: function, announcementSubdocDefaultEnabled?: function}} deps
+ * @returns {function(object): object} getAnnouncementsConfig
+ */
+function createAnnouncementsConfigReader({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled = () => true,
+}) {
+  /**
+   * Load (or lazily initialize) the `announcements` subdoc for a guild.
+   * Legacy guilds that existed before the schema field landed may have
+   * `cfg.announcements = undefined`; schema defaults kick in on save but
+   * not on `.lean()` reads, so callers must normalize. Returns a plain
+   * object with every type's config populated with defaults.
+   */
+  return function getAnnouncementsConfig(cfg) {
+    const raw = cfg?.announcements || {};
+    const normalized = {};
+    for (const subdocKey of announcementSubdocKeys()) {
+      const sub = raw[subdocKey] || {};
+      normalized[subdocKey] = {
+        enabled: typeof sub.enabled === "boolean"
+          ? sub.enabled
+          : announcementSubdocDefaultEnabled(subdocKey),
+        channelId: sub.channelId || null,
+      };
+    }
+    return normalized;
+  };
+}
+
+/**
  * Build the scheduling-helpers service from injected scheduler-state
- * getters. All resolve* fns are getters (not values) so the factory can
- * compose before the scheduler service finishes wiring at boot.
+ * getters. All resolve* fns are getters (not values): a scheduler's start
+ * time is only known once it has started.
  * @param {object} deps - see destructure inside
  * @returns {{getAnnouncementsConfig: function, nextIntervalTickMs: function, nextAnnouncementEligibleBoundaryMs: function, nextAnnouncementSchedulerCheckMs: function, formatDiscordTimestampPair: function, buildAnnouncementWhenItFiresText: function}}
  */
@@ -22,9 +55,8 @@ function createSchedulingHelpers({
   // Pure dep - just the registry-key list
   announcementSubdocKeys,
   announcementSubdocDefaultEnabled = () => true,
-  // Resolvers for timestamps + interval values. Wrapped in getters so the
-  // factory can be built before the lazy `let` bindings in bot/commands.js
-  // get assigned by createRaidSchedulerService at boot.
+  // Resolvers for timestamps + interval values. Getters, because a
+  // scheduler's start time is only known once it has started.
   resolveWeeklyResetStarted,
   resolveWeeklyResetTickMs,
   resolveAutoCleanupStarted,
@@ -39,27 +71,10 @@ function createSchedulingHelpers({
   resolveNextWorldEventReminderBoundary = () => null,
 }) {
 
-  /**
-   * Load (or lazily initialize) the `announcements` subdoc for a guild.
-   * Legacy guilds that existed before the schema field landed may have
-   * `cfg.announcements = undefined`; schema defaults kick in on save but
-   * not on `.lean()` reads, so callers must normalize. Returns a plain
-   * object with every type's config populated with defaults.
-   */
-  function getAnnouncementsConfig(cfg) {
-    const raw = cfg?.announcements || {};
-    const normalized = {};
-    for (const subdocKey of announcementSubdocKeys()) {
-      const sub = raw[subdocKey] || {};
-      normalized[subdocKey] = {
-        enabled: typeof sub.enabled === "boolean"
-          ? sub.enabled
-          : announcementSubdocDefaultEnabled(subdocKey),
-        channelId: sub.channelId || null,
-      };
-    }
-    return normalized;
-  }
+  const getAnnouncementsConfig = createAnnouncementsConfigReader({
+    announcementSubdocKeys,
+    announcementSubdocDefaultEnabled,
+  });
   
   /**
    * Next scheduler wake-up time for an interval job that started at
@@ -329,4 +344,4 @@ function createSchedulingHelpers({
   };
 }
 
-module.exports = { createSchedulingHelpers };
+module.exports = { createAnnouncementsConfigReader, createSchedulingHelpers };
