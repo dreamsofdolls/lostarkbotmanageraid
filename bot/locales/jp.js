@@ -1204,8 +1204,6 @@ module.exports = {
       eventGoneDescription: "このボードは /raid-check を開いた後に終了/キャンセル/削除されたみたい。/raid-check をもう一度実行して最新の一覧を取ってね～",
     },
     staleButton: {
-      title: "ボタンが期限切れですわ",
-      raidInvalidDescription: "ボタン内のレイドが無効ですわ (古いセッションかボット再起動の可能性)。もう一度 `/raid-check` を実行して更新してね♪",
       unsupportedActionTitle: "未対応のボタンアクションですわ",
       unsupportedActionDescription: "アクション `{action}` はアーティストが知ってるフローと一致しませんわ～ 古いビルドのボタンかも、`/raid-check` を再実行して更新してね♪",
     },
@@ -1216,11 +1214,6 @@ module.exports = {
       noFilterMatchesDescription: "選択中のユーザー・レイド・状態に一致するキャラクターがいるロスターはありません。フィルターを変えてくださいませ♪",
       sessionLockTitle: "開いた本人だけ操作できますわ",
       sessionLockDescription: "このコンポーネントは別の方の `/raid-check` セッションのものですわ～ アーティストは開いた本人にだけ操作を許可しますの。自分用のセッションは `/raid-check` を実行してね♪",
-    },
-    snapshot: {
-      notEligibleLow: "_まだ参加できませんわ (装備レベル不足)_",
-      notEligibleHigh: "_もうこのモードは卒業ですわ (装備レベル超過)_",
-      notEligibleGeneric: "_まだ参加できませんわ_",
     },
     allMode: {
       rollupLine: "🌐 ロスター: **{characters}** キャラ · **{completed}/{total}** レイド",
@@ -1275,7 +1268,6 @@ module.exports = {
       reportLineAllIntro: "Auto-sync ユーザー **{users}** 人 · キャラクター **{chars}** 体の **全レイド** を確認しました。",
       reportLineAllHint: "`/raid-check` を開き直すと全レイドの更新後の進捗を確認できます。",
       noOptedInTitle: "オプトインしているユーザーがいませんわ",
-      noOptedInDescription: "現在の未完了リストには `/raid-auto-manage action:on` をしているユーザーが居ないですわ～ アーティストは同期するユーザーがいないの。リスト内のメンバーに自動同期をオンにしてもらうか、`/raid-set` で手動更新してね♪",
       reportTitle: {
         variants: [
           "同期完了ですわ♪",
@@ -1297,7 +1289,6 @@ module.exports = {
           "誰も同期できませんでしたわ～",
         ],
       },
-      reportLineIntro: "アーティストが **{users}** 人のオプトイン済みユーザー (未完了キャラ **{chars}** 体) の同期を起動しましたわ。",
       reportFields: {
         checked: "確認済み",
         synced: "新データあり",
@@ -1311,8 +1302,6 @@ module.exports = {
       reportTailFailed: "⚠️ **{n}** 人が同期に失敗しましたわ - 詳細はボットログを確認してね♪",
       reportTailSkipped: "⏳ **{n}** 人はスキップしましたわ - 別の同期が実行中か、Local Sync を使用中か、ロスターが無いか、ログが非公開ですの。",
       reportHintAllFailed: "数分後にもう一度試すか、各メンバーに `/raid-set` で手動記録してもらってね♪",
-      reportHintFailed: "数分後にもう一度試すか、**{raidLabel}** が未完了のメンバーに `/raid-set` で手動記録してもらってね♪",
-      reportLineHint: "`/raid-check` を開いてフィルタドロップダウンで **{raidLabel}** を選ぶと新しい未完了リストが見られますわ♪",
     },
     syncDm: {
       title: "{doneIcon} アーティストがレイド進捗を同期しましたわ",

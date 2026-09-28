@@ -1,37 +1,12 @@
 /**
  * utils/raid/queries/raid-check.js
- * Mongo query construction for /raid-check scans. The iLvl-range filter
- * + field projection live next to the helper that builds the query so
- * touching one without the other is hard to miss. Invariant: stale
- * accounts STAY in the candidate set even when cached iLvl is below
- * the raid floor - /raid-check lazy-refreshes before scanning, so
- * filtering on cached iLvl alone would hide newly-honed chars.
- * Used by: services/auto-manage/runtime/core.js, handlers/raid-check/*,
- * handlers/raid-status/* (anything that scans User docs for raid view).
+ * Field projection for the /raid-check Manager view's User scans
+ * (handlers/raid-check/all-mode).
  */
-
-const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
-const {
-  ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
-} = require("../../../services/roster/refresh");
-const {
-  MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
-} = require("../../../services/access/manager");
-
-// /raid-check is restricted to RAID_MANAGER_ID (env-allowlisted users) by
-// design, so the query's "stale roster" cutoff uses the manager-side
-// 10-minute cooldown instead of the regular-user 2-hour value. A manager
-// running /raid-check during raid roll-call wants stale-recently rosters
-// to surface as candidates so the lazy-refresh path can pull fresh iLvl
-// before scanning - waiting two hours for the same query to widen would
-// make the manager's privilege effectively invisible at the query layer.
-// Regular users cannot reach this query; the gate lives in handlers/raid-check.
-const RAID_CHECK_REFRESH_CUTOFF_MS = MANAGER_ROSTER_REFRESH_COOLDOWN_MS;
 
 // Narrow Mongo payload for /raid-check scans. The view only needs roster
 // fields, refresh stamps, weekly cursor and auto-manage badges; the rest of
 // the User document stays excluded.
-const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };
 const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",
   "weeklyResetKey",
@@ -54,92 +29,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordGlobalName",
   "discordDisplayName",
 ].join(" ");
-/**
- * For a given (raidKey, selfMin) compute the iLvl range bounds needed to
- * classify roster chars as eligible / too-low for the scan.
- *
- *   - lowestMin: min iLvl of the lowest-tier mode of this raid. Chars
- *     below this are outside the raid entirely and never render.
- *   - selfMin: scan mode's own min (usually === `raidMeta.minItemLevel`).
- *   - nextMin: min iLvl of the next higher mode. Chars at or above this
- *     floor have out-grown the selected mode and should not show in that
- *     mode's scan page.
- *
- * The `lowestMin` floor uses `Math.min(RAID_REQ lowest, selfMin)` so that
- * if a caller passes a selfMin below the actual lowest mode (e.g. older
- * tests), the range still degrades gracefully instead of hiding every
- * char.
- */
-function getRaidScanRange(raidKey, selfMin) {
-  const modes = RAID_REQUIREMENTS[raidKey]?.modes || {};
-  const mins = Object.values(modes)
-    .map((m) => Number(m.minItemLevel))
-    .filter(Number.isFinite);
-  const baseLowest = mins.length > 0 ? Math.min(...mins) : selfMin;
-  const lowestMin = Math.min(baseLowest, selfMin);
-  const higherMins = mins
-    .filter((min) => min > selfMin)
-    .sort((a, b) => a - b);
-  const nextMin = higherMins.length > 0 ? higherMins[0] : Infinity;
-  return { lowestMin, selfMin, nextMin };
-}
-
-/**
- * Build the Mongo query used by /raid-check scans. Returns the base
- * "has at least one account" filter when raidMeta is null; otherwise
- * adds the iLvl-floor + stale-account union (see file header for the
- * stale-account invariant).
- * @param {{raidKey: string, minItemLevel: number}|null} raidMeta - scan target raid
- * @param {number} [now=Date.now()] - test clock
- * @returns {object} Mongo query object
- */
-function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
-  const query = { ...RAID_CHECK_USER_BASE_QUERY };
-  if (!raidMeta) return query;
-
-  const { lowestMin } = getRaidScanRange(
-    raidMeta.raidKey,
-    Number(raidMeta.minItemLevel) || 0
-  );
-  if (Number.isFinite(lowestMin) && lowestMin > 0) {
-    const refreshCutoff = now - RAID_CHECK_REFRESH_CUTOFF_MS;
-    const failureCutoff = now - ROSTER_REFRESH_FAILURE_COOLDOWN_MS;
-    // Keep stale/unrefreshed accounts in the candidate set even when their
-    // cached iLvl is below the raid floor. Initial /raid-check intentionally
-    // lazy-refreshes stale roster metadata before scanning; filtering only
-    // by cached iLvl here would hide a character who honed past the floor
-    // since the last successful refresh.
-    query.$or = [
-      { "accounts.characters.itemLevel": { $gte: lowestMin } },
-      {
-        accounts: {
-          $elemMatch: {
-            $and: [
-              {
-                $or: [
-                  { lastRefreshedAt: null },
-                  { lastRefreshedAt: { $exists: false } },
-                  { lastRefreshedAt: { $lt: refreshCutoff } },
-                ],
-              },
-              {
-                $or: [
-                  { lastRefreshAttemptAt: null },
-                  { lastRefreshAttemptAt: { $exists: false } },
-                  { lastRefreshAttemptAt: { $lt: failureCutoff } },
-                ],
-              },
-            ],
-          },
-        },
-      },
-    ];
-  }
-  return query;
-}
 
 module.exports = {
   RAID_CHECK_USER_QUERY_FIELDS,
-  getRaidScanRange,
-  buildRaidCheckUserQuery,
 };

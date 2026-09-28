@@ -5,7 +5,6 @@ const { parseCustomIdRoute } = require("../../utils/discord/custom-id");
 const RAID_CHECK_BUTTON_SCOPE = Object.freeze({
   self: "self",
   manager: "manager",
-  raid: "raid",
 });
 
 const RAID_CHECK_BUTTON_HANDLER = Object.freeze({
@@ -13,7 +12,6 @@ const RAID_CHECK_BUTTON_HANDLER = Object.freeze({
   enableAutoSelf: "enableAutoSelf",
   enableAutoOne: "enableAutoOne",
   disableAutoOne: "disableAutoOne",
-  sync: "sync",
   syncAll: "syncAll",
   unsupported: "unsupported",
 });
@@ -27,10 +25,6 @@ const MANAGER_ACTION_HANDLERS = Object.freeze({
   "sync-all": RAID_CHECK_BUTTON_HANDLER.syncAll,
   "enable-auto-one": RAID_CHECK_BUTTON_HANDLER.enableAutoOne,
   "disable-auto-one": RAID_CHECK_BUTTON_HANDLER.disableAutoOne,
-});
-
-const RAID_ACTION_HANDLERS = Object.freeze({
-  sync: RAID_CHECK_BUTTON_HANDLER.sync,
 });
 
 function parseRaidCheckButtonCustomId(customId) {
@@ -48,7 +42,6 @@ function getRaidCheckButtonRoute(customId) {
       action,
       targetDiscordId: parsed.value || null,
       managerRequired: false,
-      raidRequired: false,
     };
   }
 
@@ -60,17 +53,16 @@ function getRaidCheckButtonRoute(customId) {
       action,
       targetDiscordId: parsed.value || null,
       managerRequired: true,
-      raidRequired: false,
     };
   }
 
+  // Unknown actions, such as the per-raid Sync button on cards from before
+  // it was removed, stay Manager-gated and get the unsupported notice.
   return {
-    scope: RAID_CHECK_BUTTON_SCOPE.raid,
-    handler: RAID_ACTION_HANDLERS[action] || RAID_CHECK_BUTTON_HANDLER.unsupported,
+    scope: RAID_CHECK_BUTTON_SCOPE.manager,
+    handler: RAID_CHECK_BUTTON_HANDLER.unsupported,
     action,
-    raidKey: parsed.value || "",
     managerRequired: true,
-    raidRequired: true,
   };
 }
 

@@ -26,7 +26,6 @@ test("raid-check button routes classify self actions without manager gate", () =
     action: "disable-auto-self",
     targetDiscordId: "123",
     managerRequired: false,
-    raidRequired: false,
   });
   assert.equal(
     getRaidCheckButtonRoute("raid-check:enable-auto-self:123").handler,
@@ -34,37 +33,30 @@ test("raid-check button routes classify self actions without manager gate", () =
   );
 });
 
-test("raid-check button routes classify manager actions that do not need raid metadata", () => {
+test("raid-check button routes classify manager actions", () => {
   const syncAll = getRaidCheckButtonRoute("raid-check:sync-all");
   assert.equal(syncAll.scope, RAID_CHECK_BUTTON_SCOPE.manager);
   assert.equal(syncAll.handler, RAID_CHECK_BUTTON_HANDLER.syncAll);
   assert.equal(syncAll.managerRequired, true);
-  assert.equal(syncAll.raidRequired, false);
   assert.deepEqual(getRaidCheckButtonRoute("raid-check:enable-auto-one:456"), {
     scope: RAID_CHECK_BUTTON_SCOPE.manager,
     handler: RAID_CHECK_BUTTON_HANDLER.enableAutoOne,
     action: "enable-auto-one",
     targetDiscordId: "456",
     managerRequired: true,
-    raidRequired: false,
   });
 });
 
-test("raid-check button routes classify raid-scoped actions and preserve unsupported actions", () => {
-  assert.deepEqual(getRaidCheckButtonRoute("raid-check:sync:armoche_normal"), {
-    scope: RAID_CHECK_BUTTON_SCOPE.raid,
-    handler: RAID_CHECK_BUTTON_HANDLER.sync,
-    action: "sync",
-    raidKey: "armoche_normal",
-    managerRequired: true,
-    raidRequired: true,
-  });
-  assert.deepEqual(getRaidCheckButtonRoute("raid-check:wat:armoche_normal"), {
-    scope: RAID_CHECK_BUTTON_SCOPE.raid,
-    handler: RAID_CHECK_BUTTON_HANDLER.unsupported,
-    action: "wat",
-    raidKey: "armoche_normal",
-    managerRequired: true,
-    raidRequired: true,
-  });
+test("raid-check button routes keep old per-raid Sync and unknown actions Manager-gated and unsupported", () => {
+  for (const [customId, action] of [
+    ["raid-check:sync:armoche_normal", "sync"],
+    ["raid-check:wat:armoche_normal", "wat"],
+  ]) {
+    assert.deepEqual(getRaidCheckButtonRoute(customId), {
+      scope: RAID_CHECK_BUTTON_SCOPE.manager,
+      handler: RAID_CHECK_BUTTON_HANDLER.unsupported,
+      action,
+      managerRequired: true,
+    });
+  }
 });

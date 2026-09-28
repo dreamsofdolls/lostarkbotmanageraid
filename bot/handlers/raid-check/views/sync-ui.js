@@ -18,7 +18,6 @@ const {
 } = require("../../../utils/raid/common/shared");
 // tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAppliedAutoManageEntries,
 } = require("../../../services/auto-manage/reports/utils");
@@ -42,7 +41,6 @@ const {
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
  * @param {object} deps.raidCheckSyncLimiter - per-user concurrency cap
  * @param {object} deps.discordUserLimiter - Discord REST fan-out limiter
- * @param {Function} deps.computeRaidCheckSnapshot - snapshot builder
  * @returns {{
  *   buildRaidCheckSyncDMEmbed: Function,
  *   handleRaidCheckSyncClick: Function,
@@ -64,7 +62,6 @@ function createSyncUi({
   releaseAutoManageSyncSlot,
   raidCheckSyncLimiter,
   discordUserLimiter,
-  computeRaidCheckSnapshot,
 }) {
 
   // Private logs are a user setting that no retry fixes, so a report whose
@@ -128,26 +125,17 @@ function createSyncUi({
     return { pendingChars, userMeta };
   }
 
-  /** Sync one raid's pending characters, or all opted-in rosters when raidMeta is null. */
-  async function handleRaidCheckSyncClick(interaction, raidMeta) {
+  /** Sync-check all: sync every opted-in roster across all raids. */
+  async function handleRaidCheckSyncClick(interaction) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const syncAll = raidMeta == null;
-    const scopeLabel = syncAll ? "all" : `${raidMeta.raidKey}:${raidMeta.modeKey}`;
     // Manager (clicker) views the ephemeral report - use their lang.
     const snapshotStarted = Date.now();
     const [managerLang, snapshot] = await Promise.all([
       getUserLanguage(interaction.user.id, { UserModel: User }),
-      syncAll
-        ? loadAllRaidSyncSnapshot()
-        : computeRaidCheckSnapshot(raidMeta, { syncFreshData: true }),
+      loadAllRaidSyncSnapshot(),
     ]);
     const snapshotMs = Date.now() - snapshotStarted;
-    const raidModeLabel = syncAll ? "" : getRaidModeLabel(
-      raidMeta.raidKey,
-      raidMeta.modeKey,
-      managerLang
-    );
 
     const pendingEntryKeysByDiscordId = new Map();
     for (const pendingChar of snapshot.pendingChars) {
@@ -168,7 +156,7 @@ function createSyncUi({
     const pendingUserCount = new Set(snapshot.pendingChars.map((c) => c.discordId)).size;
     if (optedInDiscordIds.length === 0) {
       console.log(
-        `[raid-check sync] raid=${scopeLabel} pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
+        `[raid-check sync] raid=all pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
       );
       await interaction.editReply({
         content: null,
@@ -176,9 +164,7 @@ function createSyncUi({
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: t("raid-check.syncFlow.noOptedInTitle", managerLang),
-            description: t(syncAll
-              ? "raid-check.syncFlow.noOptedInAllDescription"
-              : "raid-check.syncFlow.noOptedInDescription", managerLang),
+            description: t("raid-check.syncFlow.noOptedInAllDescription", managerLang),
           }),
         ],
       });
@@ -274,7 +260,7 @@ function createSyncUi({
             // DM is read by the target, render in their lang per the
             // viewer-language rule.
             const targetLang = await getUserLanguage(discordId, { UserModel: User });
-            const embed = buildRaidCheckSyncDMEmbed(raidMeta, delta, targetLang);
+            const embed = buildRaidCheckSyncDMEmbed(null, delta, targetLang);
             await dmChannel.send({ embeds: [embed] });
             return { ok: true };
           } catch {
@@ -288,7 +274,7 @@ function createSyncUi({
     const dmFailed = dmResults.length - dmSent;
 
     console.log(
-      `[raid-check sync] raid=${scopeLabel} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
+      `[raid-check sync] raid=all pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
     );
 
     // Counters render as inline fields, following the LoaLogs scan-result
@@ -351,7 +337,7 @@ function createSyncUi({
     }
 
     const lines = [
-      t(syncAll ? "raid-check.syncFlow.reportLineAllIntro" : "raid-check.syncFlow.reportLineIntro", managerLang, {
+      t("raid-check.syncFlow.reportLineAllIntro", managerLang, {
         users: optedInDiscordIds.length,
         chars: scopedCharCount,
       }),
@@ -363,9 +349,9 @@ function createSyncUi({
       lines.push(t("raid-check.syncFlow.reportTailSkipped", managerLang, { n: skippedCount }));
     }
     const hintKey = allFailed
-      ? (syncAll ? "raid-check.syncFlow.reportHintAllFailed" : "raid-check.syncFlow.reportHintFailed")
-      : (syncAll ? "raid-check.syncFlow.reportLineAllHint" : "raid-check.syncFlow.reportLineHint");
-    lines.push("", t(hintKey, managerLang, { raidLabel: raidModeLabel }));
+      ? "raid-check.syncFlow.reportHintAllFailed"
+      : "raid-check.syncFlow.reportLineAllHint";
+    lines.push("", t(hintKey, managerLang));
 
     const embed = buildNoticeEmbed(EmbedBuilder, {
       type: noticeType,
