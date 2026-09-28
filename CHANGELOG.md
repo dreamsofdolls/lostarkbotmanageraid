@@ -25,6 +25,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Unlocking a `/raid-schedule-preview` board from Manage after its start time keeps it open; before, auto-lock locked it again within a minute. Unlocking such a board also turns its auto-lock off.
 - A `/raid-schedule-preview` board that auto-locks at its start time keeps the 🗓 Board khác của lead switcher; before, the auto-lock refresh dropped that row.
 - On a `/raid-schedule-preview` board with more than 25 signups, Kick shows one menu per 25 people so everyone can be kicked; before, signups after #25 were missing from it. Editing a turn no longer removes members the 25-name menu could not list, such as someone who re-joined with another character and moved to the end.
+- Pressing End again on a `/raid-schedule-preview` board after the "board just changed" notice no longer reports every comp member as failed: characters whose raid is already complete count as cleared in the summary.
 
 ## 2026-09-27
 
