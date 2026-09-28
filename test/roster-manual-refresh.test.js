@@ -92,3 +92,33 @@ test("a manual refresh keeps reporting under the old name when the seed name is 
   assert.equal(result.status, "updated");
   assert.equal(result.accountName, "My Roster");
 });
+
+test("a manager's roster is due for its automatic refresh after the manager cooldown, not the regular one", async () => {
+  const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+  const account = () => ({
+    accountName: "Alpha",
+    lastRefreshedAt: thirtyMinutesAgo,
+    characters: [{ id: "a", name: "Alpha", class: "Bard", itemLevel: 1700 }],
+  });
+  const fetched = [];
+  const service = createRosterRefreshService({
+    normalizeName: shared.normalizeName,
+    foldName: shared.foldName,
+    getCharacterName: shared.getCharacterName,
+    formatNextCooldownRemaining: shared.formatNextCooldownRemaining,
+    ...rosterMatching,
+    fetchRosterCharacters: async (seed) => {
+      fetched.push(seed);
+      return BIBLE_ROSTER;
+    },
+    getRosterRefreshCooldownMs: (discordId) => (discordId === "manager" ? 10 * 60 * 1000 : 2 * 60 * 60 * 1000),
+  });
+  const managerDoc = { discordId: "manager", accounts: [account()] };
+  const regularDoc = { discordId: "regular", accounts: [account()] };
+
+  assert.equal(service.hasStaleAccountRefreshes(managerDoc), true);
+  assert.equal(service.hasStaleAccountRefreshes(regularDoc), false);
+  assert.equal((await service.collectStaleAccountRefreshes(managerDoc)).length, 1);
+  assert.equal((await service.collectStaleAccountRefreshes(regularDoc)).length, 0);
+  assert.deepEqual(fetched, ["Alpha"]);
+});

@@ -25,6 +25,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - 🔄 Refresh roster in `/raid-status` and `/raid-check` reports a refresh that renamed the roster after the character it was found through (a roster whose name is not a character on Bible) as updated, under the new name. It used to say the roster could not be found although the refresh had saved.
 - `/raid-gold-earner` Confirm on a roster that was removed or renamed while the picker was open shows the roster-not-found notice, and it finds a roster whose stored name differs only in upper/lower case. It used to show a green "saved" card listing nothing, and save nothing.
 - `/raid-edit-roster` Confirm on a roster that was removed while the picker was open shows the roster-not-found notice in the user's language. English and Japanese users used to get a save-failure card quoting a Vietnamese error.
+- A Manager's rosters refresh from Bible on their own after 10 minutes, as the `/raid-status` "✅ Refresh ready" line already said. The automatic refresh used to wait the regular 2 hours for everyone.
 
 ## 2026-09-27
 
