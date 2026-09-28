@@ -16,6 +16,7 @@ const {
   newPickerSessionId,
 } = require("../../utils/raid/roster-picker");
 const {
+  createAutocompleteDispatcher,
   getRosterMatches,
   truncateChoice,
 } = require("../../utils/raid/common/autocomplete");
@@ -69,13 +70,8 @@ function createRaidGoldEarnerCommand({
     return editNotice(interaction, EmbedBuilder, notice, extras);
   }
 
-  async function handleRaidGoldEarnerAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name !== "roster") {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
+  const handleRaidGoldEarnerAutocomplete = createAutocompleteDispatcher("raid-gold-earner", {
+    async roster(interaction, focused) {
       const userDoc = await loadUserForAutocomplete(interaction.user.id);
       const choices = getRosterMatches(userDoc, focused.value || "").map((account) => {
         const charCount = Array.isArray(account.characters)
@@ -86,11 +82,8 @@ function createRaidGoldEarnerCommand({
         return truncateChoice(label, account.accountName);
       });
       await interaction.respond(choices).catch(() => {});
-    } catch (error) {
-      console.error("[autocomplete] raid-gold-earner error:", error?.message || error);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+    },
+  });
 
   async function handleRaidGoldEarnerCommand(interaction) {
     const discordId = interaction.user.id;

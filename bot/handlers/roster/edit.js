@@ -9,6 +9,7 @@ const {
 } = require("../../utils/raid/roster-picker");
 const {
   buildRosterAutocompleteChoices,
+  createAutocompleteDispatcher,
   getRosterMatches,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
@@ -98,35 +99,31 @@ function createEditRosterCommand({
     saveWithRetry,
   });
 
-  async function handleEditRosterAutocomplete(interaction) {
-    const focused = interaction.options.getFocused(true);
-    if (focused.name !== "roster") {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
-    const lang = await getUserLanguage(interaction.user.id, {
-      UserModel: User,
-      userDoc,
-    });
-    const matches = getRosterMatches(userDoc, focused.value || "");
-    const charsWord = (count) =>
-      t(
-        count === 1
-          ? "raid-edit-roster.autocomplete.charsSingular"
-          : "raid-edit-roster.autocomplete.charsPlural",
+  const handleEditRosterAutocomplete = createAutocompleteDispatcher("edit-roster", {
+    async roster(interaction, focused) {
+      const userDoc = await loadUserForAutocomplete(interaction.user.id);
+      const lang = await getUserLanguage(interaction.user.id, {
+        UserModel: User,
+        userDoc,
+      });
+      const matches = getRosterMatches(userDoc, focused.value || "");
+      const charsWord = (count) =>
+        t(
+          count === 1
+            ? "raid-edit-roster.autocomplete.charsSingular"
+            : "raid-edit-roster.autocomplete.charsPlural",
+          lang,
+        );
+      const choices = buildRosterAutocompleteChoices(matches, {
         lang,
-      );
-    const choices = buildRosterAutocompleteChoices(matches, {
-      lang,
-      t,
-      choiceKey: "raid-edit-roster.autocomplete.choice",
-      charsWord,
-    });
+        t,
+        choiceKey: "raid-edit-roster.autocomplete.choice",
+        charsWord,
+      });
 
-    await interaction.respond(choices).catch(() => {});
-  }
+      await interaction.respond(choices).catch(() => {});
+    },
+  });
 
   async function handleEditRosterCommand(interaction) {
     const callerId = interaction.user.id;
