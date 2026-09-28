@@ -165,6 +165,9 @@ detail view; a support page that fails leaves only that figure empty.
 Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
 5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
 tables expand the capture container/viewport, up to 3200px, without hiding columns.
+Tall PNGs get transparent side margins to a minimum 4:3 frame before caching,
+to keep Discord's image preview from narrowing the summary card. Content is
+neither resized nor cropped; images already wide enough pass through unchanged.
 Player images split near a card boundary with a small overlap, covering the last
 chart instead of clipping at the last table. No player images are pre-rendered.
 Concurrent panel edits are rejected before work starts, and failed edits retain

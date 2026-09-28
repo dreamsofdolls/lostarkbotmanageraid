@@ -198,6 +198,33 @@ test("capture returns selected region and closes the browser after success or sc
   assert.equal(fake.state.closed, 1);
 });
 
+test("tall screenshots are framed before publishing and cached without another screenshot", async () => {
+  const { createCanvas } = require("@napi-rs/canvas");
+  const png = await createCanvas(1280, 1214).encode("png");
+  const fake = fakeBrowser();
+  const evaluate = fake.page.evaluate;
+  fake.page.evaluate = async fn => {
+    const result = await evaluate(fn);
+    if (fn === inspectDamagePage) result.full.height = 1214;
+    return result;
+  };
+  const screenshot = fake.page.screenshot;
+  let screenshots = 0;
+  fake.page.screenshot = async options => { screenshots++; await screenshot(options); return png; };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  try {
+    const first = await capture(URL, { useCache: true });
+    const cached = await capture(URL, { useCache: true });
+    const image = first.images[0];
+    assert.equal(image.buffer.readUInt32BE(16), 1619);
+    assert.equal(image.buffer.readUInt32BE(20), 1214);
+    assert.equal(image.clip.width, 1280, "source geometry remains separate from the padded PNG");
+    assert.equal(cached.images[0].buffer, image.buffer);
+    assert.equal(cached.cached, true);
+    assert.equal(screenshots, 1);
+  } finally { await capture.close(); }
+});
+
 test("a crashed renderer is closed before one retry, holding the busy slot throughout recovery", async () => {
   const warnings = [];
   let capture;

@@ -6,6 +6,7 @@ const { BIBLE_ORIGIN, parsePublicLogUrl } = require("./source");
 const { readCaptureMemory } = require("./memory");
 const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
+const { frameCaptureImage } = require("./image-frame");
 const { inspectPlayerPage, selectPlayer } = require("./detail");
 const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview, bibleButton, waitForPartyTables } = require("./page-controls");
 const { collectTeamMetrics } = require("./team-metrics");
@@ -240,7 +241,10 @@ function createRaidLogCapture({
       const images = [];
       for (const [index, region] of (player ? evidence.clips : [evidence[view]]).entries()) {
         clip = region;
-        const buffer = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
+        const screenshot = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
+        if (screenshot.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
+        const buffer = await frameCaptureImage(screenshot, clip);
+        controller.signal.throwIfAborted();
         if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
         images.push({ buffer, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
       }
