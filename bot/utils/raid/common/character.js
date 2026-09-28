@@ -393,23 +393,54 @@ function summarizeGoldItems(items, summarizeItem) {
   };
 }
 
-// Sum gold for a whole account, gating per-character on `isGoldEarner`.
-// Lost Ark caps gold-earner characters at 6 per account/week; the
+// Lost Ark pays raid gold to 6 characters per roster each week.
+const GOLD_EARNER_CAP_PER_ACCOUNT = 6;
+
+// Only an explicit `false` opts a character out, matching the schema default
+// of true. lean() reads and projections that leave the field out carry no
+// default, so a bare truthiness check would drop those characters.
+function isGoldEarner(character) {
+  return character?.isGoldEarner !== false;
+}
+
+/**
+ * The characters of one account whose raid gold counts: flagged earners, at
+ * most GOLD_EARNER_CAP_PER_ACCOUNT, highest item level first (table order on
+ * ties), the rule /raid-gold-earner preselects by. A roster added before
+ * /raid-gold-earner ran has every character flagged, so the flag alone would
+ * count more characters than the game pays.
+ * @param {object[]} [characters]
+ * @returns {Set<object>} the counted character objects
+ */
+function countedGoldEarners(characters) {
+  const earners = (Array.isArray(characters) ? characters : []).filter(isGoldEarner);
+  if (earners.length <= GOLD_EARNER_CAP_PER_ACCOUNT) return new Set(earners);
+  return new Set(
+    earners
+      .map((character, index) => ({ character, index, itemLevel: Number(character?.itemLevel) || 0 }))
+      .sort((a, b) => b.itemLevel - a.itemLevel || a.index - b.index)
+      .slice(0, GOLD_EARNER_CAP_PER_ACCOUNT)
+      .map((entry) => entry.character)
+  );
+}
+
+// Sum gold for a whole account over its counted gold earners. The
 // per-character 3-raid gold cap is already baked into each raid entry by
 // getStatusRaidsForCharacter. `getRaidsFor` is the same callable the view
 // layer uses (already filter-scoped when the caller has a raid filter active),
 // so this function inherits the active filter without taking it separately.
 function summarizeAccountGold(account, getRaidsFor) {
+  const counted = countedGoldEarners(account?.characters);
   return summarizeGoldItems(
     account?.characters,
-    (character) => character?.isGoldEarner
+    (character) => counted.has(character)
       ? summarizeCharacterGold(getRaidsFor(character))
       : null
   );
 }
 
 // Cross-account variant for the multi-roster rollup line. Wraps
-// summarizeAccountGold and inherits the same isGoldEarner gate.
+// summarizeAccountGold and inherits its counted-earner gate.
 function summarizeGlobalGold(accounts, getRaidsFor) {
   return summarizeGoldItems(
     accounts,
@@ -455,6 +486,9 @@ module.exports = {
   formatRaidStatusLine,
   summarizeRaidProgress,
   summarizeCharacterGold,
+  GOLD_EARNER_CAP_PER_ACCOUNT,
+  isGoldEarner,
+  countedGoldEarners,
   summarizeAccountGold,
   summarizeGlobalGold,
   computeRaidGold,

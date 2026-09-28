@@ -569,3 +569,29 @@ test("preview summary allows Solo after progress from a previous raid week", () 
     true
   );
 });
+
+test("preview summary projects gold for at most 6 earners per roster", () => {
+  const names = ["Aki", "Beo", "Cam", "Dua", "Eli", "Fin", "Gao"];
+  const buckets = bucketizeLocalSyncDeltas(names.map((charName, index) => ({
+    boss: "Witch of Agony, Serca",
+    difficulty: "Normal",
+    cleared: true,
+    charName,
+    lastClearMs: 12345 + index,
+  })));
+  const summary = projectSummary([{
+    accountName: "Roster",
+    characters: names.map((name, index) => ({
+      name,
+      class: "Artist",
+      itemLevel: 1716 - index,
+      isGoldEarner: true,
+      assignedRaids: {},
+    })),
+  }], buckets);
+
+  // Every character is flagged, as on a roster added before /raid-gold-earner
+  // ran; the lowest item level (Gao) is the seventh and earns nothing.
+  assert.equal(summary.goldDelta.total, 6 * 13000);
+  assert.deepEqual(summary.goldDelta.byChar.map((entry) => entry.charName).sort(), names.slice(0, 6).sort());
+});

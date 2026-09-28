@@ -34,6 +34,7 @@ const {
   buildPickerCharacters,
 } = require("./gold-earner/selection");
 const { createGoldEarnerRenderers } = require("./gold-earner/render");
+const { countedGoldEarners } = require("../../utils/raid/common/character");
 
 function createRaidGoldEarnerCommand({
   EmbedBuilder,
@@ -90,9 +91,7 @@ function createRaidGoldEarnerCommand({
         const charCount = Array.isArray(account.characters)
           ? account.characters.length
           : 0;
-        const earnerCount = (account.characters || []).filter(
-          (character) => character.isGoldEarner
-        ).length;
+        const earnerCount = countedGoldEarners(account.characters).size;
         const label = `\uD83D\uDCC1 ${account.accountName} \u00B7 ${earnerCount}/${charCount} earner`;
         return truncateChoice(label, account.accountName);
       });
