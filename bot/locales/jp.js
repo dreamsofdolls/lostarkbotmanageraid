@@ -30,6 +30,7 @@ module.exports = {
       blocked: "Bible にブロックされました (HTTP 403)",
       notFound: "Bible に見つかりません",
     },
+    genericError: "コマンドの処理中にエラーが発生しましたわ。もう一度お試しくださいませ。",
   },
   "local-sync-discord": {
     title: "ローカル同期コンソール",

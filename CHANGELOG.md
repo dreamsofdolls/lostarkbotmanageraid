@@ -38,6 +38,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When a database error stops Local Reader from saving a preview, the page shows HTTP 500 "preview job failed" and the bot logs the error. It used to show HTTP 400 with the raw database error, which read like a problem with the log file. Too many party targets for one source Gate still gets HTTP 400 with its reason.
 - Local Reader reads up to 512 of the week's boss, difficulty and character groups, as many as a preview accepts, instead of 200. Rosters of about 25 characters or more silently lost their oldest clears of the week from the preview.
 - Local Reader's Sync button stays disabled until the send finishes. When the log file had just changed, the freshness check re-enabled it mid-send, and a second click sent a second preview, so the DM arrived twice.
+- The `roster` option of `/raid-set` and `/raid-task` add, remove and clear, and the `action` option of `/raid-task add`, describe themselves in English to Discord clients in languages other than Vietnamese and Japanese, which used to see the Vietnamese text.
+- The generic error reply, shown when a command or button fails unexpectedly, follows the user's `/raid-language` instead of always being Vietnamese. When the language cannot be read within a second, it falls back to Vietnamese.
+- The DMs for a `/raid-check` Sync and for a Manager turning auto-sync on stay within Discord's embed limits: a large roster lists as many characters as fit and ends with "+N more characters". A big Sync, or auto-sync on a user with many rosters, used to fail to send the DM at all, and the Sync counted it as a failed DM although the progress was saved.
 
 ## 2026-09-27
 
