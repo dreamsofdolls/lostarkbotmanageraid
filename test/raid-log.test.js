@@ -51,7 +51,8 @@ test("command opens a guild-only experiment without slash options", () => {
   assert.deepEqual(data.options, []);
 });
 
-function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError, players = [], metrics = [] } = {}) {
+function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, onClick, overviewCount = 0,
+  closeError, players = [], metrics = [] } = {}) {
   let rejectNavigation;
   let normalized = false;
   const state = { closed: 0, launches: 0, navigations: 0, routes: [] };
@@ -66,8 +67,11 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
         : ({ ok: () => status === 200, status: () => status, headers: () => ({ "retry-after": "60" }) });
     },
     getByRole: (role, options) => ({
-      click: async () => { if (!["Settings", "Given"].includes(options.name)) state.tab = options.name; },
-      isChecked: async () => normalized, count: async () => 0,
+      click: async () => {
+        await onClick?.(options.name, page);
+        if (!["Settings", "Given"].includes(options.name)) state.tab = options.name;
+      },
+      isChecked: async () => normalized, count: async () => (options.name === "Return to Overview" ? overviewCount : 0),
       filter: () => ({ locator: () => ({ isChecked: async () => true, click: async () => {} }) }),
     }),
     locator: () => ({ filter: () => ({ waitFor: async () => {}, click: async () => { normalized = !normalized; } }) }),
@@ -220,6 +224,40 @@ test("a crashed renderer is closed before one retry, holding the busy slot throu
   assert.match(diagnostic, /"stage":"screenshot"/);
   assert.match(diagnostic, /"memoryBefore":/);
   assert.match(diagnostic, /"memoryAfter":/);
+});
+
+test("a crash in a support's detail view retries without support views, and the log keeps skipping them", async () => {
+  const players = [{ id: "1-3", party: 1, row: 3, label: "1755 Canameo", className: "Bard" }];
+  const metrics = [{ id: "1-3", label: "1755 Canameo", className: "Bard", badges: [82],
+    dps: 1, ndps: 1, contribution: 1, damageShare: 1, stagger: 0, counters: 0 }];
+  const warnings = [];
+  const supportViews = [];
+  // Like the production log: the renderer dies on the click back to the overview.
+  const crashing = fakeBrowser({ players, metrics, overviewCount: 1, onClick: async (name, page) => {
+    if (name !== "Return to Overview") return;
+    supportViews.push("crashing");
+    page.emit("crash");
+    throw new Error("locator.click: Target crashed");
+  } });
+  const healthy = () => fakeBrowser({ players, metrics, overviewCount: 1, onClick: async name => {
+    if (name === "Return to Overview") supportViews.push("healthy");
+  } });
+  let launches = 0;
+  const capture = createRaidLogCapture({ log: { warn: message => warnings.push(message) },
+    launchBrowser: () => (++launches === 1 ? crashing : healthy()).launchBrowser() });
+  const first = await capture(URL);
+  assert.equal(first.playerCount, 8);
+  assert.equal(first.players[0].damageShare, 1);
+  assert.equal(first.players[0].buffedShare, null);
+  assert.deepEqual(supportViews, ["crashing"], "the retry opens no support view");
+  assert.match(warnings.find(w => w.startsWith("[raid-log] browser_crashed ")), /"stage":"team-metrics"/);
+  assert.ok(warnings.some(w => /retrying capture once .* without support detail views/.test(w)));
+  // A later capture of the same log goes straight to the lighter path; another log still reads supports.
+  await capture(URL, { refresh: true });
+  assert.deepEqual(supportViews, ["crashing"]);
+  await capture("https://lostark.bible/logs/other");
+  assert.deepEqual(supportViews, ["crashing", "healthy"]);
+  assert.equal(launches, 4);
 });
 
 test("repeated crashes stop after two attempts and release the slot for the next call", async () => {
