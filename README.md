@@ -158,15 +158,19 @@ log on Bible. Each panel action checks public-log access before using any cached
 image, and a character whose logs turn private mid-session gets a lock card in
 place of the panel, with the image removed and every control disabled.
 
-Capture reuses one browser/page for up to 45 idle seconds, then closes it.
+Capture reuses one browser/page for up to 45 idle seconds when memory permits.
 When it first opens a log it also reads every player's figures and percentile
-badges from the Damage table in both modes, and each support's bD% from their
-detail view; a support page that fails leaves only that figure empty.
-Automatic support-detail reads are skipped on containers capped at 512 MiB or
-less, or when a finite container limit leaves less than 256 MiB free before the
-next support. Only bD% stays empty; overview figures still load, and selecting a
-player still opens their detail on demand. Missing/unlimited cgroup readings
-retain the usual collection and crash fallback.
+badges from the Damage table in both modes. Support bD% comes from the public
+encounter data already embedded in the page, using Bible's displayed total DMG
+as the denominator, including Esther when shown. No support detail is opened
+automatically. Missing or incompatible data leaves bD% empty; player detail still
+opens on demand. Only the small computed figures are retained, not raw encounters.
+Before PNG framing, both detail screenshots are collected. With a finite cgroup
+limit, Chromium closes first if free memory is below a 128 MiB reserve plus the
+largest input/output bitmap pair. Memory is checked again after framing and
+before reusing a warm browser. Missing/unlimited cgroup readings preserve the
+45-second reuse policy. This reserve reduces peak overlap; it is not an OOM
+guarantee. One-shot captures always close Chromium before framing.
 Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
 5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
 tables expand the capture container/viewport, up to 3200px, without hiding columns.

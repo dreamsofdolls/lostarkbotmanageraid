@@ -11,18 +11,19 @@ async function readCaptureMemory(read = readFile) {
     ? [[names[index], result.value.trim().replace(/\s*\n\s*/g, "; ")]] : []));
 }
 
-// Automatic support-detail reads have exhausted 512 MB containers before the
-// screenshot stage. On larger containers, reserve room for another detail
-// render as well as the final screenshot; this is not an OOM guarantee.
-const SUPPORT_DETAIL_MIN_LIMIT = 512 * 1024 * 1024;
-const SUPPORT_DETAIL_HEADROOM = 256 * 1024 * 1024;
+// Allow for renderer/codec growth and the largest pair of decoded input/output
+// surfaces. Encoding is sequential. This is a conservative reserve, not an
+// exact peak prediction or an OOM guarantee.
+const MEMORY_RESERVE = 128 * 1024 * 1024;
 
-function canCollectSupportShares(memory) {
+function shouldReleaseBrowser(memory, clips = []) {
   const limit = Number(memory.max);
-  if (!Number.isFinite(limit) || limit <= 0) return true;
   const current = Number(memory.current);
-  return limit > SUPPORT_DETAIL_MIN_LIMIT
-    && (!Number.isFinite(current) || limit - current >= SUPPORT_DETAIL_HEADROOM);
+  if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(current) || current < 0
+    || memory.current === "" || memory.current == null) return false;
+  const surfaces = Math.max(0, ...clips.map(({ width, height }) => width < Math.ceil(height * 4 / 3)
+    ? (width + Math.ceil(height * 4 / 3)) * height * 4 : 0));
+  return limit - current < MEMORY_RESERVE + surfaces;
 }
 
-module.exports = { readCaptureMemory, canCollectSupportShares };
+module.exports = { readCaptureMemory, shouldReleaseBrowser };

@@ -3,7 +3,7 @@
 const { createBibleHttpError } = require("../auto-manage/bible/rate-limit");
 const { RaidLogError } = require("./errors");
 const { BIBLE_ORIGIN, parsePublicLogUrl } = require("./source");
-const { readCaptureMemory } = require("./memory");
+const { readCaptureMemory, shouldReleaseBrowser } = require("./memory");
 const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
 const { frameCaptureImage } = require("./image-frame");
@@ -14,9 +14,6 @@ const { captureAssetsReady } = require("./assets");
 const { createRenderQueue } = require("./render-queue");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-// Logs whose supports' detail views crashed the browser, remembered so later
-// captures of them skip those views. The oldest are forgotten first.
-const MAX_SUPPORT_CRASH_LOGS = 200;
 
 function isAllowedRequest(requestUrl, isNavigation, logUrl, resourceType) {
   try {
@@ -99,19 +96,13 @@ function createRaidLogCapture({
   maxPending = 4,
   log: logger = console,
   readMemory = readCaptureMemory,
+  frameImage = frameCaptureImage,
 } = {}) {
   const queue = createRenderQueue({ maxPending });
   let warm;
   let idleTimer;
   let disposing = Promise.resolve();
   const cache = createImageCache();
-  const supportCrashLogs = new Set();
-
-  function rememberSupportCrash(logId) {
-    supportCrashLogs.delete(logId);
-    supportCrashLogs.add(logId);
-    if (supportCrashLogs.size > MAX_SUPPORT_CRASH_LOGS) supportCrashLogs.delete(supportCrashLogs.values().next().value);
-  }
 
   function closeResource(resource) {
     if (!resource) return disposing;
@@ -122,7 +113,7 @@ function createRaidLogCapture({
     return disposing;
   }
 
-  async function capturePage(log, { view, tab, bracketed, player, refresh, supportShares }, deadline) {
+  async function capturePage(log, { view, tab, bracketed, player, refresh }, deadline) {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw new RaidLogError("timeout");
     clearTimeout(idleTimer);
@@ -143,7 +134,10 @@ function createRaidLogCapture({
     try {
       await disposing;
       if (expired || Date.now() >= deadline) throw new RaidLogError("timeout");
-      if (resource?.crashed) { await closeResource(resource); resource = null; }
+      if (resource && (resource.crashed || shouldReleaseBrowser(memoryBefore))) {
+        await closeResource(resource);
+        resource = null;
+      }
       const needsNavigation = refresh || !resource || resource.url !== log.url || !resource.baseline;
       async function preparePage() {
         controller.signal.throwIfAborted();
@@ -206,10 +200,9 @@ function createRaidLogCapture({
         await page.waitForFunction(captureAssetsReady, false);
         resource.baseline = await page.evaluate(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
-        // Opening each support's detail view for bD% is the heaviest part of a capture.
         stage = "team-metrics";
         resource.baseline.players = await collectTeamMetrics(page, resource.baseline.players, {
-          deadline, log: logger, supportShares, readMemory,
+          logId: log.id, summary: resource.baseline.summary, log: logger,
         });
         stage = "navigation";
       }
@@ -243,17 +236,33 @@ function createRaidLogCapture({
       for (const [index, region] of (player ? evidence.clips : [evidence[view]]).entries()) {
         clip = region;
         const screenshot = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
+        controller.signal.throwIfAborted();
         if (screenshot.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
-        const buffer = await frameCaptureImage(screenshot, clip);
+        images.push({ buffer: screenshot, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
+      }
+      // Capture both detail halves before disposing of the page. When memory
+      // is tight, Chromium must exit before native PNG surfaces are allocated.
+      const beforeFraming = await readMemory();
+      if (idleMs <= 0 || shouldReleaseBrowser(beforeFraming, images.map(image => image.clip))) {
+        if (idleMs > 0) logger.info?.(`[raid-log] releasing browser before PNG framing id=${log.id} max=${beforeFraming.max} current=${beforeFraming.current}`);
+        await closeResource(resource);
+      }
+      stage = "image-frame";
+      for (const image of images) {
+        controller.signal.throwIfAborted();
+        const buffer = await frameImage(image.buffer, image.clip);
         controller.signal.throwIfAborted();
         if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
-        images.push({ buffer, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
+        image.buffer = buffer;
       }
+      if (!resource.closing && shouldReleaseBrowser(await readMemory())) await closeResource(resource);
+      controller.signal.throwIfAborted();
+      if (Date.now() >= deadline) throw new RaidLogError("timeout");
       succeeded = true;
       return { ...log, view, tab, bracketed, ...evidence, players: resource.baseline.players, images };
     } catch (error) {
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
-      if (resource?.crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
+      if ((resource?.crashed && !resource.closing) || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
         logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
           id: log.id, view, tab, bracketed, stage, clip, deviceScaleFactor: 1,
           memoryBefore, memoryAfter: await readMemory(), cause: error.cause?.message || error.message,
@@ -265,7 +274,7 @@ function createRaidLogCapture({
       throw error;
     } finally {
       clearTimeout(timer);
-      if (succeeded && idleMs > 0 && !expired && !resource.crashed) {
+      if (succeeded && idleMs > 0 && !expired && !resource.crashed && !resource.closing) {
         warm = resource;
         idleTimer = setTimeout(() => {
           warm = null;
@@ -294,19 +303,15 @@ function createRaidLogCapture({
       if (ready) return { ...ready, cached: true, queueMs };
       if (refresh) cache.invalidateLog(log.id);
       const attempt = () => capturePage(log, {
-        view, tab, bracketed, player, refresh, supportShares: !supportCrashLogs.has(log.id),
+        view, tab, bracketed, player, refresh,
       }, deadline);
       let result;
       try {
         result = await attempt();
       } catch (error) {
         if (error.code !== "browser_crashed") throw error;
-        // A crash in the supports' detail views: this log goes without them, so
-        // its card still renders, with bD% empty.
-        if (error.stage === "team-metrics") rememberSupportCrash(log.id);
         // One retry within the original budget; the failed browser is closed.
-        logger.warn(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`
-          + `${supportCrashLogs.has(log.id) ? " without support detail views" : ""}`);
+        logger.warn(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`);
         result = await attempt();
       }
       if (useCache) cache.set(key, result);

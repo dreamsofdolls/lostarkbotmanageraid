@@ -14,9 +14,15 @@ async function captureAssetsReady(player = false) {
   const images = [...document.images].filter(img => hero.contains(img) || content.contains(img));
   for (const img of images) if (img.loading === "lazy") img.loading = "eager";
   if (document.fonts.status !== "loaded" || images.some(img => !img.complete)) return false;
+  const sources = images.map(img => img.currentSrc || img.src);
   await Promise.all(images.map(img => img.decode().catch(() => {})));
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  return true;
+  // Hydration can replace an icon after the first readiness check. Wait for
+  // the current set of assets, not the one that happened to exist before decode.
+  const current = [...document.images].filter(img => hero.contains(img) || content.contains(img));
+  return hero.isConnected && content.isConnected && document.fonts.status === "loaded"
+    && current.length === images.length && current.every((img, index) => img === images[index]
+      && img.complete && (img.currentSrc || img.src) === sources[index]);
 }
 
 module.exports = { captureAssetsReady };

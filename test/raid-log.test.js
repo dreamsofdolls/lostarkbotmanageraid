@@ -14,6 +14,7 @@ const { createRaidLogCommandDefinition } = require("../bot/handlers/commands/com
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 const { silentLog } = require("./helpers/silent-log");
 const { captureAssetsReady } = require("../bot/services/raid-log/assets");
+const { inspectPlayerPage } = require("../bot/services/raid-log/detail");
 const { noticeText } = require("./helpers/raid-log-fixture");
 const URL = "https://lostark.bible/logs/S9NbBTM";
 
@@ -226,6 +227,114 @@ test("tall screenshots are framed before publishing and cached without another s
   } finally { await capture.close(); }
 });
 
+test("low memory closes the browser before framing, preserves cached images and opens fresh on a cache miss", async () => {
+  const instances = [];
+  let frameCalls = 0;
+  const capture = createRaidLogCapture({ idleMs: 45_000, log: silentLog,
+    readMemory: async () => ({ max: "512000000", current: "410000000" }),
+    launchBrowser: () => { const fake = fakeBrowser(); instances.push(fake); return fake.launchBrowser(); },
+    frameImage: async buffer => {
+      frameCalls++;
+      assert.equal(instances.at(-1).state.closed, 1, "Chromium has exited before native image work");
+      return buffer;
+    },
+  });
+  try {
+    const first = await capture(URL, { useCache: true });
+    assert.equal(first.images.length, 1);
+    assert.equal((await capture(URL, { useCache: true })).cached, true);
+    assert.equal(frameCalls, 1);
+    await capture(URL, { tab: "self_buffs" });
+    assert.equal(instances.length, 2);
+    assert.equal(instances[1].state.closed, 1);
+  } finally { await capture.close(); }
+});
+
+test("memory pressure after encoding or before warm reuse closes the retained browser", async () => {
+  for (const pressureAfterFrame of [true, false]) {
+    let high = false;
+    const instances = [];
+    const capture = createRaidLogCapture({ idleMs: 45_000, log: silentLog,
+      readMemory: async () => ({ max: "512000000", current: high ? "410000000" : "200000000" }),
+      launchBrowser: () => { const fake = fakeBrowser(); instances.push(fake); return fake.launchBrowser(); },
+      frameImage: async buffer => { high = pressureAfterFrame; return buffer; },
+    });
+    try {
+      await capture(URL);
+      assert.equal(instances[0].state.closed, pressureAfterFrame ? 1 : 0);
+      high = true;
+      await capture(URL, { tab: "self_buffs" });
+      assert.equal(instances[0].state.closed, 1);
+      assert.equal(instances.length, 2);
+    } finally { await capture.close(); }
+  }
+});
+
+test("both player screenshots finish before a memory-driven close and sequential framing", async () => {
+  const player = { id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" };
+  const fake = fakeBrowser({ players: [player] });
+  const calls = [];
+  const evaluate = fake.page.evaluate;
+  fake.page.evaluate = async fn => fn === inspectPlayerPage ? { player, clips: [
+    { x: 0, y: 0, width: 1280, height: 900 }, { x: 0, y: 884, width: 1280, height: 900 },
+  ] } : evaluate(fn);
+  const locator = { nth: () => locator, locator: () => locator, filter: () => locator,
+    first: () => locator, innerText: async () => player.label, dispatchEvent: async () => {}, waitFor: async () => {}, click: async () => {} };
+  fake.page.locator = () => locator;
+  const getByRole = fake.page.getByRole;
+  fake.page.getByRole = (...args) => ({ ...getByRole(...args), waitFor: async () => {} });
+  fake.page.screenshot = async ({ clip }) => {
+    assert.equal(fake.state.closed, 0);
+    calls.push(`shot:${clip.y}`);
+    return Buffer.from(`png:${clip.y}`);
+  };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000,
+    readMemory: async () => ({ max: "512000000", current: "410000000" }),
+    frameImage: async buffer => { assert.equal(fake.state.closed, 1); calls.push(buffer.toString()); return buffer; },
+  });
+  try {
+    const result = await capture(URL, { player });
+    assert.deepEqual(calls, ["shot:0", "shot:884", "png:0", "png:884"]);
+    assert.deepEqual(result.images.map(image => image.filename.split("-").at(-1)), ["top.png", "bottom.png"]);
+    assert.equal(fake.state.closed, 1);
+  } finally { await capture.close(); }
+});
+
+test("a framing failure after intentional browser close is not retried as a browser crash", async () => {
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, frameImage: async () => { throw new Error("PNG encode failed"); } });
+  await assert.rejects(capture(URL), /PNG encode failed/);
+  assert.equal(fake.state.launches, 1);
+  assert.equal(fake.state.closed, 1);
+});
+
+test("expiry during PNG framing does not publish/cache late results or retain a browser", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeBrowser();
+  let expire = true;
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000, frameImage: async buffer => {
+    if (expire) t.mock.timers.tick(60_001);
+    return buffer;
+  } });
+  try {
+    await assert.rejects(capture(URL, { useCache: true }), { code: "timeout" });
+    assert.equal(fake.state.closed, 1);
+    expire = false;
+    assert.equal((await capture(URL, { useCache: true })).cached, undefined);
+    assert.equal(fake.state.launches, 2);
+  } finally { await capture.close(); }
+});
+
+test("synchronous image work crossing the deadline cannot bypass a delayed timeout callback", async t => {
+  let now = 0;
+  t.mock.method(Date, "now", () => now);
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000,
+    frameImage: async buffer => { now = 60_001; return buffer; } });
+  await assert.rejects(capture(URL, { useCache: true }), { code: "timeout" });
+  assert.equal(fake.state.closed, 1);
+});
+
 test("a crashed renderer is closed before one retry, holding the busy slot throughout recovery", async () => {
   const warnings = [];
   let capture;
@@ -252,41 +361,6 @@ test("a crashed renderer is closed before one retry, holding the busy slot throu
   assert.match(diagnostic, /"stage":"screenshot"/);
   assert.match(diagnostic, /"memoryBefore":/);
   assert.match(diagnostic, /"memoryAfter":/);
-});
-
-test("a crash in a support's detail view retries without support views, and the log keeps skipping them", async () => {
-  const players = [{ id: "1-3", party: 1, row: 3, label: "1755 Canameo", className: "Bard" }];
-  const metrics = [{ id: "1-3", label: "1755 Canameo", className: "Bard", badges: [82],
-    dps: 1, ndps: 1, contribution: 1, damageShare: 1, stagger: 0, counters: 0 }];
-  const warnings = [];
-  const supportViews = [];
-  // Like the production log: the renderer dies on the click back to the overview.
-  const crashing = fakeBrowser({ players, metrics, overviewCount: 1, onClick: async (name, page) => {
-    if (name !== "Return to Overview") return;
-    supportViews.push("crashing");
-    page.emit("crash");
-    throw new Error("locator.click: Target crashed");
-  } });
-  const healthy = () => fakeBrowser({ players, metrics, overviewCount: 1, onClick: async name => {
-    if (name === "Return to Overview") supportViews.push("healthy");
-  } });
-  let launches = 0;
-  const capture = createRaidLogCapture({ log: { warn: message => warnings.push(message) },
-    readMemory: crashing.readMemory,
-    launchBrowser: () => (++launches === 1 ? crashing : healthy()).launchBrowser() });
-  const first = await capture(URL);
-  assert.equal(first.playerCount, 8);
-  assert.equal(first.players[0].damageShare, 1);
-  assert.equal(first.players[0].buffedShare, null);
-  assert.deepEqual(supportViews, ["crashing"], "the retry opens no support view");
-  assert.match(warnings.find(w => w.startsWith("[raid-log] browser_crashed ")), /"stage":"team-metrics"/);
-  assert.ok(warnings.some(w => /retrying capture once .* without support detail views/.test(w)));
-  // A later capture of the same log goes straight to the lighter path; another log still reads supports.
-  await capture(URL, { refresh: true });
-  assert.deepEqual(supportViews, ["crashing"]);
-  await capture("https://lostark.bible/logs/other");
-  assert.deepEqual(supportViews, ["crashing", "healthy"]);
-  assert.equal(launches, 4);
 });
 
 test("repeated crashes stop after two attempts and release the slot for the next call", async () => {
@@ -511,6 +585,24 @@ test("capture waits only for its own images and eagerly loads its below-viewport
     inside.decode = async () => { decoded = true; };
     assert.equal(await ready(), true);
     assert.equal(decoded, true);
+  } finally { dom.window.close(); }
+});
+
+test("asset readiness rechecks icons added or reloaded while the page hydrates", async () => {
+  const { dom, document } = damageFixture();
+  try {
+    const inside = document.createElement("img");
+    Object.defineProperty(inside, "complete", { value: true, configurable: true });
+    inside.decode = async () => {};
+    let mutate = () => document.querySelector("section").appendChild(inside);
+    dom.window.requestAnimationFrame = callback => { const change = mutate; mutate = null; change?.(); callback(); };
+    const ready = () => dom.window.eval(`(${captureAssetsReady.toString()})()`);
+    assert.equal(await ready(), false, "an added icon was not part of the decoded set");
+    assert.equal(await ready(), true);
+    mutate = () => { inside.src = "/new-class.png"; Object.defineProperty(inside, "complete", { value: false, configurable: true }); };
+    assert.equal(await ready(), false, "a reused img element can start loading another icon");
+    Object.defineProperty(inside, "complete", { value: true });
+    assert.equal(await ready(), true);
   } finally { dom.window.close(); }
 });
 
