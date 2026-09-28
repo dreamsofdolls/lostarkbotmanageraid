@@ -184,7 +184,6 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
     lastLocalSyncAt: 444,
     lastLocalSyncToken: "old-token",
     lastLocalSyncTokenExpAt: 999,
-    lastPrivateLogNudgeAt: 555,
     lastAutoManageDailyAttemptDayKey: "2026-09-12",
     autoManageDailyAttemptCount: 3,
     autoManageDailyNextAttemptAt: 888,

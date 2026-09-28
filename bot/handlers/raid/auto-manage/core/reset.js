@@ -48,7 +48,6 @@ function wipeAutoManageState(userDoc) {
   userDoc.lastLocalSyncAt = null;
   userDoc.lastLocalSyncToken = null;
   userDoc.lastLocalSyncTokenExpAt = null;
-  userDoc.lastPrivateLogNudgeAt = null;
   for (const account of userDoc.accounts || []) {
     account.lastRefreshedAt = null;
     account.lastRefreshAttemptAt = null;
