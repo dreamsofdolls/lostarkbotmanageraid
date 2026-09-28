@@ -63,6 +63,17 @@ test("a support whose detail view fails keeps bD% empty and the rest still read"
   assert.equal(state.detail, null);
 });
 
+test("supportShares false reads the figures but opens no support page", async () => {
+  const { page, state, openPlayer } = fakePage();
+  const players = await collectTeamMetrics(page, PLAYERS, {
+    deadline: Date.now() + 60_000, log: silentLog, openPlayer, supportShares: false,
+  });
+  assert.deepEqual(state.opened, []);
+  assert.equal(players[1].damageShare, 4);
+  assert.deepEqual(players.map(p => p.buffedShare), [null, null, null]);
+  assert.equal(state.normalized, false);
+});
+
 test("close to the deadline no support page is opened", async () => {
   const { page, state, openPlayer } = fakePage();
   const players = await collectTeamMetrics(page, PLAYERS, { deadline: 10_000, now: () => 6_000, log: silentLog, openPlayer });

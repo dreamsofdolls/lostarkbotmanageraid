@@ -20,11 +20,14 @@ const SUPPORT_READ_RESERVE_MS = 5_000;
 /**
  * @param {object} page Playwright page on the team Damage overview
  * @param {object[]} players baseline players ({ id, party, row, label, className })
- * @param {{ deadline: number, now?: () => number, log: object, openPlayer?: Function }} options
- *   `openPlayer` is `selectPlayer`; tests pass a fake
+ * @param {{ deadline: number, now?: () => number, log: object, openPlayer?: Function, supportShares?: boolean }} options
+ *   `openPlayer` is `selectPlayer`; tests pass a fake. `supportShares: false`
+ *   skips the supports' detail views, leaving bD% null
  * @returns {Promise<object[]>} players with badges, figures and buffedShare
  */
-async function collectTeamMetrics(page, players, { deadline, now = Date.now, log, openPlayer = selectPlayer }) {
+async function collectTeamMetrics(page, players, {
+  deadline, now = Date.now, log, openPlayer = selectPlayer, supportShares = true,
+}) {
   if (!players.length) return players;
   await setNormalized(page, false);
   const bracketed = await page.evaluate(readPartyMetrics);
@@ -41,7 +44,7 @@ async function collectTeamMetrics(page, players, { deadline, now = Date.now, log
     return { ...player, dps, ndps, contribution, damageShare, stagger, counters,
       badges: { bracketed: row.badges, normalized: normalizedBadges.get(player.id) ?? [] }, buffedShare: null };
   });
-  for (const player of merged.filter(entry => isSupportClass(entry.className))) {
+  for (const player of supportShares ? merged.filter(entry => isSupportClass(entry.className)) : []) {
     if (deadline - now() < SUPPORT_READ_RESERVE_MS) break;
     try {
       if (await openPlayer(page, player)) player.buffedShare = await page.evaluate(readSupportShare);
