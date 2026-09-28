@@ -281,7 +281,31 @@ function buildLogComponents(state, disabled = false) {
   ];
 }
 
+/**
+ * A card's controls while a request runs: every control is disabled, and the
+ * menu that was used shows the picked option instead of its placeholder.
+ * @param {ActionRowBuilder[]} rows the card's controls
+ * @param {{customId: string, values?: string[]}} interaction the click being handled
+ * @returns {ActionRowBuilder[]} the waiting controls
+ */
+function buildWaitingComponents(rows, { customId, values = [] }) {
+  const picked = new Set(values);
+  return rows.map(row => {
+    const json = row.toJSON();
+    return new ActionRowBuilder({
+      ...json,
+      components: json.components.map(component => ({
+        ...component,
+        disabled: true,
+        ...(component.custom_id === customId && component.options
+          ? { options: component.options.map(option => ({ ...option, default: picked.has(option.value) })) }
+          : {}),
+      })),
+    });
+  });
+}
+
 module.exports = {
-  buildLogComponents, buildLogEmbeds, parseSummary, headlinePercent, openRaidLogs,
+  buildLogComponents, buildLogEmbeds, buildWaitingComponents, parseSummary, headlinePercent, openRaidLogs,
   raidLogCustomId, pagedChoices, PAGE_STEPS, PAGE_SIZE,
 };

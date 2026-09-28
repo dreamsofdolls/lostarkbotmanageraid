@@ -206,3 +206,33 @@ test("global router delivers raid-log search modal submissions and ignores unrel
   }
   assert.deepEqual(calls, ["raid-log:id:0:submit"]);
 });
+
+test("picking a saved character shows it in the menu and locks the card until the log opens", async () => {
+  const flat = rows => rows.flatMap(row => row.toJSON().components);
+  const f = fixture({ accounts }); await f.open();
+  const pickerControls = flat(f.payload.components);
+  let release, enter;
+  const entered = new Promise(resolve => { enter = resolve; });
+  f.beforeOpen = () => new Promise(resolve => { release = resolve; enter(); });
+  const pending = f.click(f.owner("character", "1"));
+  await entered;
+  const waiting = flat(f.payload.components);
+  assert.match(f.payload.content, /⏳.*Đã nhận yêu cầu/);
+  assert.deepEqual(waiting.map(c => c.custom_id), pickerControls.map(c => c.custom_id));
+  assert.ok(waiting.every(c => c.disabled), "search, recent logs and the roster menu are locked");
+  const menu = waiting.find(c => c.custom_id.endsWith(":character"));
+  assert.deepEqual(menu.options.filter(o => o.default).map(o => o.label), ["Altchar"]);
+  release();
+  await pending;
+  assert.equal(f.payload.content, null);
+  assert.ok(flat(f.payload.components).some(c => !c.disabled), "the opened panel is live");
+
+  // A failed open puts the picker back as it was: live, with its placeholder.
+  const g = fixture({ accounts }); await g.open();
+  const before = g.payload.components;
+  g.verifyFailure = new RaidLogError("timeout");
+  await g.click(g.owner("character", "0"));
+  assert.equal(g.payload.content, null);
+  assert.deepEqual(g.payload.components, before);
+  assert.ok(flat(g.payload.components).every(c => !c.disabled));
+});
