@@ -27,6 +27,11 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A Discord error on a click in the `/raid-check` Manager view or the `/raid-bg view` scene browser (a click Discord had already expired, for one) is logged and the session carries on. It used to shut the whole bot down, taking every open panel with it.
 - A `/raid-check` 🔄 Refresh roster that finishes after the 5-minute session has closed shows the refreshed roster with the controls still disabled. It used to switch the expired buttons back on, and clicking one ended in "This interaction failed".
 - The `/raid-check` Enable / Disable auto-sync button follows the user's auto-sync state once 🔄 Refresh roster or the opening background refresh reloads them, as the roster card already did. It used to keep the label from when the view opened, so a Manager who had just turned auto-sync off was still offered Disable.
+- `/raid-schedule-preview` create and Edit time no longer accept a start date that has already passed (`5/6/25 20:00`, or an earlier hour today with the year typed) or a three-digit year (`5/6/202`): they show the invalid-time notice instead of saving a board that locked within a minute and was deleted with its signups at the next weekly-reset sweep. A date without a year still rolls to next year.
+- Unlocking a `/raid-schedule-preview` board from Manage after its start time keeps it open; before, auto-lock locked it again within a minute. Unlocking such a board also turns its auto-lock off.
+- A `/raid-schedule-preview` board that auto-locks at its start time keeps the 🗓 Board khác của lead switcher; before, the auto-lock refresh dropped that row.
+- On a `/raid-schedule-preview` board with more than 25 signups, Kick shows one menu per 25 people so everyone can be kicked; before, signups after #25 were missing from it. Editing a turn no longer removes members the 25-name menu could not list, such as someone who re-joined with another character and moved to the end.
+- Pressing End again on a `/raid-schedule-preview` board after the "board just changed" notice no longer reports every comp member as failed: characters whose raid is already complete count as cleared in the summary.
 
 ## 2026-09-27
 

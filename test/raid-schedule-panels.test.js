@@ -133,6 +133,27 @@ test("schedule delete, kick, and add-member panels expose stable custom ids", ()
   assert.equal(addCharSelect.options[0].data.value, "7");
 });
 
+test("schedule kick picker spills past 25 signups so every signup can be kicked", () => {
+  const panels = makePanels();
+  const signups = Array.from({ length: 30 }, (_, i) => ({
+    discordId: `u${i + 1}`,
+    accountName: `Roster${i + 1}`,
+    characterName: `Char${i + 1}`,
+    characterClass: "Berserker",
+    characterItemLevel: 1720,
+    role: "dps",
+    status: "confirmed",
+    joinedAt: i + 1,
+  }));
+
+  const rows = panels.kickSelectPayload(makeEvent({ signups }), "vi").components;
+
+  assert.deepEqual(customIds(rows), [`rse:kickpick:${EVENT_ID}`, `rse:kickpick:1:${EVENT_ID}`]);
+  const values = rows.flatMap((row) => row.components[0].options.map((option) => option.data.value));
+  assert.deepEqual(values, signups.map((signup) => signup.discordId));
+  assert.equal(rows[1].components[0].data.max_values, 5);
+});
+
 test("schedule teams panels preserve selected turn members", () => {
   const panels = makePanels();
   const event = makeEvent();

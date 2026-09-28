@@ -838,6 +838,7 @@ const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
   ButtonBuilder,
   ButtonStyle,
   UI,
+  boardPayload: raidScheduleCommandHandlers.boardPayload,
 });
 ({
   startRaidScheduleAutoLockScheduler,
