@@ -21,8 +21,7 @@ const {
   RAID_REQUIREMENTS,
   areEquivalentRaidModes,
   getGatesForRaid,
-  getGoldForGate,
-  getBoundGoldForGate,
+  getGateGoldParts,
   isGoldBound,
   isSoloModeKey,
 } = require("../../../domain/raid-catalog");
@@ -90,32 +89,27 @@ function buildCharacterRecord(source, fallbackId) {
 // character's `isGoldEarner` flag or the 3-raid gold cap. Those are
 // user/account semantics applied after the raid entry has its raw value.
 function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
-  const fullBound = isGoldBound(raidKey, modeKey);
-  let earned = 0;
-  let earnedBound = 0;
-  for (const gate of completedGateKeys || []) {
-    const bound = getBoundGoldForGate(raidKey, modeKey, gate);
-    const unbound = fullBound ? 0 : getGoldForGate(raidKey, modeKey, gate);
-    earned += unbound + bound;
-    earnedBound += bound;
-  }
-  let total = 0;
-  let totalBound = 0;
-  for (const gate of allGateKeys || []) {
-    const bound = getBoundGoldForGate(raidKey, modeKey, gate);
-    const unbound = fullBound ? 0 : getGoldForGate(raidKey, modeKey, gate);
-    total += unbound + bound;
-    totalBound += bound;
-  }
+  const sumGates = (gates) => {
+    let gold = 0;
+    let bound = 0;
+    for (const gate of gates || []) {
+      const parts = getGateGoldParts(raidKey, modeKey, gate);
+      gold += parts.gold;
+      bound += parts.bound;
+    }
+    return { gold, bound };
+  };
+  const earned = sumGates(completedGateKeys);
+  const total = sumGates(allGateKeys);
   // goldBound tags fully bound modes (Horizon) so auto-slot logic can skip
   // them. Reduced normal modes stay auto-eligible but still carry
   // earnedBoundGold/totalBoundGold for the locked half.
   return {
-    earnedGold: earned,
-    totalGold: total,
-    earnedBoundGold: earnedBound,
-    totalBoundGold: totalBound,
-    goldBound: fullBound,
+    earnedGold: earned.gold,
+    totalGold: total.gold,
+    earnedBoundGold: earned.bound,
+    totalBoundGold: total.bound,
+    goldBound: isGoldBound(raidKey, modeKey),
   };
 }
 

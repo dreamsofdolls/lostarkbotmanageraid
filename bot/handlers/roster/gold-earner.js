@@ -16,6 +16,7 @@ const {
   newPickerSessionId,
 } = require("../../utils/raid/roster-picker");
 const {
+  createAutocompleteDispatcher,
   getRosterMatches,
   truncateChoice,
 } = require("../../utils/raid/common/autocomplete");
@@ -31,9 +32,9 @@ const {
 } = require("./gold-earner/constants");
 const {
   pickInitialSelection,
-  findAccountByRoster,
   buildPickerCharacters,
 } = require("./gold-earner/selection");
+const { findAccountByName } = require("../../utils/user-doc");
 const { createGoldEarnerRenderers } = require("./gold-earner/render");
 const { countedGoldEarners } = require("../../utils/raid/common/character");
 
@@ -69,13 +70,8 @@ function createRaidGoldEarnerCommand({
     return editNotice(interaction, EmbedBuilder, notice, extras);
   }
 
-  async function handleRaidGoldEarnerAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name !== "roster") {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
+  const handleRaidGoldEarnerAutocomplete = createAutocompleteDispatcher("raid-gold-earner", {
+    async roster(interaction, focused) {
       const userDoc = await loadUserForAutocomplete(interaction.user.id);
       const choices = getRosterMatches(userDoc, focused.value || "").map((account) => {
         const charCount = Array.isArray(account.characters)
@@ -86,11 +82,8 @@ function createRaidGoldEarnerCommand({
         return truncateChoice(label, account.accountName);
       });
       await interaction.respond(choices).catch(() => {});
-    } catch (error) {
-      console.error("[autocomplete] raid-gold-earner error:", error?.message || error);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+    },
+  });
 
   async function handleRaidGoldEarnerCommand(interaction) {
     const discordId = interaction.user.id;
@@ -112,8 +105,7 @@ function createRaidGoldEarnerCommand({
       langPromise,
       User.findOne({ discordId }),
     ]);
-    const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
-    const target = findAccountByRoster(accounts, rosterInput, normalizeName);
+    const target = findAccountByName(userDoc, rosterInput, normalizeName);
 
     if (!target) {
       await editPickerNotice(interaction, {
@@ -241,7 +233,7 @@ function createRaidGoldEarnerCommand({
       const doc = await User.findOne({ discordId: session.callerId });
       // The roster can be removed, or renamed by a background refresh, while
       // the picker is open; saving nothing must not read as a success.
-      const account = doc ? findAccountByRoster(doc.accounts, session.accountName, normalizeName) : null;
+      const account = findAccountByName(doc, session.accountName, normalizeName);
       rosterMissing = !account;
       if (!account) return;
 

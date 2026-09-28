@@ -29,9 +29,7 @@ const { readAuthenticatedPreviewRequest } = require("./preview-request");
 const {
   RAID_REQUIREMENTS,
   getGatesForRaid,
-  getGoldForGate,
-  getBoundGoldForGate,
-  isGoldBound,
+  getGateGoldParts,
 } = require("../../../../domain/raid-catalog");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const {
@@ -212,12 +210,9 @@ function summarizeAppliedGates({ account, char, appliedGates, finalRaidEntriesBy
     changedRaidKeys.add(`${normalizeName(char.name)}::${raidKey}::${modeKey}`);
     const finalRaid = finalRaidEntriesByKey.get(raidKey);
     if (!countedGoldEarners(account?.characters).has(char) || !finalRaid?.goldReceives) continue;
-    const bound = getBoundGoldForGate(raidKey, modeKey, gate);
-    const unbound = isGoldBound(raidKey, modeKey)
-      ? 0
-      : getGoldForGate(raidKey, modeKey, gate);
-    gold += unbound + bound;
-    goldBound += bound;
+    const parts = getGateGoldParts(raidKey, modeKey, gate);
+    gold += parts.gold;
+    goldBound += parts.bound;
   }
 
   return {

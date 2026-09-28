@@ -1098,11 +1098,11 @@ syncBtn.addEventListener("click", async () => {
       syncBtn.disabled = !canSendCurrentPreview();
       return;
     }
-    const deliveryKey = data?.delivery?.delivered
-      ? "sync.sentToDiscord"
-      : data?.delivery?.pending
-        ? "sync.deliveryPending"
-        : "sync.savedForDiscord";
+    // The server answers before the DM goes out, so delivery is either
+    // pending (a DM is on its way) or stored (no Discord client to send it).
+    const deliveryKey = data?.delivery?.pending
+      ? "sync.deliveryPending"
+      : "sync.savedForDiscord";
     syncOutput.innerHTML = `<span class="status-ok">${escapeHtml(t("sync.previewReady"))}</span> ${escapeHtml(t(deliveryKey))}`;
     syncOutput.hidden = false;
     void fileChangeMonitor?.checkNow("post-send");

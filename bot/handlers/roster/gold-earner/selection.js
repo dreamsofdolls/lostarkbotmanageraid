@@ -19,13 +19,6 @@ function pickInitialSelection(chars) {
   return new Set(ranked.map((r) => r.i));
 }
 
-function findAccountByRoster(accounts, rosterInput, normalizeName) {
-  const target = normalizeName(rosterInput);
-  return (Array.isArray(accounts) ? accounts : []).find(
-    (account) => normalizeName(account?.accountName) === target
-  );
-}
-
 function sortCharactersForPicker(characters) {
   return [...(Array.isArray(characters) ? characters : [])].sort(
     (a, b) => (Number(b.itemLevel) || 0) - (Number(a.itemLevel) || 0)
@@ -52,6 +45,5 @@ function buildPickerCharacters(characters) {
 
 module.exports = {
   pickInitialSelection,
-  findAccountByRoster,
   buildPickerCharacters,
 };
