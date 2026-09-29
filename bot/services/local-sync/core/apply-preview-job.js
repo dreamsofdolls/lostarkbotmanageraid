@@ -338,6 +338,14 @@ async function releaseApplySlotBestEffort(discordId, ownsSlot, deps) {
   }
 }
 
+/**
+ * Claim and apply one stored preview job for its owner.
+ * @param {string} jobId
+ * @param {string} discordId - job owner
+ * @param {object} [deps] - models and raid writers; `shrinkSourceToken: false`
+ *   keeps the Local Reader token at its full lifetime after a write
+ * @returns {Promise<{ok: boolean, state: string, job: object|null, result?: object, retryable?: boolean}>}
+ */
 async function applyPreviewJob(jobId, discordId, deps = {}) {
   const UserModel = deps.UserModel || User;
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
@@ -397,13 +405,17 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     if (rejectedOutcome) return rejectedOutcome;
 
     await recordPreviewSuccessBestEffort(discordId, UserModel, job.scope);
-    const newExpSec = await shrinkPreviewTokenBestEffort({
-      UserModel,
-      userDoc,
-      job,
-      discordId,
-      summary,
-    });
+    // The Local Reader applies from the same page that holds the token, so a
+    // web apply keeps the link alive for the next clear of the session.
+    const newExpSec = deps.shrinkSourceToken === false
+      ? null
+      : await shrinkPreviewTokenBestEffort({
+        UserModel,
+        userDoc,
+        job,
+        discordId,
+        summary,
+      });
     // Awaited so a failure here reaches the catch below like every other step.
     return await finishAppliedPreview({
       jobId,

@@ -57,5 +57,4 @@ module.exports = {
   cancelPreviewJob: previewJobs.cancelPreviewJob,
   applyPreviewJob: applyPreview.applyPreviewJob,
   propagatePartyDeltas: partyPropagation.propagatePartyDeltas,
-  findRegisteredPartyTargets: partyPropagation.findRegisteredPartyTargets,
 };

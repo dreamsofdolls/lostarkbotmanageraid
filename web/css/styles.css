@@ -1,737 +1,403 @@
 /**
  * web/css/styles.css
- * Local Reader companion · editorial print styling.
- * The page reads as a printed page, not a console: double rules,
- * serif chapter numerals, letterspaced small labels, no `//` kickers
- * and no HUD corner brackets. Every functional class below is one the
- * JS renderers already emit (see js/sync/render/*.js), so the look is
- * carried entirely by this file.
- * Invariant: surface tokens are a 3-step ladder (--surface-1 outermost
- * to --surface-3 innermost). Nesting a box without stepping down the
- * ladder makes the layers blur into one another.
+ * Local Reader · one-button page in ink and vermilion: an ensō to drop the
+ * file into, a seal button to sync, a stamped seal when done.
+ * Invariant: every screen change goes through `main[data-stage]` (set by
+ * app.js) so the faces of the well, the action slot and the file line cross-
+ * fade from one rule set. The CSP has no 'unsafe-inline', so no style lives
+ * in the markup; the brush filters are the inline SVG in index.html.
  */
 
 :root {
-  /* Warm ink base. The hue sits in the browns rather than the blue-greys
-     so the signature amber reads as brass ink on smoke-stained paper.
-     Every preview/sync class below reads these vars, so the palette
-     cascades from here. */
-  --bg: #16130f;
-  --bg-deep: #100e0b;
-  --card: #1f1b16;
-  --card-top: #262118;
-  --border: #3a332a;
-  --border-soft: #292319;
-  --text: #ece6da;
-  --text-dim: #a29885;
-  /* Surface ladder · four box levels nest inside each other
-     (card > preview-stats > char-card > char-pending-row) and need
-     distinct values or they read as one flat slab. */
-  --surface-1: #1f1b16;
-  --surface-2: #1a1712;
-  --surface-3: #14120e;
-  --hairline: #2e2820;
-  --accent: #f5a623;
-  --accent-bright: #ffc35e;
-  --accent-dim: #c98517;
-  --accent-ink: #16181c;
-  --success: #57c98c;
-  --error: #ef5d57;
-  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
-  --font-body: "Work Sans", -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
-  --font-mono: "Space Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --ink: oklch(0.165 0.008 60);
+  --ink-raised: oklch(0.2 0.009 60);
+  --line: oklch(0.28 0.012 60);
+  --paper: oklch(0.93 0.018 82);
+  --dim: oklch(0.74 0.02 75);
+  --faint: oklch(0.6 0.015 70);
+  --verm: oklch(0.6 0.19 32);
+  --verm-deep: oklch(0.5 0.16 32);
+  --verm-text: oklch(0.76 0.13 35);
+  --amber-text: oklch(0.83 0.1 80);
+  --jade: oklch(0.76 0.08 165);
+  --on-verm: oklch(0.97 0.02 80);
+  --font-display: "Alegreya", Georgia, serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-seal: "Noto Serif JP", "Yu Mincho", serif;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --fade: 260ms;
 }
 
 * { box-sizing: border-box; }
 
+html { color-scheme: dark; }
+
 body {
   margin: 0;
-  font-family: var(--font-body);
-  color: var(--text);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  /* Layered radials = depth/atmosphere instead of a flat fill; fixed so it
-     stays put while the page scrolls. */
-  background:
-    radial-gradient(1150px 640px at 84% -14%, rgba(245, 166, 35, 0.085), transparent 62%),
-    radial-gradient(900px 560px at 8% 112%, rgba(120, 92, 52, 0.07), transparent 60%),
-    var(--bg);
-  background-attachment: fixed;
-}
-
-/* 740px left ~40% of a 1180px window empty and capped the character
-   grid at 2 columns. 840px fits 3 without pushing prose past 75ch. */
-.container {
-  position: relative;
-  max-width: 840px;
-  margin: 0 auto;
-  padding: 52px 22px 96px;
-}
-
-/* ── masthead: centred nameplate under a double rule ── */
-header {
-  margin-bottom: 40px;
-  padding-bottom: 20px;
-  text-align: center;
-  border-bottom: 3px double var(--border);
-}
-/* Folio line. Deliberately NOT a `//` kicker · that is programming
-   comment syntax and reads as stray code on a user-facing page.
-   Kept language-neutral on purpose: CSS `content` cannot go through
-   the data-i18n pass in js/core/i18n.js, so anything localized here
-   would show Vietnamese to en/jp readers. */
-header::before {
-  content: "ARTIST · LOCAL SYNC COMPANION";
-  display: block;
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 4px;
-  color: var(--text-dim);
-  padding-bottom: 14px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-soft);
-}
-header h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 58px;
-  line-height: 0.98;
-  letter-spacing: -1px;
-  color: var(--text);
-  /* Fraunces is optical-size aware · a high opsz gives the display cut
-     with the sharper serifs, which is what makes it read as a nameplate
-     rather than body copy blown up. Only axes named in the font URL
-     respond; anything else here would be inert. */
-  font-variation-settings: "opsz" 120;
-}
-.subtitle {
-  margin: 12px auto 0;
-  max-width: 50ch;
-  font-family: var(--font-display);
-  font-style: italic;
-  color: var(--text-dim);
-  font-size: 16px;
-}
-
-/* ── plate: a framed block, double-ruled inside its own edge ──
-   The frame is drawn with inset shadows rather than corner brackets.
-   Brackets are HUD grammar and argue with the printed-page voice the
-   rest of the file speaks. */
-.card {
-  position: relative;
-  background: linear-gradient(180deg, var(--card-top), var(--card));
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 26px 30px 28px;
-  margin-bottom: 18px;
-  box-shadow:
-    inset 0 0 0 1px var(--bg),
-    inset 0 0 0 2px var(--border-soft),
-    0 18px 40px -30px #000;
-  animation: card-in 0.5s cubic-bezier(0.22, 0.7, 0.2, 1) backwards;
-}
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card { animation: none; }
-}
-/* Section 3 carries more than half the page · a hairline rail marks it
-   as the main body without breaking the uniform plate treatment. */
-#preview-section { border-left: 1px solid var(--border); }
-
-/* Section heading: letterspaced caps, with the leading numeral pulled
-   up to chapter size. `::first-letter` targets the "1." / "2." that the
-   markup already carries, so no extra element is needed. */
-.card h2 {
-  /* 20px here plus the lede's own 6px top margin opened a gap under every
-     section rule that read as a missing line. The first element after the
-     heading zeroes its top margin (below), so this value is the whole gap. */
-  margin: 0 0 14px;
-  padding-bottom: 13px;
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 3.4px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  border-bottom: 1px solid var(--border-soft);
-}
-.card h2::first-letter {
-  font-family: var(--font-display);
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--accent);
-  vertical-align: -3px;
-  margin-right: 3px;
-}
-
-.hint { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin: 6px 0; }
-.preview-note { margin-top: 12px; }
-/* The opening line of each section is its lede · set in italic serif so
-   it reads as standfirst copy rather than another hint. */
-.card > .hint:first-of-type {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-style: italic;
-  /* 62ch broke these two-line ledes mid-clause and left a visible gap to
-     the right of the first line. Wider bound plus balanced wrapping so
-     both lines come out near the same length. */
-  max-width: 76ch;
-  text-wrap: balance;
-}
-/* Whatever comes first inside a card sits directly under the heading rule,
-   so it must not add its own top margin on top of the heading's. */
-.card > .hint:first-of-type,
-.card > *:first-of-type:not(h2) {
-  margin-top: 0;
-}
-.auth-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.auth-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; }
-.auth-identity-pill { padding-left: 8px; }
-.auth-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #5ec88f; box-shadow: 0 0 6px rgba(94, 200, 143, 0.5); flex-shrink: 0; }
-.auth-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
-.auth-avatar--placeholder { display: inline-flex; align-items: center; justify-content: center; background: var(--hairline); color: var(--text-dim); font-size: 11px; font-weight: 600; }
-.auth-pill-text { display: inline-flex; align-items: baseline; gap: 4px; }
-.auth-linked-label { color: var(--text-dim); }
-.auth-name { color: var(--text); font-weight: 600; }
-.auth-timer-pill { color: var(--text-dim); }
-.auth-timer-pill .auth-timer-icon { font-size: 11px; }
-.auth-timer-pill--warn { color: #e8a85d; border-color: #6b4d2c; background: #2a2218; }
-.week-range { margin: -2px 0 10px; font-family: var(--font-display); font-style: italic; font-size: 13.5px; }
-.week-range strong { color: var(--accent); font-weight: 600; font-style: normal; }
-/* Statistics band: ruled top and bottom, no fill · a table of figures
-   set into the page rather than a panel sitting on top of it. */
-.preview-stats { margin: 0 0 14px; padding: 14px 2px; background: none; border: 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); border-radius: 0; }
-.preview-stats .stat-row { display: flex; flex-wrap: wrap; gap: 30px; }
-.preview-stats .stat { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; }
-.preview-stats .stat-icon { font-size: 14px; }
-.preview-stats .stat-value { color: var(--text); font-family: var(--font-display); font-size: 15px; font-weight: 600; }
-.preview-stats .stat-value strong { color: var(--accent); }
-.preview-stats details { margin-top: 8px; padding-top: 10px; border-top: 1px dotted var(--border); }
-.preview-stats summary { cursor: pointer; color: var(--text-dim); font-family: var(--font-display); font-style: italic; font-size: 13px; padding: 2px 0; }
-.preview-stats summary:hover { color: var(--text); }
-.preview-stats details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-dim); }
-.preview-stats details li { margin: 2px 0; }
-.preview-stats details li strong { color: var(--text); font-weight: 600; }
-/* ── small labels ──────────────────────────────────────────────
-   One rule for every micro-label on the page. Letterspaced caps in the
-   body face, not mono · mono labels read as machine output, which is
-   the voice this design moves away from. */
-.preview-stats .stat-label,
-.char-raid-name,
-.char-pending-roster-header {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.char-pending-roster-header { margin: 10px 0 4px; }
-.char-pending-roster-header strong { color: var(--accent); }
-
-.char-pending-list { list-style: none !important; padding-left: 0 !important; }
-/* Character rows are ruled entries in a table of contents, not chips.
-   Dotted leaders carry the eye across to the raid pills on the right. */
-.char-pending-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 2px; margin: 0 !important; background: none; border: 0; border-bottom: 1px dotted var(--border); border-radius: 0; }
-.char-pending-row strong { font-size: 13px; }
-.char-pending-head { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); font-size: 15px; }
-.char-pending-head .class-icon { width: 22px; height: 22px; }
-.raid-pill-row { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-.raid-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #2a2e34; border: 1px solid #3a3e44; }
-.raid-pill--done { background: #1f2e26; border-color: #2f5a48; color: #8edcb4; }
-.raid-pill--partial { background: #2e2a1a; border-color: #5a4d2c; color: #e8c97a; }
-.raid-pill--pending { background: #2a2e34; border-color: #3a3e44; color: var(--text-dim); }
-.raid-pill-mode { color: inherit; opacity: 0.75; font-size: 10px; }
-.gold-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 11px; background: #2e2918; border: 1px solid #6b5a2c; color: #f0c870; font-weight: 600; }
-.raid-pill--incoming { box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(244, 174, 83, 0.3); }
-.raid-pill-incoming { font-size: 10px; }
-
-code {
-  font-family: var(--font-mono);
-  background: var(--bg-deep);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 12.5px;
-  color: var(--accent-bright);
-  border: 1px solid var(--border-soft);
-}
-
-.drop-zone {
-  border: 1.5px solid var(--border);
-  border-radius: 3px;
-  padding: 34px 20px;
-  text-align: center;
-  background: rgba(255, 255, 255, 0.012);
-  transition: border-color 0.2s, background 0.2s, transform 0.2s;
-  cursor: pointer;
-}
-.drop-zone p { font-family: var(--font-display); font-size: 16px; }
-.drop-zone .hint { font-family: var(--font-body); font-size: 12px; }
-.drop-zone:hover {
-  border-color: var(--accent-dim);
-  background: rgba(245, 166, 35, 0.04);
-}
-.drop-zone.dragover {
-  border-color: var(--accent);
-  background: rgba(245, 166, 35, 0.09);
-  transform: translateY(-1px);
-}
-.drop-zone p { margin: 4px 0; }
-
-button {
-  font-family: var(--font-body);
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: 0;
-  border-radius: 2px;
-  padding: 9px 16px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
-  letter-spacing: 0.4px;
-  margin-top: 8px;
-  transition: transform 0.12s ease, filter 0.12s ease;
-}
-button:hover:not(:disabled) { filter: brightness(1.07); }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* Only the final action gets the solid amber weight. "Chọn file" is a
-   mid-flow step · giving both buttons the same lift made them compete. */
-#sync-btn {
-  font-family: var(--font-display);
-  font-size: 15px;
-  padding: 10px 24px;
-  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
-  box-shadow: 0 2px 0 var(--accent-dim), 0 8px 18px -10px rgba(245, 166, 35, 0.55);
-}
-#sync-btn:hover:not(:disabled) { transform: translateY(-1px); }
-#sync-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--accent-dim); }
-#sync-btn:disabled { box-shadow: none; filter: grayscale(0.3); }
-#pick-file-btn {
-  background: transparent;
-  color: var(--accent-bright);
-  border: 1px solid var(--accent-dim);
-}
-#pick-file-btn:hover { background: rgba(245, 166, 35, 0.10); filter: none; }
-
-.meta {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--bg-deep);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  font-size: 13px;
-  font-family: var(--font-mono);
-  color: var(--text-dim);
-}
-
-/* Realtime file state sits outside .meta so updating the selected-file row
-   never destroys it. The dot is deliberately quiet: it communicates whether
-   sending is safe without turning the editorial page into a monitoring HUD. */
-.live-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 9px;
-  color: var(--text-dim);
-  font-size: 12px;
-}
-.live-status[hidden] { display: none; }
-.live-status::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: var(--text-dim);
-}
-.live-status[data-state="ready"] { color: var(--success); }
-.live-status[data-state="ready"]::before {
-  background: var(--success);
-  box-shadow: 0 0 7px rgba(87, 201, 140, 0.45);
-}
-.live-status[data-state="updating"],
-.live-status[data-state="warning"] { color: var(--accent-bright); }
-.live-status[data-state="updating"]::before,
-.live-status[data-state="warning"]::before { background: var(--accent); }
-.live-status[data-state="error"] { color: var(--error); }
-.live-status[data-state="error"]::before { background: var(--error); }
-.live-status[data-state="static"]::before { background: var(--text-dim); }
-/* The "found N characters / M clears" line opens the preview it
-   describes · set as a standfirst, not boxed off on its own. */
-#preview-output > .meta:first-child {
-  margin-top: 0;
-  padding: 0 2px;
-  background: none;
-  border: 0;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 14.5px;
-}
-#preview-output > .meta:first-child strong { color: var(--accent-bright); }
-
-/* File-meta row hosts the "Selected ... · ... · modified ..." line on
-   one side and Remove / Restore buttons on the other. Flex layout so
-   the line stays readable + buttons hug the right edge. Wraps on
-   narrow viewports rather than clipping the file name. */
-.file-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.file-meta-row span { flex: 1 1 auto; min-width: 0; }
-.remove-file-btn {
-  background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  padding: 4px 10px;
-  margin-top: 0;
-  font-weight: 500;
-}
-.remove-file-btn:hover {
-  background: var(--error);
-  color: white;
-  border-color: var(--error);
-}
-
-.status-ok { color: var(--success); }
-.status-err { color: var(--error); }
-.status-warn { color: var(--accent-bright); }
-
-/* Empty state · a ruled block with an italic serif lead, matching the
-   rest of the page instead of a bare sentence dropped into the card.
-   Deliberately not .status-ok: green reads as "something succeeded",
-   and "there is nothing here" is neither success nor failure. */
-.empty-state {
-  padding: 16px 2px 18px;
-  border-top: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
-}
-.empty-state-title {
-  margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 17px;
-  color: var(--text);
-}
-.empty-state-hint {
-  margin: 0;
-  max-width: 72ch;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-dim);
-}
-.empty-state-hint strong { color: var(--accent-bright); font-weight: 600; }
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-  font-size: 13px;
-}
-table th, table td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-}
-table th { color: var(--text-dim); font-weight: 600; }
-
-.char-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.class-icon {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  border-radius: 50%;
-  object-fit: cover;
-  /* Lighter than the plate + a subtle ring so transparent class-glyph
-     PNGs pop against the dark page. brightness filter boosts the
-     line-art luminance without distorting the per-class color identity
-     (Reaper purple, Berserker red, etc) the way an invert would.
-     Never invert these: `filter` also flips the element's own
-     background, turning the tile into a solid black square. */
-  background: #3d372e;
-  border: 1px solid #4d4639;
-  padding: 1px;
-  filter: brightness(1.15) saturate(1.05);
-}
-
-/* Per-raid preview group: each (raid, mode) gets its own card-like
-   block with a heading + small table. Stacks vertically inside the
-   main preview-output container; spacing between groups keeps the
-   visual rhythm clear. */
-.raid-group {
-  margin-top: 18px;
-  padding-top: 6px;
-}
-.raid-group h3 {
-  margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-size: 16px;
-  color: var(--text);
-  font-weight: 600;
-}
-.raid-group table { margin-top: 4px; }
-
-/* Phase 7 roster-paginated diff view: ONE roster shown at a time with
-   prev/next buttons (when multiple rosters exist). Inside the active
-   roster: stack of raid cards. Each raid card has a (raid + mode)
-   header followed by char rows, mirroring /raid-status raid card
-   structure exactly so the user's mental model carries over. */
-.roster-pagination {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: center;
-  margin: 20px 0 12px;
-  padding: 10px 2px;
-  background: none;
-  border: 0;
-  border-radius: 0;
-  /* Double rules top and bottom · the running head of the section. */
-  border-top: 3px double var(--border);
-  border-bottom: 3px double var(--border);
-}
-.roster-name {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text);
-  flex: 1;
-  text-align: center;
-}
-.page-counter {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-}
-.page-btn {
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 4px 10px;
-  font-size: 14px;
-  cursor: pointer;
-  font-weight: 600;
-  margin-top: 0;
-}
-.page-btn:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
-}
-.page-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.view-toggle {
-  margin-left: auto;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-dim);
-}
-.view-toggle:hover {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-/* Char-first view: per-char card with raid+mode rows inline. Default
-   view since "what has my char done this week" is the natural mental
-   model when previewing what will sync. Toggle button at the top
-   swaps to raid-first. */
-/* Char cards pack 2-up via this wrapper. Each card is min ~340px so
-   the raid rows inside stay readable; wide viewports get 2 columns,
-   narrow (~720px or less) collapse to 1. Falling back gracefully on
-   mobile means we don't have to ship a media query. */
-.char-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  /* Column gutter wide enough to separate two text columns without a
-     divider rule · row gap stays tight because each entry is ruled. */
-  gap: 8px 34px;
-  margin-top: 12px;
-  /* Without align-items:start, CSS Grid defaults to stretch - so a
-     1-raid card next to a 3-raid card grows vertically to match the
-     taller sibling, leaving empty space at the bottom. start lets
-     each card hug its own content height. */
-  align-items: start;
-}
-/* Entries in a two-column list, ruled at the top · not boxed cards. */
-.char-card {
-  margin-top: 0; /* gap on the wrapper grid handles spacing */
-  padding: 12px 0 4px;
-  background: none;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-}
-.char-card-head {
-  font-family: var(--font-display);
-  font-size: 16px;
-  margin-bottom: 8px;
-  padding-bottom: 3px;
-  border-bottom: 0;
-}
-/* Raid rows stack vertically inside each char card. Outer .char-cards
-   -grid handles the 2-up packing of CHARS; if we also pack raid rows
-   2-up inside, each card becomes too wide for 2-up cards to fit on
-   typical viewports. Vertical stack keeps cards slim so 2 cards fit
-   per row on ~700px+ viewports. */
-.char-raid-grid {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.char-raid-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-/* Sizing only · type comes from the shared small-label rule above. */
-.char-raid-name { flex: 0 0 60px; }
-.char-raid-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.char-mode-block {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.char-mode-label {
-  font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 600;
-  white-space: nowrap;
-  /* Fixed-width column so gate badges line up vertically across modes
-     of the same raid. Tightened from 80px to give G3 future-room while
-     still fitting "🌑 Nightmare" (will wrap on extreme JP-wide variants
-     but Normal/Hard fit cleanly). */
-  min-width: 64px;
+  color: var(--paper);
+  font: 15px/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(820px 400px at 50% -10%, oklch(0.25 0.03 55 / 0.8), transparent 70%),
+    var(--ink);
+  overflow-x: hidden;
 }
 
-/* Raid-first view · same treatment as the char-first entries above so
-   the two views read as one document. Not rendered in the mockups, so
-   it is easy to leave behind on a restyle. */
-.raid-card {
-  margin-top: 18px;
-  padding: 12px 0 4px;
-  background: none;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
+/* Paper grain. img-src allows data: in the CSP. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .94  0 0 0 0 .84  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
-.raid-card-header {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: 17px;
-  color: var(--text);
-  font-weight: 600;
-}
-.raid-card-char {
+
+.defs { position: absolute; }
+
+button { font: inherit; color: inherit; }
+
+/* ── header ─────────────────────────────────────────────────── */
+.top {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--hairline);
+  padding: 26px 48px;
 }
-.raid-card-char:last-child { border-bottom: none; }
-.char-info {
-  flex: 1 1 220px;
-  font-size: 13px;
-  min-width: 0;
+.seal {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: var(--verm);
+  color: var(--on-verm);
+  font: 700 19px/1 var(--font-seal);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px var(--verm), inset 0 0 0 3.3px oklch(0.96 0.02 80 / 0.75);
+  rotate: -4deg;
+  animation: seal-in 500ms var(--ease-out-quint) both;
 }
-.gate-badges {
+.nameplate { display: flex; flex-direction: column; }
+.nameplate b { font: italic 700 19px/1 var(--font-display); margin-bottom: 2px; }
+.nameplate span { font-size: 12px; color: var(--dim); }
+.who { margin-left: auto; font-size: 13px; color: var(--dim); text-align: right; }
+.who b { color: var(--paper); font-weight: 600; }
+.who[data-tone="warn"] { color: var(--amber-text); }
+
+/* ── stage ──────────────────────────────────────────────────── */
+.stage {
+  position: relative;
+  flex: 1;
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.gate-badge {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-  border: 1px solid transparent;
-}
-.gate-synced {
-  background: rgba(76, 175, 80, 0.18);
-  color: #8dd791;
-  border-color: rgba(76, 175, 80, 0.4);
-}
-.gate-pending {
-  background: rgba(245, 166, 35, 0.18);
-  color: #ffd28b;
-  border-color: rgba(245, 166, 35, 0.5);
-}
-.gate-mode-conflict {
-  background: rgba(255, 112, 67, 0.18);
-  color: #ffaa88;
-  border-color: rgba(255, 112, 67, 0.5);
-}
-.gate-empty {
-  background: var(--bg-deep);
-  color: var(--text-dim);
-  border-color: var(--hairline);
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: clamp(20px, 6vh, 60px) 16px 56px;
 }
 
-/* Compact legend strip above the roster blocks. Maps each gate state
-   to its color so the user can decode the badges below. Inline-flex
-   with wrap so it collapses on narrow viewports. */
-.diff-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 4px;
-  font-size: 11px;
-}
-.legend-item {
-  padding: 3px 8px;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-  border: 1px solid transparent;
-}
-
-/* Footer collapsibles for failed + unmapped sections - keep them
-   visually distinct from the main raid groups and hide their detail
-   by default so the focused view is "what will sync". */
-.footer-details {
-  margin-top: 18px;
-  padding: 10px 12px;
-  background: var(--surface-3);
-  border-radius: 2px;
-  font-size: 13px;
-}
-.footer-details summary {
+.well {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
   cursor: pointer;
-  color: var(--text-dim);
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 500;
-  user-select: none;
+  transition: transform 220ms var(--ease-out-quint);
 }
-.footer-details summary:hover { color: var(--text); }
-.footer-details ul { margin: 8px 0 0; padding-left: 20px; }
-.footer-details li { margin: 2px 0; }
+.well:disabled { cursor: default; }
+.well:focus-visible { outline: 2px solid var(--verm); outline-offset: 8px; }
+.stage[data-drag="on"] .well { transform: scale(1.04); }
+
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ink {
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  opacity: 0.85;
+  filter: url(#brush-rough);
+  animation: draw 900ms var(--ease-out-expo) 150ms both;
+  transition: stroke 200ms, opacity var(--fade);
+}
+.stage[data-drag="on"] .ink { stroke: var(--verm); opacity: 1; }
+.stage:is([data-stage="blocked"], [data-stage="problem"]) .ink { opacity: 0.3; }
+.stage[data-stage="done"] .ink { opacity: 0; }
+
+.sweep {
+  fill: none;
+  stroke: var(--verm);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-dasharray: 16 84;
+  filter: url(#brush-rough);
+  transform-origin: 32px 32px;
+  opacity: 0;
+  transition: opacity 200ms;
+  animation: spin 1100ms linear infinite paused;
+}
+.stage:is([data-stage="reading"], [data-stage="syncing"]) .sweep,
+.stage[data-busy="true"] .sweep {
+  opacity: 1;
+  animation-play-state: running;
+}
+/* The stamp holds still while the post-sync re-read runs behind it. */
+.stage[data-stage="done"] .sweep { opacity: 0; animation-play-state: paused; }
+
+/* Faces of the well: one shows per stage, the others fade out. */
+.face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  opacity: 0;
+  transform: scale(0.94);
+  visibility: hidden;
+  transition:
+    opacity var(--fade) var(--ease-out-quint),
+    transform var(--fade) var(--ease-out-quint),
+    visibility 0s linear var(--fade);
+}
+.stage:is([data-stage="blocked"], [data-stage="empty"], [data-stage="restore"], [data-stage="reading"], [data-stage="nothing"], [data-stage="problem"]) .face-prompt,
+.stage:is([data-stage="ready"], [data-stage="syncing"], [data-stage="error"]) .face-count,
+.stage[data-stage="done"] .face-stamp {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.icon { display: none; width: 34px; height: 34px; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.icon-drop { stroke: var(--verm); }
+.icon-block { width: 32px; height: 32px; stroke: var(--faint); stroke-width: 1.8; }
+.stage:is([data-stage="empty"], [data-stage="restore"], [data-stage="reading"]) .icon-drop,
+.stage:is([data-stage="blocked"], [data-stage="problem"]) .icon-block { display: block; }
+
+.prompt-title {
+  max-width: 220px;
+  font: 500 24px/1.2 var(--font-display);
+  white-space: pre-line;
+}
+.prompt-hint { max-width: 220px; font-size: 13px; line-height: 1.45; color: var(--dim); }
+.stage:is([data-stage="nothing"], [data-stage="blocked"], [data-stage="problem"]) .prompt-title {
+  font-style: italic;
+  color: var(--dim);
+}
+.face-prompt.swap > span { animation: fade-up 220ms var(--ease-out-quint) both; }
+
+.count {
+  font: italic 700 104px/0.95 var(--font-display);
+  color: var(--verm);
+  font-variant-numeric: lining-nums;
+}
+.unit {
+  font: 700 12px var(--font-body);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.stamp {
+  position: absolute;
+  inset: 40px;
+  display: grid;
+  place-items: center;
+  border: 5px solid var(--verm);
+  border-radius: 14px;
+  color: var(--verm);
+  font: 700 104px/1 var(--font-seal);
+  filter: url(#brush-fine);
+  rotate: -8deg;
+}
+.stamp small {
+  position: absolute;
+  bottom: 18px;
+  font: 800 13px/1 var(--font-body);
+  letter-spacing: 0.24em;
+}
+.bloom {
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  border: 10px solid oklch(0.6 0.19 32 / 0.5);
+  opacity: 0;
+}
+.stage[data-stage="done"] .stamp { animation: slam 300ms var(--ease-out-quint) both; }
+.stage[data-stage="done"] .bloom { animation: bloom 640ms var(--ease-out-expo) 160ms both; }
+
+/* ── action slot: the Sync button or the done copy ─────────── */
+.actions { display: grid; place-items: center; min-height: 60px; }
+.actions > * {
+  grid-area: 1 / 1;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--fade) var(--ease-out-quint), visibility 0s linear var(--fade);
+}
+.stage:is([data-stage="empty"], [data-stage="restore"], [data-stage="reading"], [data-stage="ready"], [data-stage="nothing"], [data-stage="syncing"], [data-stage="error"]) .btn,
+.stage[data-stage="done"] .done-copy {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.btn {
+  min-width: 200px;
+  padding: 17px 48px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--verm);
+  color: var(--on-verm);
+  font: 700 20px/1 var(--font-display);
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 0 2px var(--verm),
+    inset 0 0 0 3.5px oklch(0.97 0.02 80 / 0.6),
+    0 10px 26px oklch(0.6 0.19 32 / 0.3);
+  transition:
+    opacity var(--fade) var(--ease-out-quint),
+    visibility 0s linear var(--fade),
+    transform 200ms var(--ease-out-quint),
+    background-color 200ms,
+    color 200ms,
+    box-shadow 200ms;
+}
+.btn:hover:not(:disabled) { transform: translateY(-2px); }
+.btn:active:not(:disabled) { transform: translateY(2px) scale(0.98); transition-duration: 100ms; }
+.btn:focus-visible { outline: 2px solid var(--paper); outline-offset: 4px; }
+.btn:disabled {
+  cursor: default;
+  background: transparent;
+  color: var(--faint);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+/* backwards, not both: a held final transform would block the hover lift. */
+.stage[data-stage="ready"] .btn { animation: rise 260ms var(--ease-out-quint) 360ms backwards; }
+.stage[data-stage="syncing"] .btn:disabled {
+  background: var(--verm-deep);
+  color: oklch(0.97 0.02 80 / 0.8);
+  box-shadow: none;
+  transform: translateY(2px) scale(0.98);
+}
+.stage[data-stage="error"] .btn { animation: shake 260ms ease-out; }
+
+.done-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.stage[data-stage="done"] .done-copy > * { animation: fade-up 300ms var(--ease-out-quint) 520ms both; }
+.done-title { margin: 0; font: 500 32px/1.15 var(--font-display); }
+.done-title em { font-style: italic; font-weight: 700; color: var(--verm); }
+.done-rejected { margin: 0; font-size: 13.5px; color: var(--verm-text); }
+.done-hint { margin: 0; font-size: 13.5px; color: var(--dim); }
+
+/* ── lines under the action ───────────────────────────────── */
+.warn,
+.status {
+  margin: 0;
+  max-width: 480px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+  animation: fade-up 240ms var(--ease-out-quint) both;
+}
+.warn { display: flex; gap: 8px; align-items: flex-start; text-align: left; color: var(--verm-text); }
+.warn::before {
+  content: "!";
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: var(--verm);
+  color: var(--on-verm);
+  font-size: 12px;
+  font-weight: 800;
+}
+.status { color: var(--dim); }
+.status[data-tone="warn"] { color: var(--amber-text); }
+.status[data-tone="error"] { color: var(--verm-text); }
+.warn[hidden], .status[hidden], .done-rejected[hidden] { display: none; }
+/* The difficulty warning belongs to the Sync decision only. */
+.stage:not([data-stage="ready"], [data-stage="error"]) .warn { display: none; }
+
+.file-line {
+  display: none;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 10px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--dim);
+}
+.stage:is([data-stage="reading"], [data-stage="ready"], [data-stage="nothing"], [data-stage="syncing"], [data-stage="done"], [data-stage="error"], [data-stage="problem"]) .file-line {
+  display: inline-flex;
+  animation: fade-up 240ms var(--ease-out-quint) both;
+}
+.file-line b { color: var(--paper); font-weight: 600; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.file-line[data-live="live"] .live-dot {
+  background: var(--jade);
+  box-shadow: 0 0 0 4px oklch(0.76 0.08 165 / 0.18);
+}
+.link-btn {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--verm-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.link-btn:hover { text-decoration: underline; }
+.link-btn:focus-visible { outline: 2px solid var(--verm); outline-offset: 2px; }
+.stage[data-stage="syncing"] .link-btn { visibility: hidden; }
+
+.path { display: none; margin: 0; font-size: 12.5px; color: var(--faint); }
+.stage:is([data-stage="empty"], [data-stage="restore"]) .path { display: block; }
+
+/* ── motion ───────────────────────────────────────────────── */
+@keyframes seal-in { from { opacity: 0; transform: scale(1.3) rotate(-10deg); } to { opacity: 1; transform: none; } }
+@keyframes draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes slam {
+  0% { opacity: 0; transform: scale(1.55); }
+  70% { opacity: 1; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes bloom { from { opacity: 0.9; transform: scale(0.7); } to { opacity: 0; transform: scale(1.35); } }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .top { padding: 18px 16px; }
+  .well { width: 240px; height: 240px; }
+  .count { font-size: 88px; }
+  .stamp { inset: 34px; font-size: 88px; }
+  .done-title { font-size: 28px; }
+}

@@ -8,58 +8,65 @@
   <title data-i18n="meta.pageTitle">Artist · Local Reader</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Fraunces needs the `ital` axis: the editorial styling sets
-       font-style: italic on the serif in six places (subtitle, section
-       ledes, week range, summaries, preview standfirst). Without the
-       axis the browser only has the roman and synthesizes a mechanical
-       shear instead of drawing the real italic. -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,500;0,700;1,500;1,700&family=Manrope:wght@400;500;600;700;800&display=swap" />
+  <!-- Only the two seal glyphs; the text= subset keeps the CJK font tiny. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E7%B5%B5%E6%B8%88&display=swap" />
   <link rel="stylesheet" href="/sync/css/styles.css" />
 </head>
 <body>
-  <main class="container">
-    <header>
-      <h1 data-i18n="header.h1">Local Reader</h1>
-      <p class="subtitle" data-i18n="header.subtitle">Read encounters.db locally, then confirm changes in Discord</p>
-    </header>
+  <!-- Brush filters referenced from styles.css. The CSP has no
+       'unsafe-inline', so the page keeps every style in the stylesheet. -->
+  <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="brush-rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7" /><feDisplacementMap in="SourceGraphic" scale="5" /></filter>
+    <filter id="brush-fine"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" /><feDisplacementMap in="SourceGraphic" scale="2.2" /></filter>
+  </svg>
 
-    <section id="auth-state" class="card">
-      <h2 data-i18n="identity.section">1. Identity</h2>
-      <div id="auth-status" data-i18n="identity.loading">Reading link token...</div>
-    </section>
+  <header class="top">
+    <span class="seal" aria-hidden="true">絵</span>
+    <span class="nameplate"><b>Artist</b><span data-i18n="header.h1">Local Reader</span></span>
+    <span id="who" class="who"></span>
+  </header>
 
-    <section id="file-section" class="card" hidden>
-      <h2 data-i18n="file.section">2. Encounters database</h2>
-      <p class="hint" data-i18n="file.hint">
-        Drag-and-drop your <code>encounters.db</code> file from
-        <code>%localappdata%\LOA Logs\</code>. Browser keeps the permission for
-        next visits.
-      </p>
-      <div id="drop-zone" class="drop-zone">
-        <p data-i18n="file.dropHere">Drop <code>encounters.db</code> here</p>
-        <p class="hint" data-i18n="file.or">or</p>
-        <button id="pick-file-btn" type="button" data-i18n="file.pickBtn">Pick file</button>
+  <main id="stage" class="stage" data-stage="boot">
+    <button id="well" class="well" type="button" disabled>
+      <svg class="ring" viewBox="0 0 64 64" aria-hidden="true">
+        <path class="ink" pathLength="100" d="M33 5.5 A26.5 26.5 0 1 1 11.5 16" />
+        <circle class="sweep" cx="32" cy="32" r="26.5" pathLength="100" />
+      </svg>
+      <span class="face face-prompt">
+        <svg class="icon icon-drop" viewBox="0 0 60 60" aria-hidden="true"><path d="M30 8v28M20 26l10 10 10-10" /><path d="M10 38v8a4 4 0 004 4h32a4 4 0 004-4v-8" /></svg>
+        <svg class="icon icon-block" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="10" /><path d="M8.5 8.5l9 9M17.5 8.5l-9 9" /></svg>
+        <span id="prompt-title" class="prompt-title"></span>
+        <span id="prompt-hint" class="prompt-hint"></span>
+      </span>
+      <span class="face face-count">
+        <span id="count" class="count">0</span>
+        <span class="unit" data-i18n="well.unit">clear mới</span>
+      </span>
+      <span class="face face-stamp" aria-hidden="true">
+        <span class="bloom"></span>
+        <span class="stamp">済<small data-i18n="done.stamp">ĐÃ GHI</small></span>
+      </span>
+    </button>
+
+    <div class="actions">
+      <button id="sync-btn" class="btn" type="button" disabled data-i18n="sync.btn">Đồng bộ</button>
+      <div class="done-copy" role="status">
+        <p id="done-title" class="done-title"></p>
+        <p id="done-rejected" class="done-rejected" hidden></p>
+        <p class="done-hint" data-i18n="done.hint">Chi tiết từng nhân vật xem trong /raid-status trên Discord</p>
       </div>
-      <div id="file-meta" class="meta" hidden></div>
-      <div id="file-live-status" class="live-status" aria-live="polite" hidden></div>
-    </section>
+    </div>
 
-    <section id="preview-section" class="card" hidden>
-      <h2 data-i18n="preview.section">3. Current raid-week preview</h2>
-      <p class="hint week-range" id="preview-week-range" hidden></p>
-      <div id="preview-stats" class="preview-stats" hidden></div>
-      <div id="preview-output" data-i18n="preview.loadingWasm">Loading SQLite WASM (one-time, cached after)...</div>
-    </section>
-
-    <section id="sync-section" class="card" hidden>
-      <h2 data-i18n="sync.section">4. Send preview to Discord</h2>
-      <p class="hint" data-i18n="sync.hint">
-        Sends only the small delta preview to Discord. Review and apply it from the private Local Sync console.
-      </p>
-      <button id="sync-btn" type="button" disabled data-i18n="sync.btnReady">Send to Discord</button>
-      <div id="sync-output" class="meta" hidden></div>
-    </section>
-
+    <p id="warn" class="warn" hidden></p>
+    <p id="status" class="status" aria-live="polite" hidden></p>
+    <p class="file-line">
+      <span class="live-dot" aria-hidden="true"></span>
+      <b>encounters.db</b>
+      <span id="file-meta"></span>
+      <button id="change-file" class="link-btn" type="button" data-i18n="file.change">Đổi file</button>
+    </p>
+    <p class="path" data-i18n="file.path">%localappdata%\LOA Logs\encounters.db</p>
   </main>
 
   <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is selected.

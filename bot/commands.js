@@ -77,6 +77,7 @@ const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createRaidTaskCommand } = require("./handlers/raid/task");
 const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const { createLocalSyncDiscordConsole } = require("./handlers/local-sync/discord-console");
+const { applyPreviewJob } = require("./services/local-sync");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
@@ -592,7 +593,6 @@ const {
 const {
   handleLocalSyncButton,
   handleLocalSyncRosterSelect,
-  notifyPreviewReady: notifyLocalSyncPreviewReady,
 } = createLocalSyncDiscordConsole({
   EmbedBuilder,
   ActionRowBuilder,
@@ -610,6 +610,25 @@ const {
   releaseAutoManageSyncSlot,
   openRaidStatusSession: handleStatusCommand,
 });
+
+/**
+ * Apply a preview job for the Local Reader web page. The page applies from
+ * the tab that holds the link, so the token keeps its full lifetime for the
+ * next clear of the session.
+ * @param {string} jobId
+ * @param {string} discordId - job owner, from the verified link token
+ * @returns {Promise<object>} the applyPreviewJob outcome
+ */
+function applyLocalSyncPreviewJob(jobId, discordId) {
+  return applyPreviewJob(jobId, discordId, {
+    UserModel: User,
+    applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
+    shrinkSourceToken: false,
+  });
+}
 
 const raidScheduleCommandHandlers = createRaidScheduleCommand({
   EmbedBuilder,
@@ -975,7 +994,7 @@ module.exports = {
   handleRaidGoldEarnerButton,
   handleLocalSyncButton,
   handleLocalSyncRosterSelect,
-  notifyLocalSyncPreviewReady,
+  applyLocalSyncPreviewJob,
   loadMonitorChannelCache,
   getCachedMonitorChannelId,
   startRaidChannelScheduler,

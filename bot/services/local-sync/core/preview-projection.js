@@ -1,10 +1,11 @@
 /**
- * services/local-sync/http/endpoints/preview-summary-endpoint.js
- * Pre-sync diff computation for the web companion's "currently synced
- * vs pending" preview. Pure projection over (accounts × deltaBuckets)
- * - no DB writes - so the user can preview the impact before clicking
- * Apply. Mirrors `summarizeRaidProgress` from utils/raid/common so the
- * percent matches what /raid-status shows post-sync.
+ * services/local-sync/core/preview-projection.js
+ * Projects a preview job's deltas onto the roster: the gates it would
+ * change, the gold it would add and the week completion after it. Pure
+ * computation over (accounts × deltaBuckets), no DB access. The preview job
+ * stores the result and the Discord Local Sync card renders it. Mirrors
+ * `summarizeRaidProgress` from utils/raid/common so the percent matches what
+ * /raid-status shows post-sync.
  */
 
 "use strict";
@@ -12,38 +13,26 @@
 const {
   COMPANION_SCOPE,
   bucketizeLocalSyncDeltas,
-  filterPartyDeltasBySourceDeltas,
-  findRegisteredPartyTargets,
   isModeAllowedForCompanionScope,
   normalizeLocalSyncDifficulty,
-  normalizePreviewDeltas,
-} = require("../..");
-const { assertPartyTargetFanout } = require("../../core/party-policy");
-const {
-  createJsonSender,
-} = require("../json");
-const {
-  requireCurrentLocalSyncUser,
-} = require("../request-gates");
-const { readAuthenticatedPreviewRequest } = require("./preview-request");
+} = require("..");
 const {
   RAID_REQUIREMENTS,
   getGatesForRaid,
   getGateGoldParts,
-} = require("../../../../domain/raid-catalog");
-const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
+} = require("../../../domain/raid-catalog");
+const { normalizeName, toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   countedGoldEarners,
   getGoldOverride,
   getStatusRaidsForCharacter,
-} = require("../../../../utils/raid/common/character");
-const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
+} = require("../../../utils/raid/common/character");
 const {
   buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
   isCurrentWeekCompletion,
   resolveBucketModePreference,
-} = require("../../core/apply/apply-roster");
+} = require("./apply/apply-roster");
 
 const RAID_KEYS = Object.keys(RAID_REQUIREMENTS);
 const RAID_ORDER_INDEX = new Map(RAID_KEYS.map((raidKey, index) => [raidKey, index]));
@@ -481,137 +470,7 @@ function projectSummary(
   return buildProjectionResponse(summary);
 }
 
-/**
- * Registered party members a Full preview would reach, with the raids and
- * gates each shares with a source clear. Owner IDs stay on the server · the
- * browser only learns which names from its own log are registered.
- * @param {object[]} partyDeltas - normalized party deltas tied to source clears
- * @param {object} options
- * @param {object} options.User - User model for the roster lookup
- * @param {number} options.currentWeekStartMs - weekly reset floor
- * @returns {Promise<Array<{charName: string, raids: Array<{raidKey: string, modeKey: string, gates: string[]}>}>>}
- */
-async function summarizeRegisteredParty(partyDeltas, { User, currentWeekStartMs }) {
-  const targets = await findRegisteredPartyTargets(partyDeltas, { UserModel: User });
-  return targets
-    .map((target) => ({
-      charName: target.charName,
-      raids: bucketizeCurrentWeekDeltas(target.deltas, currentWeekStartMs)
-        .map((bucket) => ({
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: getGatesForRaid(bucket.raidKey).slice(0, bucket.gateIndex + 1),
-        }))
-        .sort((a, b) => RAID_ORDER_INDEX.get(a.raidKey) - RAID_ORDER_INDEX.get(b.raidKey)),
-    }))
-    .filter((member) => member.raids.length > 0);
-}
-
-/**
- * Build the `POST /api/local-sync/preview-summary` handler. Pre-sync
- * companion stats: gold delta, completion projection, raid status list,
- * last-sync timestamps, and the registered party members a Full sync would
- * also reach. Lets the user preview post-sync changes before clicking the
- * Sync button.
- *
- * Auth chain mirrors the sync endpoint - Bearer JWT, verify, Mongo state
- * check (localSyncEnabled, isCurrentStoredToken). Pure read; no writes.
- */
-function createPreviewSummaryEndpoint({ User }) {
-  if (!User) throw new Error("[preview-summary] User model required");
-
-  const send = createJsonSender({ methods: "POST, OPTIONS" });
-
-  return async function handlePreviewSummary(req, res) {
-    const request = await readAuthenticatedPreviewRequest({ req, res, send });
-    if (!request) return;
-    const { token, discordId, payload, scope, scopeExplicit, body } = request;
-
-    // Normalized like the preview job's deltas, so the preview counts only
-    // clears the job would store and shares its size cap.
-    let deltas;
-    try {
-      deltas = normalizePreviewDeltas(Array.isArray(body?.deltas) ? body.deltas : []);
-    } catch (err) {
-      send(res, 400, { ok: false, error: err?.message || "deltas invalid" });
-      return;
-    }
-
-    let userDoc;
-    try {
-      userDoc = await User.findOne({ discordId })
-        .select("autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt lastLocalSyncAt lastAutoManageSyncAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.isGoldEarner accounts.characters.assignedRaids")
-        .lean();
-    } catch (err) {
-      console.error("[preview-summary] state read failed:", err?.message || err);
-      send(res, 500, { ok: false, error: "state read failed" });
-      return;
-    }
-
-    if (!userDoc) {
-      send(res, 200, {
-        ok: true,
-        scope,
-        goldDelta: { total: 0, boundTotal: 0, byChar: [] },
-        completion: { totalRaids: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
-        changeDetails: [],
-        charsAfterSync: [],
-        lastSync: { localSyncAt: null, autoManageSyncAt: null },
-      });
-      return;
-    }
-    if (!requireCurrentLocalSyncUser({
-      userDoc,
-      token,
-      payload,
-      scopeExplicit,
-      res,
-      send,
-    })) return;
-
-    // Same checks the preview job applies, so the preview names only party
-    // members the stored job would accept.
-    let partyDeltas;
-    try {
-      partyDeltas = scope === COMPANION_SCOPE.full
-        ? filterPartyDeltasBySourceDeltas(deltas, normalizePreviewDeltas(body?.partyDeltas || []))
-        : [];
-      assertPartyTargetFanout(partyDeltas);
-    } catch (err) {
-      send(res, 400, { ok: false, error: err?.message || "party deltas invalid" });
-      return;
-    }
-
-    const currentWeekStartMs = getCurrentResetStartMs();
-    let party;
-    try {
-      party = await summarizeRegisteredParty(partyDeltas, { User, currentWeekStartMs });
-    } catch (err) {
-      console.error("[preview-summary] party lookup failed:", err?.message || err);
-      send(res, 500, { ok: false, error: "party lookup failed" });
-      return;
-    }
-    const buckets = bucketizeCurrentWeekDeltas(deltas, currentWeekStartMs);
-    const summary = projectSummary(userDoc.accounts || [], buckets, {
-      scope,
-      currentWeekStartMs,
-    });
-
-    send(res, 200, {
-      ok: true,
-      scope,
-      ...summary,
-      party,
-      lastSync: {
-        localSyncAt: Number(userDoc.lastLocalSyncAt) || null,
-        autoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || null,
-      },
-    });
-  };
-}
-
 module.exports = {
   bucketizeCurrentWeekDeltas,
-  createPreviewSummaryEndpoint,
   projectSummary,
 };

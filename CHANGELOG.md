@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-29
+
+### Changed
+- Local Reader syncs straight from the page: drop `encounters.db`, press **Đồng bộ**, and Artist writes the new clears. The pending-preview DM and the trip back to Discord are gone; a preview left pending (after a transient write error, say) can still be synced from `/raid-status` → `🗃️ Local Sync`.
+- The Local Reader page is one quiet screen: a drop well, the count of new clears, one Sync button and a 済 stamp when it is done, with scene transitions that stay still under reduced motion. A difficulty change that would replace stored progress shows one warning line above the button.
+- Retrying after a transient write error reuses the same preview, so party members still receive the Gates the first attempt wrote. A sync from the page keeps the 30-minute link instead of cutting it to 60 seconds.
+- `/raid-status`, `/raid-auto-manage`, `/raid-help`, the pinned welcome card and the README describe the page flow in vi, jp and en.
+
 ## 2026-09-28
 
 ### Changed

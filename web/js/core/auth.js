@@ -36,93 +36,88 @@ export function readAndScrubLocalSyncToken(windowRef = window) {
   return token;
 }
 
-function renderAuthStatus({ authStatus, authState, t, escapeHtml }) {
-  if (!authState) return;
-  const { kind, expSec, username, avatarUrl } = authState;
-  if (kind === "noToken") {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.noToken")}</span> ${t("identity.noTokenHint")}`;
-    return;
-  }
-  if (kind === "malformed") {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.malformed")}</span> ${t("identity.malformedHint")}`;
-    return;
-  }
-
-  const nowSec = Math.floor(Date.now() / 1000);
-  const remSec = Math.max(0, expSec - nowSec);
-  if (expSec && remSec === 0) {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.expired")}</span> ${t("identity.expiredHint")}`;
-    return;
-  }
-
-  const validStr = remSec >= 60
-    ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
-    : t("identity.tokenValidSec", { n: remSec });
-  let identityPill;
-  if (username || avatarUrl) {
-    const avatarImg = avatarUrl
-      ? `<img class="auth-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
-      : `<span class="auth-avatar auth-avatar--placeholder">${escapeHtml((username || "?").slice(0, 1).toUpperCase())}</span>`;
-    const nameSpan = username
-      ? `<span class="auth-name">${escapeHtml(username)}</span>`
-      : "";
-    const linkedLabel = `<span class="auth-linked-label">${escapeHtml(t("identity.linked"))}</span>`;
-    identityPill = `<span class="auth-pill auth-identity-pill"><span class="auth-status-dot"></span>${avatarImg}<span class="auth-pill-text">${linkedLabel}${nameSpan}</span></span>`;
-  } else {
-    identityPill = `<span class="auth-pill auth-identity-pill"><span class="auth-status-dot"></span><span class="auth-pill-text"><span class="auth-name">${escapeHtml(t("identity.linkedAnonymous"))}</span></span></span>`;
-  }
-
-  const timerClass = remSec < 60
-    ? "auth-pill auth-timer-pill auth-timer-pill--warn"
-    : "auth-pill auth-timer-pill";
-  const timerStr = `<span class="${timerClass}"><span class="auth-timer-icon">&#9201;</span><span>${escapeHtml(validStr)}</span></span>`;
-  authStatus.innerHTML = `<div class="auth-row">${identityPill}${timerStr}</div>`;
+function nowSec() {
+  return Math.floor(Date.now() / 1000);
 }
 
+// The header line only names the linked user and the time left on the link.
+// Failed states render nothing here; the page shows them in the well.
+function renderWho({ whoEl, authState, t, escapeHtml }) {
+  if (authState.kind !== "ok") {
+    whoEl.innerHTML = "";
+    delete whoEl.dataset.tone;
+    return;
+  }
+  const remSec = Math.max(0, authState.expSec - nowSec());
+  const validity = remSec >= 60
+    ? t("identity.linkValid", { n: Math.floor(remSec / 60) })
+    : t("identity.linkValidSec", { n: remSec });
+  const name = authState.username
+    ? `<b>${escapeHtml(authState.username)}</b>`
+    : escapeHtml(t("identity.linkedAnonymous"));
+  whoEl.innerHTML = `${name} · ${escapeHtml(validity)}`;
+  if (remSec < 60) whoEl.dataset.tone = "warn";
+  else delete whoEl.dataset.tone;
+}
+
+/**
+ * Resolve the link token into an auth state, render the header line and
+ * expose the token to the page while the link is valid.
+ * @param {object} options
+ * @param {string|null} options.token - raw link token
+ * @param {object|null} options.payload - decoded token payload
+ * @param {HTMLElement} options.whoEl - header element for the identity line
+ * @param {Function} options.t - i18n lookup
+ * @param {Function} options.escapeHtml
+ * @param {Function} [options.onExpire] - called once when a valid link runs out
+ * @returns {{readonly state: {kind: "noToken"|"malformed"|"expired"|"ok"}}}
+ */
 export function bootstrapAuthSession({
   token,
   payload,
-  authStatus,
-  fileSection,
+  whoEl,
   t,
   escapeHtml,
+  onExpire = null,
   windowRef = window,
   setIntervalFn = setInterval,
+  clearIntervalFn = clearInterval,
 }) {
-  let authState = null;
-
-  function render() {
-    renderAuthStatus({ authStatus, authState, t, escapeHtml });
-  }
-
+  let authState;
   if (!token) {
     authState = { kind: "noToken" };
-    render();
   } else if (!payload || !payload.discordId) {
     authState = { kind: "malformed" };
-    render();
   } else {
     const expSec = payload.exp || 0;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const identityFields = {
+    authState = {
+      kind: expSec && expSec < nowSec() ? "expired" : "ok",
+      expSec,
       username: typeof payload.username === "string" ? payload.username : null,
-      avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : null,
     };
-    authState = { kind: "ok", expSec, discordId: payload.discordId, ...identityFields };
-    render();
+  }
 
-    if (!(expSec && expSec < nowSec)) {
-      setIntervalFn(render, 1000);
-      windowRef.__artistSyncToken = token;
-      windowRef.__artistDiscordId = payload.discordId;
-      if (fileSection) fileSection.hidden = false;
-    }
+  const render = () => renderWho({ whoEl, authState, t, escapeHtml });
+  render();
+
+  if (authState.kind === "ok") {
+    windowRef.__artistSyncToken = token;
+    windowRef.__artistDiscordId = payload.discordId;
+    const timer = setIntervalFn(() => {
+      if (authState.expSec && authState.expSec <= nowSec()) {
+        authState = { kind: "expired" };
+        clearIntervalFn(timer);
+        render();
+        if (onExpire) onExpire();
+        return;
+      }
+      render();
+    }, 1000);
   }
 
   return {
     get state() {
       return authState;
     },
-    render,
   };
 }

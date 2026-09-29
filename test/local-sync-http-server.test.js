@@ -69,9 +69,7 @@ test("local-sync web server serves browser helper modules", async () => {
     for (const [route, expectedExport] of [
       ["/sync/js/core/auth.js", "bootstrapAuthSession"],
       ["/sync/js/core/html.js", "escapeHtml"],
-      ["/sync/js/core/format.js", "formatBytes"],
       ["/sync/js/sync/file/file-change-monitor.js", "readFileRevision"],
-      ["/sync/js/sync/render/preview-renderer.js", "renderDiffPage"],
       ["/sync/js/sync/sqlite-schema.js", "resolveEncounterSource"],
     ]) {
       const resp = await fetch(`${baseUrl}${route}`);
@@ -80,21 +78,6 @@ test("local-sync web server serves browser helper modules", async () => {
       const body = await resp.text();
       assert.match(body, new RegExp(`export (?:async )?function ${expectedExport}`));
     }
-  } finally {
-    await stop();
-  }
-});
-
-test("local-sync preview escapes SQLite schema metadata before innerHTML", async () => {
-  const { baseUrl, stop } = await startTestServer();
-  try {
-    const resp = await fetch(`${baseUrl}/sync/js/sync/render/preview-renderer.js`);
-    assert.equal(resp.status, 200);
-    const body = await resp.text();
-    assert.match(
-      body,
-      /escapeHtml\(t\("preview\.schemaDebug", meta\.schemaDebug\)\)/
-    );
   } finally {
     await stop();
   }
@@ -223,6 +206,7 @@ test("Local Reader startup failure is logged and degraded instead of rejecting g
   const companion = startLocalSyncWebCompanion({
     rootDir: path.join(__dirname, ".."),
     User: {},
+    applyPreviewJob: async () => ({}),
     log: {
       log() {},
       error(...args) {

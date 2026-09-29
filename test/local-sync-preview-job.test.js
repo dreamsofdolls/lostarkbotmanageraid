@@ -16,9 +16,6 @@ const {
   createPreviewJobEndpoint,
 } = require("../bot/services/local-sync/http/endpoints/preview-job-endpoint");
 const {
-  createPreviewSummaryEndpoint,
-} = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
-const {
   createLocalSyncApiHandlers,
 } = require("../bot/app/local-sync-web");
 
@@ -81,10 +78,12 @@ function makeAkiUser(discordId, token) {
   };
 }
 
-test("web API exposes preview handoff but not the legacy direct-write route", () => {
-  const handlers = createLocalSyncApiHandlers({ User: {} });
+test("web API stores and applies preview jobs but keeps no direct-write route", () => {
+  const handlers = createLocalSyncApiHandlers({ User: {}, applyPreviewJob: async () => ({}) });
 
   assert.equal(typeof handlers["POST /api/local-sync/preview-job"], "function");
+  assert.equal(typeof handlers["POST /api/local-sync/apply"], "function");
+  assert.equal(handlers["POST /api/local-sync/preview-summary"], undefined);
   assert.equal(handlers["POST /api/raid-sync"], undefined);
 });
 
@@ -281,11 +280,9 @@ test("concurrent preview creation is serialized per Discord user", async () => {
   assert.deepEqual(events, ["update", "create", "update", "create"]);
 });
 
-test("preview-job endpoint acknowledges durable storage before Discord delivery", async () => {
+test("preview-job endpoint stores the cleared deltas and answers with the job id", async () => {
   const token = mintToken("u1", undefined, "vi");
   const created = [];
-  const notifications = [];
-  const backgroundTasks = [];
   const PreviewModel = {
     async updateMany() {},
     async create(doc) {
@@ -304,7 +301,6 @@ test("preview-job endpoint acknowledges durable storage before Discord delivery"
               autoManageEnabled: false,
               lastLocalSyncToken: token,
               lastLocalSyncTokenExpAt: 9_999_999_999,
-              language: "vi",
               accounts: [{
                 accountName: "Roster",
                 characters: [{
@@ -321,15 +317,7 @@ test("preview-job endpoint acknowledges durable storage before Discord delivery"
       };
     },
   };
-  const handler = createPreviewJobEndpoint({
-    User,
-    PreviewModel,
-    notifyPreviewReady: async (payload) => {
-      notifications.push(payload);
-      return { delivered: true, channel: "dm" };
-    },
-    scheduleTask: (task) => backgroundTasks.push(task),
-  });
+  const handler = createPreviewJobEndpoint({ User, PreviewModel });
   const res = makeRes();
 
   await handler(makeReq(token, {
@@ -341,11 +329,8 @@ test("preview-job endpoint acknowledges durable storage before Discord delivery"
 
   assert.equal(res.status, 200);
   assert.equal(res.json().ok, true);
-  assert.deepEqual(res.json().delivery, {
-    delivered: false,
-    channel: "stored",
-    pending: true,
-  });
+  assert.equal(res.json().jobId, created[0].jobId);
+  assert.equal(res.json().delivery, undefined);
   assert.equal(created.length, 1);
   assert.equal(created[0].discordId, "u1");
   assert.equal(created[0].scope, "full");
@@ -354,65 +339,6 @@ test("preview-job endpoint acknowledges durable storage before Discord delivery"
   assert.deepEqual(created[0].projection.changeDetails[0].raids, [
     { raidKey: "armoche", modeKey: "normal", gates: ["G1"] },
   ]);
-  assert.equal(notifications.length, 0, "Discord must not delay the HTTP acknowledgement");
-  assert.equal(backgroundTasks.length, 1);
-  await backgroundTasks[0]();
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0].jobId, created[0].jobId);
-  assert.equal(notifications[0].discordId, "u1");
-  assert.equal(notifications[0].lang, "vi");
-  assert.equal(notifications[0].job.jobId, created[0].jobId);
-  assert.equal(notifications[0].userDoc.discordId, "u1");
-});
-
-test("preview-job endpoint stores the job when Discord DMs are unavailable", async () => {
-  const token = mintToken("u2", undefined, "en");
-  const backgroundTasks = [];
-  const warnings = [];
-  const PreviewModel = {
-    async updateMany() {},
-    async create(doc) { return doc; },
-  };
-  const User = {
-    findOne() {
-      return {
-        select: () => ({
-          lean: async () => ({
-            discordId: "u2",
-            localSyncEnabled: true,
-            lastLocalSyncToken: token,
-            lastLocalSyncTokenExpAt: 9_999_999_999,
-            language: "en",
-            accounts: [],
-          }),
-        }),
-      };
-    },
-  };
-  const handler = createPreviewJobEndpoint({
-    User,
-    PreviewModel,
-    notifyPreviewReady: async () => {
-      throw new Error("Cannot send messages to this user");
-    },
-    scheduleTask: (task) => backgroundTasks.push(task),
-    log: {
-      error() {},
-      warn(...args) { warnings.push(args.join(" ")); },
-    },
-  });
-  const res = makeRes();
-
-  await handler(makeReq(token, { deltas: [validDelta()] }), res, { query: {} });
-
-  assert.equal(res.status, 200);
-  assert.equal(res.json().ok, true);
-  assert.equal(res.json().delivery.delivered, false);
-  assert.equal(res.json().delivery.channel, "stored");
-  assert.equal(res.json().delivery.pending, true);
-  assert.equal(backgroundTasks.length, 1);
-  await backgroundTasks[0]();
-  assert.match(warnings.join("\n"), /Cannot send messages/);
 });
 
 test("preview-job endpoint logs a storage failure and answers 500 without the driver message", async () => {
@@ -480,84 +406,9 @@ test("preview-job endpoint keeps a party fan-out rejection as a 400 with its mes
   assert.deepEqual(errors, [], "a rejected request is not a server fault");
 });
 
-test("preview-summary names registered party members tied to a source clear, without their owners", async () => {
-  const token = mintToken("u1", undefined, "vi");
-  const partyQueries = [];
-  const User = {
-    findOne() {
-      return {
-        select: () => ({
-          lean: async () => ({
-            discordId: "u1",
-            localSyncEnabled: true,
-            lastLocalSyncToken: token,
-            lastLocalSyncTokenExpAt: 9_999_999_999,
-            accounts: [{
-              accountName: "Roster",
-              characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
-            }],
-          }),
-        }),
-      };
-    },
-    find(filter) {
-      partyQueries.push(filter);
-      return {
-        select() { return this; },
-        collation() { return this; },
-        // Stored in another case: the lookup matches names case-insensitively.
-        async lean() {
-          return [{ discordId: "u2", accounts: [{ accountName: "Other", characters: [{ name: "bao" }] }] }];
-        },
-      };
-    },
-  };
-  const handler = createPreviewSummaryEndpoint({ User });
-  const res = makeRes();
-  const source = validDelta();
-
-  await handler(makeReq(token, {
-    deltas: [source],
-    partyDeltas: [
-      { ...source, charName: "Bao", sourceCharName: "Aki" },
-      { ...source, charName: "Stranger", sourceCharName: "Aki" },
-      // No source clear carries this timestamp, so it never reaches the lookup.
-      { ...source, charName: "Forged", sourceCharName: "Aki", lastClearMs: source.lastClearMs - 1 },
-    ],
-  }), res, { query: {} });
-
-  assert.equal(res.status, 200);
-  assert.deepEqual(res.json().party, [{
-    charName: "Bao",
-    raids: [{ raidKey: "armoche", modeKey: "normal", gates: ["G1"] }],
-  }]);
-  assert.deepEqual(partyQueries[0]["accounts.characters.name"].$in, ["Bao", "Stranger"]);
-  assert.doesNotMatch(res.body, /u2/);
-});
-
-test("preview-summary counts only the clears a preview job would store", async () => {
-  const token = mintToken("u5", undefined, "en");
-  const handler = createPreviewSummaryEndpoint({ User: makeAkiUser("u5", token) });
-
-  const notCleared = makeRes();
-  await handler(makeReq(token, {
-    deltas: [validDelta({ cleared: "false" })],
-  }), notCleared, { query: {} });
-  assert.equal(notCleared.status, 200);
-  assert.deepEqual(notCleared.json().changes, { chars: 0, raids: 0, gates: 0 });
-
-  // The Local Reader sends `cleared: 1`, which both endpoints accept.
-  const cleared = makeRes();
-  await handler(makeReq(token, {
-    deltas: [validDelta({ cleared: 1 })],
-  }), cleared, { query: {} });
-  assert.equal(cleared.status, 200);
-  assert.deepEqual(cleared.json().changes, { chars: 1, raids: 1, gates: 1 });
-});
-
-test("preview-summary rejects more deltas than a preview job accepts", async () => {
+test("preview-job endpoint rejects more deltas than a preview job accepts", async () => {
   const token = mintToken("u6", undefined, "en");
-  const handler = createPreviewSummaryEndpoint({ User: makeAkiUser("u6", token) });
+  const handler = createPreviewJobEndpoint({ User: makeAkiUser("u6", token) });
   const res = makeRes();
 
   await handler(makeReq(token, {

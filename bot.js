@@ -27,7 +27,7 @@ const raidCommands = require("./bot/commands");
 const {
   commands,
   handleRaidChannelMessage,
-  notifyLocalSyncPreviewReady,
+  applyLocalSyncPreviewJob,
   loadMonitorChannelCache,
   getCachedMonitorChannelId,
   startRaidChannelScheduler,
@@ -121,7 +121,7 @@ async function startBot() {
   localSyncWeb = startLocalSyncWebCompanion({
     rootDir: __dirname,
     User,
-    notifyPreviewReady: (payload) => notifyLocalSyncPreviewReady(client, payload),
+    applyPreviewJob: applyLocalSyncPreviewJob,
   });
 
   async function handleClientReady(readyClient) {

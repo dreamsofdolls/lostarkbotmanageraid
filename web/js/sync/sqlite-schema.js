@@ -1,5 +1,3 @@
-import { escapeHtml } from "/sync/js/core/html.js";
-
 export function resolveEncounterSource({ previewCols, encounterCols }) {
   const previewBossCol = pickColumn(previewCols, ["current_boss", "current_boss_name"]);
   const previewTsCol = pickColumn(previewCols, ["fight_start", "last_combat_packet"]);
@@ -38,12 +36,6 @@ function pickColumn(cols, names) {
 
 export function quoteIdent(name) {
   return `"${String(name).replace(/"/g, '""')}"`;
-}
-
-export function formatSchemaPreview(tableName, cols) {
-  if (!cols || cols.size === 0) return `<code>${escapeHtml(tableName)}</code>: not found`;
-  const colPreview = [...cols].slice(0, 16).map(escapeHtml).join(", ");
-  return `<code>${escapeHtml(tableName)}</code>: ${colPreview}${cols.size > 16 ? "..." : ""}`;
 }
 
 // PRAGMA-based column lister. Returns a Set of column names present on

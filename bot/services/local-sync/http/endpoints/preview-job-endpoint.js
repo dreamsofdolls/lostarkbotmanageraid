@@ -1,10 +1,9 @@
 /**
  * POST /api/local-sync/preview-job
  *
- * The browser remains the local-file reader, but it no longer applies
- * raid progress directly. It stores a short-lived preview job and asks the
- * Discord surface to deliver the confirmation UI. The apply path is owned by
- * a Discord button whose user identity is checked again at click time.
+ * Stores the browser's delta preview as a short-lived job. The Local Reader
+ * applies it next through POST /api/local-sync/apply; a job left pending can
+ * still be applied from the /raid-status Local Sync view.
  */
 
 "use strict";
@@ -18,7 +17,7 @@ const { assertPartyTargetFanout } = require("../../core/party-policy");
 const {
   bucketizeCurrentWeekDeltas,
   projectSummary,
-} = require("./preview-summary-endpoint");
+} = require("../../core/preview-projection");
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const {
   createJsonSender,
@@ -27,29 +26,6 @@ const {
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
 const { readAuthenticatedPreviewRequest } = require("./preview-request");
-
-const STORED_DELIVERY = Object.freeze({
-  delivered: false,
-  channel: "stored",
-  error: "discord delivery unavailable",
-});
-
-const PENDING_DELIVERY = Object.freeze({
-  delivered: false,
-  channel: "stored",
-  pending: true,
-});
-
-function normalizeDeliveryResult(result) {
-  if (result?.delivered) {
-    return { delivered: true, channel: result.channel || "dm" };
-  }
-  return {
-    delivered: false,
-    channel: "stored",
-    error: String(result?.error || "discord delivery unavailable"),
-  };
-}
 
 function buildStoredProjection(summary) {
   return {
@@ -63,44 +39,17 @@ function buildStoredProjection(summary) {
   };
 }
 
-function plainJobSnapshot(job) {
-  return typeof job?.toObject === "function" ? job.toObject() : job;
-}
-
-function schedulePreviewDelivery({
-  notifyPreviewReady,
-  payload,
-  scheduleTask,
-  log,
-}) {
-  if (typeof notifyPreviewReady !== "function") return false;
-  const run = async () => {
-    try {
-      const delivery = normalizeDeliveryResult(await notifyPreviewReady(payload));
-      if (!delivery.delivered) {
-        log.warn(
-          "[preview-job-endpoint] Discord delivery unavailable; preview remains stored:",
-          delivery.error
-        );
-      }
-    } catch (err) {
-      log.warn("[preview-job-endpoint] Discord delivery failed:", err?.message || err);
-    }
-  };
-  try {
-    scheduleTask(run);
-    return true;
-  } catch (err) {
-    log.warn("[preview-job-endpoint] Discord delivery scheduling failed:", err?.message || err);
-    return false;
-  }
-}
-
+/**
+ * Build the `POST /api/local-sync/preview-job` handler.
+ * @param {object} deps
+ * @param {object} deps.User - User model
+ * @param {object|null} [deps.PreviewModel] - preview job model override
+ * @param {object} [deps.log]
+ * @returns {(req: object, res: object) => Promise<void>}
+ */
 function createPreviewJobEndpoint({
   User,
   PreviewModel = null,
-  notifyPreviewReady = null,
-  scheduleTask = (task) => setImmediate(task),
   log = console,
 }) {
   if (!User) throw new Error("[preview-job-endpoint] User model required");
@@ -140,7 +89,7 @@ function createPreviewJobEndpoint({
     try {
       userDoc = await User.findOne({ discordId })
         .select(
-          "autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt language " +
+          "autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt " +
           "accounts.accountName accounts.characters.name accounts.characters.class " +
           "accounts.characters.itemLevel accounts.characters.isGoldEarner accounts.characters.assignedRaids"
         )
@@ -181,35 +130,11 @@ function createPreviewJobEndpoint({
       return;
     }
 
-    const notificationPayload = {
-      jobId: job.jobId,
-      discordId,
-      lang: payload.lang || userDoc?.language || "vi",
-      // The endpoint has just loaded both snapshots. Reusing them lets the DM
-      // path skip two immediate MongoDB reads without weakening apply-time
-      // validation, which reloads the current user again when the button wins.
-      job: plainJobSnapshot(job),
-      userDoc,
-    };
-    const hasNotifier = typeof notifyPreviewReady === "function";
     send(res, 200, {
       ok: true,
       jobId: job.jobId,
       expiresAt: new Date(job.expiresAt).toISOString(),
-      delivery: hasNotifier ? PENDING_DELIVERY : STORED_DELIVERY,
     });
-
-    // A durable preview is the HTTP success boundary. Discord REST and console
-    // rendering continue after res.end(), so slow or blocked DMs cannot hold
-    // the Local Reader button in a loading state.
-    if (hasNotifier) {
-      schedulePreviewDelivery({
-        notifyPreviewReady,
-        payload: notificationPayload,
-        scheduleTask,
-        log,
-      });
-    }
   };
 }
 

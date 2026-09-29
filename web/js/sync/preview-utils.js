@@ -12,7 +12,6 @@ let RAID_MODE_LABELS = {};
 
 let RAID_GATES = {};
 let CLASS_BY_ID = {};
-let CLASS_ICON_BY_LABEL = {};
 let DIFFICULTY_TO_MODE_KEY = {};
 let RAID_MODE_ILVL = {};
 let RAID_MODE_BASE = {};
@@ -21,22 +20,6 @@ let RAID_ORDER = [];
 let MODE_ORDER = [];
 let catalogLoaded = false;
 const MAX_ENCOUNTER_PARTICIPANTS = 16;
-
-function normalizeClassLabel(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function buildClassIconByLabel(classesById) {
-  const byLabel = {};
-  for (const info of Object.values(classesById || {})) {
-    const label = normalizeClassLabel(info?.label);
-    if (label && info?.icon) {
-      byLabel[label] = info.icon;
-      byLabel[label.replace(/\s+/g, "")] = info.icon;
-    }
-  }
-  return byLabel;
-}
 
 function buildRaidCatalogIndexes(raids) {
   const indexes = {
@@ -90,7 +73,6 @@ export function setCatalog(rawCatalog = {}) {
   RAID_ORDER = configuredOrder(rawCatalog.raidOrder, Object.keys(raids));
   MODE_ORDER = configuredOrder(rawCatalog.modeOrder, Object.keys(indexes.modeLabels));
   CLASS_BY_ID = rawCatalog.classesById || {};
-  CLASS_ICON_BY_LABEL = buildClassIconByLabel(CLASS_BY_ID);
   DIFFICULTY_TO_MODE_KEY = rawCatalog.difficultyToModeKey || {};
   catalogLoaded = true;
   return rawCatalog;
@@ -107,10 +89,6 @@ export async function loadCatalog(fetcher = globalThis.fetch) {
   }
   const data = await resp.json();
   setCatalog(data?.catalog || data);
-}
-
-export function getClassIconForLabel(classLabel) {
-  return CLASS_ICON_BY_LABEL[normalizeClassLabel(classLabel)] || "";
 }
 
 export function normalizeDifficulty(raw) {
@@ -303,26 +281,6 @@ export function bucketize(rows) {
   return [...map.values()];
 }
 
-/**
- * Surface the bosses present in raw rows that didn't map to any known
- * raid. Distinct from "failed encounters" (cleared=0) - unmapped means
- * the boss exists but the mapping table has no corresponding raid and gate.
- * Returned as a sorted array of unique boss names so the UI can
- * list them for "report this" CTAs.
- */
-export function findUnmappedBosses(rows) {
-  const set = new Set();
-  for (const row of rows) {
-    const [boss, , cleared] = row;
-    if (Number(cleared) !== 1) continue;
-    if (!boss) continue;
-    if (!getRaidGateForBoss(boss)) {
-      set.add(boss);
-    }
-  }
-  return [...set].sort();
-}
-
 // ----- Roster diff (Phase 7: roster-grouped preview) -----
 
 export function currentWeeklyResetStartMs(now = new Date()) {
@@ -485,22 +443,6 @@ export function buildActionableBucketKeySet(
   return keys;
 }
 
-export function collectDiffStateCounts(scope) {
-  const counts = {};
-  const accounts = Array.isArray(scope) ? scope : (scope ? [scope] : []);
-  for (const account of accounts) {
-    for (const character of account?.characters || []) {
-      for (const cell of character?.cells || []) {
-        for (const gate of cell.gates || []) {
-          const state = cell.states?.[gate];
-          if (state) counts[state] = (counts[state] || 0) + 1;
-        }
-      }
-    }
-  }
-  return counts;
-}
-
 function normalizeAllowedModes(allowedModeKeys) {
   if (!Array.isArray(allowedModeKeys)) return null;
   return new Set(allowedModeKeys
@@ -570,19 +512,13 @@ function buildCharacterCell({
     }),
   ]));
   if (!Object.values(states).some((state) => state !== "empty")) return null;
-  return { raidKey, modeKey, sourceModeKey, gates, states };
-}
-
-function appendRaidProjection(charsByRaidMode, character, cell) {
-  const key = `${cell.raidKey}_${cell.modeKey}`;
-  if (!charsByRaidMode.has(key)) charsByRaidMode.set(key, []);
-  charsByRaidMode.get(key).push({
-    name: character?.name || "",
-    class: character?.class || "",
-    itemLevel: Number(character?.itemLevel) || 0,
-    gates: cell.gates,
-    states: cell.states,
-  });
+  // The stored difficulty a sync of this cell would wipe, for the page's
+  // difficulty-change warning.
+  const conflictGate = gates.find((gate) => states[gate] === "mode-conflict");
+  const replacedModeKey = conflictGate
+    ? normalizeDifficulty(assignedRaids?.[conflictGate]?.difficulty)
+    : null;
+  return { raidKey, modeKey, sourceModeKey, gates, states, replacedModeKey };
 }
 
 function buildCharacterProjection(character, context) {
@@ -602,9 +538,7 @@ function buildCharacterProjection(character, context) {
       fileClearMap: context.fileClearMap,
       currentWeekStartMs: context.currentWeekStartMs,
     });
-    if (!cell) continue;
-    cells.push(cell);
-    appendRaidProjection(context.charsByRaidMode, character, cell);
+    if (cell) cells.push(cell);
   }
   if (cells.length === 0) return null;
   return {
@@ -619,56 +553,28 @@ function compareCharacters(left, right) {
   return (right.itemLevel - left.itemLevel) || left.name.localeCompare(right.name);
 }
 
-function buildRaidCards(charsByRaidMode) {
-  const cards = [];
-  for (const raidKey of RAID_ORDER) {
-    for (const modeKey of MODE_ORDER) {
-      const chars = charsByRaidMode.get(`${raidKey}_${modeKey}`);
-      if (!chars?.length) continue;
-      chars.sort(compareCharacters);
-      cards.push({ raidKey, modeKey, chars });
-    }
-  }
-  return cards;
-}
-
-function buildAccountDiff(account, sharedContext) {
-  const charsByRaidMode = new Map();
-  const context = { ...sharedContext, charsByRaidMode };
+function buildAccountDiff(account, context) {
   const characters = (account?.characters || [])
     .map((character) => buildCharacterProjection(character, context))
     .filter(Boolean)
     .sort(compareCharacters);
-  const raidCards = buildRaidCards(charsByRaidMode);
-  if (characters.length === 0 && raidCards.length === 0) return null;
+  if (characters.length === 0) return null;
   return {
     accountName: account?.accountName || "(unnamed)",
     characters,
-    raidCards,
   };
 }
 
 /**
- * Build the renderable diff structure with TWO projections of the
- * same per-(char, raid, mode, gate) cell data so the UI can offer
- * toggle between char-first and raid-first views:
- *
- *   - `raidCards`: account -> raid+mode cards -> char rows. Best for
- *     "who in this account cleared raid X". Manager scan flow.
- *   - `characters`: account -> char cards -> raid+mode cells. Best for
- *     "what raids has this char done this week". Default per-user flow.
- *
- * Cells are computed once (resolveCellState) and shared by both views;
- * the projection step just pivots the same data. Cells with all gates
- * empty are filtered out of both views (no point rendering rows of
- * "·" badges because they duplicate the zero-value state).
- *
- * Returns: array of accounts:
- *   [{
- *     accountName,
- *     raidCards: [{ raidKey, modeKey, chars: [{name, class, itemLevel, gates, states}] }],
- *     characters: [{ name, class, itemLevel, cells: [{raidKey, modeKey, gates, states}] }]
- *   }]
+ * Compare the file's clears with the stored roster, per (char, raid, mode,
+ * gate). Cells with every gate empty are dropped, and so are characters and
+ * accounts left with no cells.
+ * @param {object[]} rosterAccounts - slim roster from GET /api/me/roster
+ * @param {object[]} fileBuckets - output of bucketize()
+ * @param {{allowedModeKeys?: string[]|null, currentWeekStartMs?: number}} [options]
+ * @returns {Array<{accountName: string, characters: Array<{name: string, class: string,
+ *   itemLevel: number, cells: Array<{raidKey: string, modeKey: string, sourceModeKey: string,
+ *   gates: string[], states: object, replacedModeKey: string|null}>}>}>}
  */
 export function buildDiff(
   rosterAccounts,

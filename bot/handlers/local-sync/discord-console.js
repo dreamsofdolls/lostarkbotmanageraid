@@ -13,7 +13,7 @@ const {
 const {
   bucketizeCurrentWeekDeltas,
   projectSummary,
-} = require("../../services/local-sync/http/endpoints/preview-summary-endpoint");
+} = require("../../services/local-sync/core/preview-projection");
 const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekly-reset");
 const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
 const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
@@ -234,35 +234,6 @@ function createLocalSyncDiscordConsole({
     return { job, userDoc, lang };
   }
 
-  async function notifyPreviewReady(client, {
-    jobId,
-    discordId,
-    lang = "vi",
-    job: providedJob = null,
-    userDoc: providedUserDoc = null,
-  }) {
-    if (!client?.users?.fetch) {
-      return { delivered: false, error: "Discord client unavailable" };
-    }
-    if (providedJob && providedJob.discordId !== discordId) {
-      return { delivered: false, error: "preview job unavailable" };
-    }
-    // Job lookup, Discord user lookup, and roster lookup are independent.
-    // Run them together; the HTTP handoff can also supply the two MongoDB
-    // snapshots it just created/read so the usual path only waits on Discord.
-    const [job, targetUser, userDoc] = await Promise.all([
-      providedJob || getPreviewJob(jobId, jobDeps),
-      client.users.fetch(discordId),
-      providedUserDoc || loadConsoleUser(User, discordId),
-    ]);
-    if (!job || job.discordId !== discordId) {
-      return { delivered: false, error: "preview job unavailable" };
-    }
-    const payload = await buildConsole(targetUser, { job, lang, userDoc });
-    const message = await targetUser.send(payload);
-    return { delivered: true, channel: "dm", messageId: message.id };
-  }
-
   // Roster picker on the standalone console and the DM. There is no
   // session here, so the choice rides in the select's value and the job
   // in the customId · re-rendering narrowed needs nothing else.
@@ -370,7 +341,6 @@ function createLocalSyncDiscordConsole({
   return {
     handleLocalSyncButton,
     handleLocalSyncRosterSelect,
-    notifyPreviewReady,
     buildConsole,
   };
 }

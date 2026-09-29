@@ -7,7 +7,7 @@ const { bucketizeLocalSyncDeltas } = require("../bot/services/local-sync");
 const {
   bucketizeCurrentWeekDeltas,
   projectSummary,
-} = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+} = require("../bot/services/local-sync/core/preview-projection");
 
 function makeAccounts(character) {
   return [

@@ -21,6 +21,21 @@ function makeRoster(character) {
   ];
 }
 
+function countGateStates(diff) {
+  const counts = {};
+  for (const account of diff) {
+    for (const character of account.characters) {
+      for (const cell of character.cells) {
+        for (const gate of cell.gates) {
+          const state = cell.states[gate];
+          counts[state] = (counts[state] || 0) + 1;
+        }
+      }
+    }
+  }
+  return counts;
+}
+
 test("preview actionable keys include only registered roster clears that are not already synced", async () => {
   const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
   const rows = [
@@ -57,7 +72,7 @@ test("preview actionable keys exclude off-roster clears", async () => {
 });
 
 test("preview actionable keys exclude clears that are already marked complete", async () => {
-  const { bucketize, buildDiff, buildActionableBucketKeySet, collectDiffStateCounts } = await loadPreviewUtils();
+  const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
   const rows = [
     ["Witch of Agony, Serca", "Hard", 1, "Aki", 1, 1000, ""],
   ];
@@ -75,8 +90,29 @@ test("preview actionable keys exclude clears that are already marked complete", 
 
   const keys = buildActionableBucketKeySet(diff);
   assert.equal(keys.size, 0);
-  assert.equal(collectDiffStateCounts(diff).synced, 1);
-  assert.equal(collectDiffStateCounts(diff).pending, undefined);
+  assert.equal(countGateStates(diff).synced, 1);
+  assert.equal(countGateStates(diff).pending, undefined);
+});
+
+test("a difficulty change records the stored mode the sync would replace", async () => {
+  const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
+  const buckets = bucketize([
+    ["Abyss Lord Kazeros", "Normal", 1, "Aki", 1, 2000, ""],
+  ]);
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1740,
+    assignedRaids: {
+      kazeros: { G1: { completedDate: 1500, difficulty: "Hard" } },
+    },
+  }), buckets, { currentWeekStartMs: 1000 });
+
+  const normalCell = diff[0].characters[0].cells
+    .find((cell) => cell.raidKey === "kazeros" && cell.modeKey === "normal");
+  assert.equal(normalCell.states.G1, "mode-conflict");
+  assert.equal(normalCell.replacedModeKey, "hard");
+  assert.equal(buildActionableBucketKeySet(diff).has("aki::kazeros::normal"), true);
 });
 
 test("preview buckets get class info from backend catalog", async () => {
@@ -207,7 +243,7 @@ test("preview exposes an explicit LoaLog Solo clear even before the roster store
 });
 
 test("preview does not treat previous-week progress as a Solo mode conflict", async () => {
-  const { bucketize, buildDiff, buildActionableBucketKeySet, collectDiffStateCounts } = await loadPreviewUtils();
+  const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
   const buckets = bucketize([
     ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 2000, ""],
   ]);
@@ -227,7 +263,7 @@ test("preview does not treat previous-week progress as a Solo mode conflict", as
     currentWeekStartMs: 1000,
   });
 
-  const counts = collectDiffStateCounts(diff);
+  const counts = countGateStates(diff);
   assert.equal(counts["mode-conflict"], undefined);
   assert.equal(counts.pending, 2, "Armoche exposes two pending Solo gates");
   assert.equal(
@@ -236,7 +272,7 @@ test("preview does not treat previous-week progress as a Solo mode conflict", as
   );
 });
 
-test("preview Solo scope excludes every non-Solo mode from both projections", async () => {
+test("preview Solo scope excludes every non-Solo mode", async () => {
   const { bucketize, buildDiff } = await loadPreviewUtils();
   const buckets = bucketize([
     ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 1000, ""],
@@ -250,7 +286,6 @@ test("preview Solo scope excludes every non-Solo mode from both projections", as
   }), buckets, { allowedModeKeys: ["solo"] });
 
   assert.deepEqual(diff[0].characters[0].cells.map((cell) => cell.modeKey), ["solo"]);
-  assert.deepEqual(diff[0].raidCards.map((card) => card.modeKey), ["solo"]);
 });
 
 test("preview skips unknown difficulty and Solo on the level-based Horizon raid", async () => {

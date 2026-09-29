@@ -110,56 +110,42 @@ test("Solo actionable keys exclude cross-mode conflicts while full sync keeps th
   assert.equal(buildActionableBucketKeySet(diff, { includeModeConflict: false }).size, 0);
 });
 
-test("Solo preview uses its own timestamp source and label", async () => {
-  const { resolvePreviewLastSync } = await import("../web/js/sync/preview-stats.js");
-  const summary = {
-    scope: "solo",
-    lastSync: { localSyncAt: 100, autoManageSyncAt: 200 },
-  };
-
-  assert.deepEqual(resolvePreviewLastSync(summary), {
-    ms: 100,
-    labelKey: "preview.statsLastSyncSoloMode",
-  });
-  assert.equal(resolvePreviewLastSync({ scope: "solo", lastSync: { autoManageSyncAt: 200 } }), null);
-  assert.deepEqual(resolvePreviewLastSync({ lastSync: summary.lastSync }), {
-    ms: 200,
-    labelKey: "preview.statsLastSyncBibleMode",
-  });
-});
-
 test("all web locales provide Solo companion copy and a Solo mode label", async () => {
   const { TRANSLATIONS } = await import("../web/js/core/locales.js");
   for (const lang of ["vi", "jp", "en"]) {
     assert.equal(TRANSLATIONS[lang].modeLabels.solo.length > 0, true, lang);
     assert.match(TRANSLATIONS[lang].solo.header.h1, /Solo/i, lang);
-    assert.match(TRANSLATIONS[lang].solo.file.hint, /Solo/i, lang);
-    assert.equal(TRANSLATIONS[lang].solo.preview.statsLastSyncSoloMode.length > 0, true, lang);
-    assert.equal(TRANSLATIONS[lang].solo.diff.state["mode-conflict"].length > 0, true, lang);
+    assert.match(TRANSLATIONS[lang].solo.well.nothingHint, /Solo/i, lang);
+    assert.match(TRANSLATIONS[lang].solo.done.title, /Solo/i, lang);
     assert.doesNotMatch(JSON.stringify(TRANSLATIONS[lang]), /\/raid-sync\b/, lang);
   }
 });
 
-test("all web locales explain realtime file freshness and send-time verification", async () => {
+test("all web locales cover every page state and message the Local Reader renders", async () => {
   const { TRANSLATIONS } = await import("../web/js/core/locales.js");
-  const fileKeys = [
-    "liveStarting",
-    "liveUpdating",
-    "liveVerifying",
-    "liveReady",
-    "liveStatic",
-    "liveRetrying",
-    "liveWalWarning",
-  ];
+  const required = {
+    identity: ["noToken", "malformed", "expired", "revoked", "disabled", "linkValid", "linkValidSec", "linkedAnonymous"],
+    well: ["drop", "dropHint", "dragging", "restore", "restoreHint", "reading", "readingHint", "unit", "nothing", "nothingHint"],
+    problem: ["openFailed", "notLoaLogs", "schema", "soloDifficulty"],
+    file: ["path", "change", "updated", "invalidExt", "fsaUnavailable", "pickFailed", "restoreDenied", "liveStatic", "liveRetrying", "liveWalWarning"],
+    sync: ["btn", "syncing", "retry", "fileBusy", "walUnsafe", "rosterRetrying", "partial", "retryable", "failed", "busy", "stale", "networkError", "conflict", "conflictMore"],
+    done: ["stamp", "title", "rejected", "hint"],
+  };
   for (const lang of ["vi", "jp", "en"]) {
-    for (const key of fileKeys) {
-      assert.equal(TRANSLATIONS[lang].file[key].length > 0, true, `${lang}.${key}`);
+    for (const [section, keys] of Object.entries(required)) {
+      for (const key of keys) {
+        assert.equal(TRANSLATIONS[lang][section][key].length > 0, true, `${lang}.${section}.${key}`);
+      }
     }
-    assert.match(TRANSLATIONS[lang].file.liveReady, /\{time\}/, lang);
-    assert.equal(TRANSLATIONS[lang].sync.verifyingFreshness.length > 0, true, lang);
-    assert.equal(TRANSLATIONS[lang].sync.fileBusy.length > 0, true, lang);
-    assert.equal(TRANSLATIONS[lang].sync.walUnsafe.length > 0, true, lang);
-    assert.equal(TRANSLATIONS[lang].sync.deliveryPending.length > 0, true, lang);
+    // Every blocked and problem title shown in the well has a hint beside it.
+    for (const kind of ["noToken", "malformed", "expired", "revoked", "disabled"]) {
+      assert.equal(TRANSLATIONS[lang].identity[`${kind}Hint`].length > 0, true, `${lang}.${kind}Hint`);
+    }
+    for (const kind of required.problem) {
+      assert.equal(TRANSLATIONS[lang].problem[`${kind}Hint`].length > 0, true, `${lang}.${kind}Hint`);
+    }
+    assert.match(TRANSLATIONS[lang].file.updated, /\{time\}/, lang);
+    assert.match(TRANSLATIONS[lang].done.title, /<em>.*\{n\}.*<\/em>/, lang);
   }
 });
 
@@ -168,11 +154,11 @@ test("web i18n overlays Solo copy without changing full companion copy", async (
   try {
     const { t } = await import("../web/js/core/i18n.js");
     assert.equal(t("header.h1"), "Solo Local Reader");
-    assert.match(t("sync.hint"), /only encounters whose difficulty is Solo/);
+    assert.match(t("well.nothingHint"), /Solo clears only/);
 
     global.window.__artistSyncScope = "full";
     assert.equal(t("header.h1"), "Local Reader");
-    assert.match(t("sync.hint"), /delta preview to Discord/);
+    assert.doesNotMatch(t("well.nothingHint"), /Solo/);
   } finally {
     delete global.window;
   }

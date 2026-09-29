@@ -25,6 +25,7 @@ const {
   COMPANION_SCOPE,
   PREVIEW_APPLY_LEASE_MS,
 } = require("../bot/services/local-sync");
+const { fingerprintToken } = require("../bot/services/local-sync/core/preview-jobs");
 
 function makeJob(overrides = {}) {
   return {
@@ -247,7 +248,7 @@ test("an applied console still lists what it synced once that progress is writte
   const {
     projectSummary,
     bucketizeCurrentWeekDeltas,
-  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  } = require("../bot/services/local-sync/core/preview-projection");
   const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
   const discordId = "raid-sync-applied-body-user";
   const week = getCurrentResetStartMs();
@@ -462,85 +463,6 @@ test("global Local Sync buttons acknowledge quickly but reject a different Disco
   assert.match(replies[0].content, /different Discord account/);
 });
 
-test("Discord DM delivery renders the durable console without writing the preview", async () => {
-  const discordId = "raid-sync-dm-user";
-  const userDoc = {
-    discordId,
-    language: "en",
-    localSyncEnabled: true,
-    autoManageEnabled: false,
-    accounts: makeAkiRoster(),
-  };
-  const pendingJob = makeJob({ discordId });
-  const PreviewModel = makePreviewModel(pendingJob);
-  let previewReads = 0;
-  const readPreview = PreviewModel.findOne.bind(PreviewModel);
-  PreviewModel.findOne = (filter) => {
-    previewReads += 1;
-    return readPreview(filter);
-  };
-  let previewWrites = 0;
-  const writePreview = PreviewModel.findOneAndUpdate.bind(PreviewModel);
-  PreviewModel.findOneAndUpdate = (...args) => {
-    previewWrites += 1;
-    return writePreview(...args);
-  };
-  const UserModel = makeConsoleUserModel(userDoc);
-  let userReads = 0;
-  const readUser = UserModel.findOne.bind(UserModel);
-  UserModel.findOne = (...args) => {
-    userReads += 1;
-    return readUser(...args);
-  };
-  const sent = [];
-  const targetUser = {
-    id: discordId,
-    username: "Aki",
-    async send(payload) {
-      sent.push(payload);
-      return { id: "message-1", channelId: "dm-channel-1" };
-    },
-  };
-  const service = createLocalSyncDiscordConsole({
-    EmbedBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    MessageFlags: { Ephemeral: 64 },
-    UI,
-    User: UserModel,
-    PreviewModel,
-  });
-  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
-  delete process.env.PUBLIC_BASE_URL;
-  let outcome;
-  try {
-    outcome = await service.notifyPreviewReady({
-      users: { fetch: async () => targetUser },
-    }, {
-      jobId: pendingJob.jobId,
-      discordId,
-      lang: "en",
-      job: pendingJob,
-      userDoc,
-    });
-  } finally {
-    if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
-    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
-  }
-
-  assert.deepEqual(outcome, {
-    delivered: true,
-    channel: "dm",
-    messageId: "message-1",
-  });
-  assert.equal(sent.length, 1);
-  assert.equal(previewReads, 0, "the freshly created preview snapshot should be reused");
-  assert.equal(userReads, 0, "the endpoint roster snapshot should be reused");
-  assert.ok(componentIds(sent[0]).includes(`local-sync:apply:${pendingJob.jobId}`));
-  assert.equal(previewWrites, 0, "sending the DM should not write to the preview");
-});
-
 function matchesFilter(doc, filter) {
   for (const [key, expected] of Object.entries(filter)) {
     if (key === "$or") {
@@ -636,6 +558,48 @@ test("Discord apply claims a preview atomically and is idempotent", async () => 
   assert.equal(second.ok, false);
   assert.equal(second.state, "applied");
   assert.equal(writes.length, 1, "a second click must not write again");
+});
+
+test("a Discord apply shortens the source link while a web apply keeps it", async () => {
+  const sourceToken = "source-link-token";
+  async function applyWith(extraDeps) {
+    const PreviewModel = makePreviewModel(makeJob({ tokenFingerprint: fingerprintToken(sourceToken) }));
+    const expiryWrites = [];
+    const userDoc = {
+      discordId: "u1",
+      localSyncEnabled: true,
+      autoManageEnabled: false,
+      lastLocalSyncToken: sourceToken,
+      accounts: [{
+        accountName: "Roster",
+        characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+      }],
+    };
+    const outcome = await applyPreviewJob("11111111-2222-4333-8444-555555555555", "u1", {
+      PreviewModel,
+      UserModel: {
+        findOne: () => makeConsoleUserQuery(userDoc),
+        async findOneAndUpdate() { return userDoc; },
+        async updateOne(filter, update) {
+          if (update?.$set?.lastLocalSyncTokenExpAt) expiryWrites.push(update.$set);
+          return { matchedCount: 1 };
+        },
+      },
+      applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Aki" }),
+      ...extraDeps,
+    });
+    return { outcome, expiryWrites };
+  }
+
+  const discord = await applyWith({});
+  const web = await applyWith({ shrinkSourceToken: false });
+
+  assert.equal(discord.outcome.state, "applied");
+  assert.equal(discord.expiryWrites.length, 1);
+  assert.equal(typeof discord.outcome.result.newExpSec, "number");
+  assert.equal(web.outcome.state, "applied");
+  assert.equal(web.expiryWrites.length, 0);
+  assert.equal(web.outcome.result.newExpSec, null);
 });
 
 test("full Local Sync applies an evidenced party gate to a registered roster owner", async () => {
@@ -1335,7 +1299,7 @@ function makeSummaryFixture() {
   const {
     projectSummary,
     bucketizeCurrentWeekDeltas,
-  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  } = require("../bot/services/local-sync/core/preview-projection");
   const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
   const week = getCurrentResetStartMs();
   const assigned = {
@@ -1565,7 +1529,7 @@ test("the empty card names the reader control the viewer has", () => {
 
   const full = describeEmpty("https://example.test/sync?token=x", "full");
   assert.equal(full.split("\n")[0], "⏳ **Đọc log** › ⚪ Xem trước › ⚪ Đồng bộ");
-  assert.match(full, /Bấm \*\*Mở Local Reader\*\*, chọn/);
+  assert.match(full, /Bấm \*\*Mở Local Reader\*\*, thả/);
 
   const solo = describeEmpty(null, "solo");
   assert.match(solo, /Bấm \*\*Solo Local Reader\*\*/);
@@ -1627,7 +1591,7 @@ function makeWideSummary(charactersPerRoster) {
   const {
     projectSummary,
     bucketizeCurrentWeekDeltas,
-  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  } = require("../bot/services/local-sync/core/preview-projection");
   const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
   const week = getCurrentResetStartMs();
   const accounts = charactersPerRoster.map((count, rosterIndex) => ({
@@ -1682,7 +1646,7 @@ function makeAppliedFixture() {
   const {
     projectSummary,
     bucketizeCurrentWeekDeltas,
-  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  } = require("../bot/services/local-sync/core/preview-projection");
   const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
   const week = getCurrentResetStartMs();
   const deltas = [{

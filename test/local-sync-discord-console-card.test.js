@@ -48,18 +48,18 @@ test("no job is the empty card, and step 1 names the control the viewer has", ()
   assert.equal(withLink.kind, "empty");
   assert.equal(withLink.colorKey, "neutral");
   assert.equal(withLink.trackerLine, "⏳ **Đọc log** › ⚪ Xem trước › ⚪ Đồng bộ");
-  assert.match(withLink.sentence, /\*\*1\.\*\* Bấm \*\*Mở Local Reader\*\*, chọn/);
+  assert.match(withLink.sentence, /\*\*1\.\*\* Bấm \*\*Mở Local Reader\*\*, thả/);
 
   const solo = describeCard({
     job: null, state: "missing", summary: null, activeScope: "solo", hasReaderLink: false,
   });
-  assert.match(solo.sentence, /\*\*1\.\*\* Bấm \*\*Solo Local Reader\*\* \(link riêng chỉ cậu thấy\), chọn/);
+  assert.match(solo.sentence, /\*\*1\.\*\* Bấm \*\*Solo Local Reader\*\* \(link riêng chỉ cậu thấy\), thả/);
   assert.doesNotMatch(solo.sentence, /\{openReader\}/);
 
   const unconfigured = describeCard({
     job: null, state: "missing", summary: null, hasReaderLink: false,
   });
-  assert.match(unconfigured.sentence, /\*\*1\.\*\* Mở Local Reader, chọn/);
+  assert.match(unconfigured.sentence, /\*\*1\.\*\* Mở Local Reader, thả/);
 });
 
 test("a pending preview with changes waits for confirmation", () => {
@@ -169,16 +169,16 @@ test("closed previews are grey and carry no body, Sync or expiry", () => {
 });
 
 test("an expired preview names the reader control the card has", () => {
-  assert.match(describeCard({ state: "expired" }).sentence, /Cậu mở \*\*Local Reader\*\* rồi gửi/);
+  assert.match(describeCard({ state: "expired" }).sentence, /Cậu mở \*\*Local Reader\*\* rồi bấm/);
   assert.match(
     describeCard({ state: "expired", activeScope: "solo", hasReaderLink: false }).sentence,
-    /Cậu bấm \*\*Solo Local Reader\*\* rồi gửi/
+    /Cậu bấm \*\*Solo Local Reader\*\* rồi bấm/
   );
   // Full Local Sync without a link means the server has no public URL, so
   // there is no control to point at.
   assert.match(
     describeCard({ state: "expired", hasReaderLink: false }).sentence,
-    /Cậu mở Local Reader rồi gửi/
+    /Cậu mở Local Reader rồi bấm/
   );
 });
 

@@ -85,9 +85,9 @@ export function t(key, vars) {
 
 const seenMissingKeys = new Set();
 
-// Locale-aware raid + mode label helpers. Used by preview-utils for the
-// per-raid table headings. Falls back to the raidKey/modeKey itself if
-// the lang dict is missing the entry.
+// Locale-aware raid + mode label helpers for the difficulty-change warning.
+// Falls back to the raidKey/modeKey itself if the lang dict is missing the
+// entry.
 export function getRaidLabel(raidKey) {
   const lang = getActiveLang();
   const labels = (TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANG]).raidLabels || {};

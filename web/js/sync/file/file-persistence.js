@@ -6,8 +6,8 @@
 //
 // Single-entry store keyed "current". The value carries the
 // Discord ID associated with the saved handle, allowing detection when a
-// "different user opened the page" and wipe accordingly. User-side
-// Remove button calls clearHandle() explicitly.
+// "different user opened the page" and wipe accordingly. Picking another
+// file replaces the entry.
 
 "use strict";
 
@@ -70,9 +70,8 @@ async function loadEntry() {
   });
 }
 
-/** Wipe the stored entry. Used by the "Remove file" UI + the
- *  cross-user clear path. */
-export async function clearHandle() {
+/** Wipe the stored entry. Used by the cross-user clear path. */
+async function clearHandle() {
   await withStore("readwrite", (store) => {
     store.delete(ENTRY_KEY);
   });
