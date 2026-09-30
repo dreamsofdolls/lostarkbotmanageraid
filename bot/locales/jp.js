@@ -1170,15 +1170,14 @@ module.exports = {
       resetDescription: "**{characterName}** の **{scope}** にはマーク済みのゲートが無いので、消すものが無いですわ～\n\nゲートを完了にマークしたい場合は `status` を `complete` か `process` に変えて再実行してくださいね♪",
     },
     success: {
-      processTitle: "ゲートクリア完了ですわ～♪",
-      processDescription: "アーティストが **{characterName}** の **{raidLabel}** で **{gate}** を完了にマークしましたわ♪ 他のゲートもクリアしたら投稿するか `/raid-set status:process gate:G2` で更新してね - Lost Ark の順次進行に従って自動累積しますわ。",
-      completeTitle: "レイド完了ですわ♪",
-      completeDescription: "アーティストが **{characterName}** の **{raidLabel}** を全部完了にマークしましたわ♪ 今週はもう心配ないですわ - 来週水曜 19:00 JST のリセットを待ってね～",
-      resetTitle: "全部リセットしましたわ",
-      resetDescription: "アーティストが **{characterName}** の **{raidLabel}** の今週の進捗を全消去しましたわ。クリアした時に再度マークしてね - `/raid-set` かレイドチャンネルへの投稿でできますわ♪",
-      helperPrefix: "{iconInfo} あなたは <@{target}>{labelHint} さんの代わりに設定中ですわ - このロスターを以前あなたが登録したので、アーティストは引き続き更新を許可しますの～\n\n",
+      helperLine: "{iconInfo} あなたは <@{target}>{labelHint} さんの代わりに設定中ですわ - このロスターを以前あなたが登録したので、アーティストは引き続き更新を許可しますの～",
       helperLabelHint: " (**{ownerLabel}**)",
       modeChangedFooter: "モードが {mode} に変わりましたわ - データ整合性のため旧モードの進捗は消去されましたの。",
+      nextStep: {
+        process: "他のゲートをクリアしたら、レイドチャンネルに投稿するか /raid-set をもう一度使ってね♪",
+        complete: "水曜 19:00 JST のリセット後にまた挑戦できますわ。",
+        reset: "またクリアしたら /raid-set かレイドチャンネルへの投稿で記録してね～",
+      },
     },
   },
   "raid-check": {

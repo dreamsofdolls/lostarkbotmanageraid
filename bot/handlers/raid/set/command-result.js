@@ -1,30 +1,12 @@
 "use strict";
 
-const SUCCESS_COPY = Object.freeze({
-  process: {
-    titleKey: "raid-set.success.processTitle",
-    descriptionKey: "raid-set.success.processDescription",
-    params({ effectiveGate, localizedRaid, characterName }) {
-      return { gate: effectiveGate, raidLabel: localizedRaid, characterName };
-    },
-  },
-  complete: {
-    titleKey: "raid-set.success.completeTitle",
-    descriptionKey: "raid-set.success.completeDescription",
-    params({ localizedRaid, characterName }) {
-      return { raidLabel: localizedRaid, characterName };
-    },
-  },
-  reset: {
-    titleKey: "raid-set.success.resetTitle",
-    descriptionKey: "raid-set.success.resetDescription",
-    params({ localizedRaid, characterName }) {
-      return { raidLabel: localizedRaid, characterName };
-    },
-  },
-});
+const {
+  createRaidChannelEmbedBuilders,
+} = require("../../../services/raid/channel-monitor/channel-monitor-embeds");
 
 function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
+  const { buildRaidChannelReceiptEmbed } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
+
   async function replyRosterOwnerFailure({
     replySetNotice,
     resolvedOwner,
@@ -152,43 +134,32 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     });
   }
 
-  function buildSuccessCopy({
-    lang,
-    statusType,
-    localizedRaid,
-    effectiveGate,
-    characterName,
-    actingForOther,
-    targetDiscordId,
-    ownerLabel,
-  }) {
-    const copy = SUCCESS_COPY[statusType] || SUCCESS_COPY.reset;
-    let description = t(
-      copy.descriptionKey,
-      lang,
-      copy.params({ effectiveGate, localizedRaid, characterName })
-    );
-    if (actingForOther) {
-      const labelHint = ownerLabel
-        ? t("raid-set.success.helperLabelHint", lang, { ownerLabel })
-        : "";
-      const helperPrefix = t("raid-set.success.helperPrefix", lang, {
-        iconInfo: UI.icons.info,
-        target: targetDiscordId,
-        labelHint,
-      });
-      description = `${helperPrefix}${description}`;
-    }
-    return {
-      title: t(copy.titleKey, lang),
-      description,
-    };
+  /** The command in Discord's option order, echoed on the receipt's first line. */
+  function formatRaidSetCommand({ rosterName, characterName, localizedRaid, statusType, effectiveGate }) {
+    const gate = effectiveGate ? ` gate:${effectiveGate}` : "";
+    return `/raid-set roster:${rosterName} character:${characterName} raid:${localizedRaid} status:${statusType}${gate}`;
   }
 
+  function buildHelperLine({ lang, targetDiscordId, ownerLabel }) {
+    const labelHint = ownerLabel
+      ? t("raid-set.success.helperLabelHint", lang, { ownerLabel })
+      : "";
+    return t("raid-set.success.helperLine", lang, {
+      iconInfo: UI.icons.info,
+      target: targetDiscordId,
+      labelHint,
+    });
+  }
+
+  // The same "Raid Update" card a clear post in the raid channel gets, so a
+  // write reads the same whichever way it was made.
   async function replySuccess({
     replySetEmbed,
     lang,
     result,
+    raidMeta,
+    accounts,
+    rosterName,
     statusType,
     localizedRaid,
     effectiveGate,
@@ -197,38 +168,41 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     targetDiscordId,
     ownerLabel,
   }) {
-    const markedDone = statusType === "complete" || statusType === "process";
-    const { title, description } = buildSuccessCopy({
+    const receipt = buildRaidChannelReceiptEmbed({
+      text: formatRaidSetCommand({ rosterName, characterName, localizedRaid, statusType, effectiveGate }),
+      resultGroups: [{ raidMeta, statusType, results: [result] }],
+      accounts,
       lang,
-      statusType,
-      localizedRaid,
-      effectiveGate,
-      characterName,
-      actingForOther,
-      targetDiscordId,
-      ownerLabel,
     });
-    const resultEmbed = new EmbedBuilder()
-      .setTitle(`${markedDone ? UI.icons.done : UI.icons.reset} ${title}`)
-      .setColor(markedDone ? UI.colors.success : UI.colors.muted)
-      .setDescription(description)
-      .setTimestamp();
-    if (result.modeResetCount > 0) {
-      resultEmbed.setFooter({
-        text: t("raid-set.success.modeChangedFooter", lang, {
-          mode: result.selectedDifficulty,
-        }),
-      });
+    if (actingForOther) {
+      receipt.setDescription(`${receipt.data.description}\n${buildHelperLine({ lang, targetDiscordId, ownerLabel })}`);
     }
-    await replySetEmbed(resultEmbed, {
+    const footer = [
+      result.modeResetCount > 0
+        ? t("raid-set.success.modeChangedFooter", lang, { mode: result.selectedDifficulty })
+        : null,
+      t(`raid-set.success.nextStep.${statusType}`, lang),
+    ].filter(Boolean).join(" ");
+    receipt.setFooter({ text: footer });
+    await replySetEmbed(receipt, {
       allowedMentions: { parse: [] },
     });
   }
 
+  /**
+   * Reply to a /raid-set run with the notice or receipt its result calls for.
+   * @param {object} params
+   * @param {object} params.result - from applyRaidSetForDiscordId
+   * @param {Array<{accountName: string, account: object}>} params.accounts -
+   *   the owner's rosters read after the write; the receipt draws the
+   *   character's card from them
+   * @returns {Promise<void>}
+   */
   async function replyRaidSetResult({
     replySetNotice,
     replySetEmbed,
     result,
+    accounts,
     lang,
     rosterName,
     characterName,
@@ -290,6 +264,9 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
       replySetEmbed,
       lang,
       result,
+      raidMeta,
+      accounts,
+      rosterName,
       statusType,
       localizedRaid,
       effectiveGate,

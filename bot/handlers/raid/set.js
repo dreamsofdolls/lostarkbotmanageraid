@@ -208,6 +208,18 @@ function createRaidSetCommand(deps) {
     return results;
   }
 
+  // The write is already saved, so a failed re-read must not turn the reply
+  // into an error: the receipt then shows the result without the card.
+  async function loadOwnerAccountsAfterWrite(discordId) {
+    try {
+      const ownerDoc = await User.findOne({ discordId }).lean();
+      return ownerDoc.accounts.map((account) => ({ accountName: account.accountName, account }));
+    } catch (err) {
+      console.warn(`[raid-set] receipt re-read for ${discordId} failed:`, err?.message || err);
+      return [];
+    }
+  }
+
   async function handleRaidSetCommand(interaction) {
     const executorId = interaction.user.id;
     const input = readRaidSetInput(interaction);
@@ -251,11 +263,13 @@ function createRaidSetCommand(deps) {
       statusType,
       effectiveGates: effectiveGate ? [effectiveGate] : [],
     });
+    const accounts = result.updated ? await loadOwnerAccountsAfterWrite(targetDiscordId) : [];
 
     await replyRaidSetResult({
       replySetNotice,
       replySetEmbed,
       result,
+      accounts,
       lang,
       rosterName,
       characterName,

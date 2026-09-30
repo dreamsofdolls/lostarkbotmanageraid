@@ -1169,15 +1169,14 @@ module.exports = {
       resetDescription: "**{characterName}** has no marked gates on **{scope}**, so there's nothing for Artist to clear~\n\nIf you wanted to mark gates done, change `status` to `complete` or `process` and rerun.",
     },
     success: {
-      processTitle: "Gate cleared~",
-      processDescription: "Artist marked **{gate}** done on **{raidLabel}** for **{characterName}**. Post or `/raid-set status:process gate:G2` for the next gate - I'll auto-accumulate per Lost Ark sequential progression.",
-      completeTitle: "Raid done~",
-      completeDescription: "Artist marked all of **{raidLabel}** done for **{characterName}**. No worries this week - reset is Wed 10:00 UTC.",
-      resetTitle: "Reset clean",
-      resetDescription: "Artist wiped **{characterName}**'s **{raidLabel}** progress for this week. You can mark again as you clear - via `/raid-set` or by posting in the raid channel.",
-      helperPrefix: "{iconInfo} You're setting on behalf of <@{target}>{labelHint} - you registered this roster previously so Artist still lets you update it.\n\n",
+      helperLine: "{iconInfo} You're setting on behalf of <@{target}>{labelHint} - you registered this roster previously so Artist still lets you update it.",
       helperLabelHint: " (**{ownerLabel}**)",
       modeChangedFooter: "Mode switched to {mode} - old-mode progress was cleared to keep data consistent.",
+      nextStep: {
+        process: "Cleared another gate? Post it in the raid channel or run /raid-set again.",
+        complete: "Runs again after the Wed 10:00 UTC reset.",
+        reset: "Cleared it again? Use /raid-set or post in the raid channel.",
+      },
     },
   },
   "raid-check": {

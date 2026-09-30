@@ -331,9 +331,15 @@ test("handleRaidSetCommand: process gate writes progress and replies with succes
   assert.equal(interaction.events[0], "deferReply");
   assert.equal(interaction.deferred[0].flags, MessageFlags.Ephemeral);
   assert.equal(interaction.replies.length, 1);
-  const [embed] = interaction.replies[0].embeds;
-  assert.match(embed.data.description, /Cyrano/);
-  assert.match(embed.data.description, /G1/);
+  // The same card a clear post in the raid channel gets: the command,
+  // the result, then Cyrano's /raid-status card after the write.
+  const card = interaction.replies[0].embeds[0].toJSON();
+  assert.match(card.title, /Raid Update$/);
+  assert.match(card.description, /^💬 `\/raid-set roster:Alpha character:Cyrano raid:\S.* status:process gate:G1`/);
+  const cyrano = card.fields.filter((field) => /Cyrano · 1730/.test(field.name));
+  assert.equal(cyrano.length, 1);
+  assert.match(cyrano[0].value, /Kazeros.* · 1\/2/);
+  assert.ok(card.footer.text.length > 0, "the footer says what to do next");
   const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
   assert.ok(Number(kaz.G1.completedDate) > 0, "G1 should be stamped");
   assert.ok(!(Number(kaz.G2.completedDate) > 0), "G2 should remain unstamped");

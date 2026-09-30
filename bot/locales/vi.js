@@ -1192,15 +1192,14 @@ module.exports = {
       resetDescription: "**{characterName}** ở **{scope}** chưa có gate nào được đánh dấu xong cả, Artist chẳng có gì để xoá cho cậu đâu~\n\nNếu cậu muốn đánh dấu gate xong xuôi thì đổi `status` sang `complete` hoặc `process` rồi chạy lại giúp tớ nha.",
     },
     success: {
-      processTitle: "Gate clear xong nha~",
-      processDescription: "Artist mark **{gate}** của **{raidLabel}** done cho **{characterName}** rồi nha. Còn gate khác cứ post tiếp hoặc `/raid-set status:process gate:G2` khi clear xong - tớ tự cộng dồn theo Lost Ark sequential progression.",
-      completeTitle: "Raid done luôn nha~",
-      completeDescription: "Artist mark cả **{raidLabel}** done cho **{characterName}** rồi. Tuần này khỏi lo nữa, đợi reset thứ 4 17h VN tuần sau là làm lại từ đầu.",
-      resetTitle: "Reset sạch rồi",
-      resetDescription: "Artist xoá sạch tiến độ **{raidLabel}** của **{characterName}** tuần này rồi nha. Giờ cậu có thể đánh dấu lại từ đầu khi clear xong - dùng `/raid-set` hoặc post format trong raid channel.",
-      helperPrefix: "{iconInfo} Cậu đang set giúp <@{target}>{labelHint} - cậu là người đăng ký roster này trước đó nên Artist vẫn cho cậu update tiếp nhé.\n\n",
+      helperLine: "{iconInfo} Cậu đang set giúp <@{target}>{labelHint} - cậu là người đăng ký roster này trước đó nên Artist vẫn cho cậu update tiếp nhé.",
       helperLabelHint: " (**{ownerLabel}**)",
       modeChangedFooter: "Mode đổi sang {mode} - tiến độ mode cũ bị xoá để giữ data consistent.",
+      nextStep: {
+        process: "Gate khác clear xong thì post vào channel raid hoặc chạy lại /raid-set.",
+        complete: "Reset thứ 4 17:00 (giờ VN) là chạy lại được.",
+        reset: "Clear lại thì dùng /raid-set hoặc post vào channel raid.",
+      },
     },
   },
   "raid-check": {
