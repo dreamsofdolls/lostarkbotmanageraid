@@ -70,7 +70,9 @@ function createGoldEarnerRenderers({
       ButtonStyle,
       buttonsPerRow: BUTTONS_PER_ROW,
       customIdPrefix: "gold-earner",
-      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      confirmLabel: t("raid-gold-earner.picker.confirmLabel", session.lang, {
+        count: session.selectedIndices.size,
+      }),
       cancelLabel: t("raid-gold-earner.picker.cancelLabel", session.lang),
       describeButton(character, index) {
         const isSelected = session.selectedIndices.has(index);

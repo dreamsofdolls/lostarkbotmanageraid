@@ -2,7 +2,11 @@
 
 const { buildTogglePickerComponents } = require("../../../utils/raid/roster-picker");
 const { t } = require("../../../services/i18n");
-const { buildPickerClosedEmbed, formatSavedCharacterLine } = require("../picker/render");
+const {
+  buildPickerClosedEmbed,
+  formatClassIcon,
+  formatSavedCharacterLine,
+} = require("../picker/render");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
@@ -107,7 +111,9 @@ function createEditRosterRenderers({
       ButtonStyle,
       buttonsPerRow,
       customIdPrefix: "edit-roster",
-      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      confirmLabel: t("raid-edit-roster.picker.confirmLabel", session.lang, {
+        count: session.selectedIndices.size,
+      }),
       confirmDisabled: session.selectedIndices.size === 0,
       cancelLabel: t("raid-edit-roster.picker.cancelLabel", session.lang),
       describeButton(character, index) {
@@ -144,46 +150,40 @@ function createEditRosterRenderers({
     return buildClosedEmbed(session, "cancelled");
   }
 
+  /**
+   * The card after an edit is saved: the roster as it is now with new
+   * characters marked in place, and the removed ones struck in their own
+   * field.
+   * @param {object} session - the edit picker session
+   * @param {{added: string[], removed: object[], kept: string[], finalChars: object[]}} summary
+   *   - from persistEditedRoster; removed and finalChars are saved-character summaries
+   * @returns {EmbedBuilder}
+   */
   function buildSavedEmbed(session, summary) {
     const lang = session.lang;
     const { added, removed, kept, finalChars } = summary;
-    const lines = finalChars.map(formatSavedCharacterLine);
-    const diffParts = [];
+    const addedNames = new Set(added);
+    const lines = finalChars.map((character) => formatSavedCharacterLine(
+      character,
+      addedNames.has(character.name) ? ` ${NEW_TAG}` : ""
+    ));
+    const boldNames = (names) => names.map((name) => `**${name}**`).join(", ");
+    const changeParts = [
+      added.length ? t("raid-edit-roster.saved.changes.added", lang, { names: boldNames(added) }) : "",
+      removed.length
+        ? t("raid-edit-roster.saved.changes.removed", lang, { names: boldNames(removed.map((character) => character.name)) })
+        : "",
+    ].filter(Boolean);
+    const changeLine = changeParts.length
+      ? changeParts.join(" \u00b7 ")
+      : t(`raid-edit-roster.saved.changes.${kept.length ? "refreshed" : "none"}`, lang);
 
-    if (added.length) {
-      diffParts.push(
-        t("raid-edit-roster.saved.diffAdded", lang, {
-          count: added.length,
-          names: added.join(", "),
-        })
-      );
-    }
-
-    if (removed.length) {
-      diffParts.push(
-        t("raid-edit-roster.saved.diffRemoved", lang, {
-          count: removed.length,
-          names: removed.join(", "),
-        })
-      );
-    }
-
-    if (kept.length && !added.length && !removed.length) {
-      diffParts.push(
-        t("raid-edit-roster.saved.diffUnchanged", lang, { count: kept.length })
-      );
-    }
-
-    const diffLine = diffParts.length
-      ? diffParts.join(" \u00b7 ")
-      : t("raid-edit-roster.saved.diffNoChange", lang);
-
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setTitle(t("raid-edit-roster.saved.title", lang, { iconFolder: UI.icons.folder }))
       .setDescription(
         [
           t("raid-edit-roster.saved.rosterLine", lang, { accountName: session.accountName }),
-          t("raid-edit-roster.saved.diffLine", lang, { diff: diffLine }),
+          changeLine,
         ].join("\n")
       )
       .addFields({
@@ -196,6 +196,17 @@ function createEditRosterRenderers({
       .setColor(UI.colors.success)
       .setFooter({ text: t("raid-edit-roster.saved.footerText", lang) })
       .setTimestamp();
+    if (removed.length) {
+      embed.addFields({
+        name: t("raid-edit-roster.saved.removedField", lang),
+        value: removed
+          .map((character) => `${formatClassIcon(character.class)} ~~${character.name}~~ \u00b7 \`${character.itemLevel}\``)
+          .join("\n")
+          .slice(0, 1024),
+        inline: false,
+      });
+    }
+    return embed;
   }
 
   return {

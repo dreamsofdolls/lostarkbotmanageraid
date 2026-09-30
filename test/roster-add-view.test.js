@@ -13,6 +13,7 @@ const {
   buildSeedRosterLink,
   createAddRosterViewBuilders,
 } = require("../bot/handlers/roster/add/view");
+const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 
 const UI = {
   colors: { muted: 1, neutral: 2, success: 3 },
@@ -44,7 +45,10 @@ test("raid-add roster view builds bible roster links with encoded seed names", (
   );
 });
 
-test("raid-add roster view renders picker embed and toggle buttons", () => {
+test("raid-add roster view renders picker embed and toggle buttons", (t) => {
+  // The bootstrap fills class icons at runtime; Bard stays without one.
+  CLASS_EMOJI_MAP.Artist = "<:artist:123>";
+  t.after(() => { CLASS_EMOJI_MAP.Artist = ""; });
   const { builders } = makeBuilders();
   const session = {
     lang: "en",
@@ -58,15 +62,20 @@ test("raid-add roster view renders picker embed and toggle buttons", () => {
   };
 
   const embed = builders.buildSelectionEmbed(session).toJSON();
-  assert.match(embed.description, /Qiylyn/);
-  assert.match(embed.description, /CP `100000`/);
+  assert.match(embed.description, /<:artist:123> Qiylyn · iLvl `1700` · CP `100000`/);
+  assert.match(embed.description, /Bard Bardly · iLvl `1690`/);
 
   const rows = builders.buildSelectionComponents(session);
   assert.equal(rows.length, 2);
-  const firstButton = rows[0].components[0].toJSON();
-  assert.match(firstButton.label, /1\. Qiylyn/);
-  assert.equal(firstButton.style, ButtonStyle.Success);
+  const [artistButton, bardButton] = rows[0].components.map((button) => button.toJSON());
+  assert.equal(artistButton.label, "✅ Qiylyn");
+  assert.deepEqual(artistButton.emoji, { animated: false, name: "artist", id: "123" });
+  assert.equal(artistButton.style, ButtonStyle.Success);
+  // A class without an icon keeps its name in the label.
+  assert.equal(bardButton.label, "⬜ Bardly (Bard)");
+  assert.equal(bardButton.emoji, undefined);
   const confirmButton = rows[1].components[0].toJSON();
+  assert.equal(confirmButton.label, "raid-add-roster.picker.confirmLabel:en");
   assert.equal(confirmButton.disabled, false);
 });
 

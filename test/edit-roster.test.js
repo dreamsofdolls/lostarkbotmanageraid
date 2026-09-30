@@ -280,7 +280,7 @@ test("persistEditedRoster: preserves off-window saved chars when picker capped (
 
   // Off-window keys are NOT counted as removed even though they aren't
   // in selectedChars.
-  assert.deepEqual(summary.removed.sort(), ["Saved05", "Saved10"]);
+  assert.deepEqual(summary.removed.map((character) => character.name).sort(), ["Saved05", "Saved10"]);
 
   const stored = docs.get("user-1");
   const finalNames = stored.accounts[0].characters.map((c) => c.name).sort();
@@ -560,7 +560,7 @@ test("persistEditedRoster: removes unticked chars, keeps ticked ones", async () 
 
   const summary = await factory.__test.persistEditedRoster(session, selected);
 
-  assert.deepEqual(summary.removed.sort(), ["B", "C"]);
+  assert.deepEqual(summary.removed.map((character) => character.name).sort(), ["B", "C"]);
   assert.deepEqual(summary.kept, ["A"]);
   assert.deepEqual(summary.added, []);
 

@@ -144,6 +144,32 @@ test("edit roster render marks new and stale chars in embed and buttons", () => 
   assert.equal(rows.at(-1).components[0].data.disabled, false);
 });
 
+test("edit roster saved card marks new characters in place and strikes the removed ones", () => {
+  const { buildSavedEmbed } = createRenderers();
+  const finalChars = [
+    { name: "Qiylyn", class: "Artist", itemLevel: 1758, combatScore: "4812" },
+    { name: "Canamech", class: "Machinist", itemLevel: 1700, combatScore: "2488" },
+  ];
+  const embed = buildSavedEmbed({ lang: "en", accountName: "Alpha" }, {
+    added: ["Canamech"],
+    removed: [{ name: "Du", class: "Gunlancer", itemLevel: 1712.5, combatScore: "2954" }],
+    kept: ["Qiylyn"],
+    finalChars,
+  });
+
+  assert.match(embed.data.description, /🆕 added \*\*Canamech\*\* · ➖ removed \*\*Du\*\*$/);
+  const [characters, removed] = embed.data.fields;
+  assert.match(characters.value, /\*\*Canamech\*\* 🆕/);
+  assert.doesNotMatch(characters.value, /\*\*Qiylyn\*\* 🆕/);
+  assert.equal(removed.value, "Gunlancer ~~Du~~ · `1712.5`");
+
+  const refreshed = buildSavedEmbed({ lang: "en", accountName: "Alpha" }, {
+    added: [], removed: [], kept: ["Qiylyn", "Canamech"], finalChars,
+  });
+  assert.match(refreshed.data.description, /refreshed iLvl and CP/);
+  assert.equal(refreshed.data.fields.length, 1);
+});
+
 test("edit roster render disables confirm when no chars are selected", () => {
   const { buildSelectionComponents } = createRenderers();
   const rows = buildSelectionComponents({

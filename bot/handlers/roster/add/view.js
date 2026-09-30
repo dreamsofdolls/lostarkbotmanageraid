@@ -3,8 +3,14 @@
 const {
   buildTogglePickerComponents,
 } = require("../../../utils/raid/roster-picker");
+const { getClassEmoji } = require("../../../models/Class");
+const { parseCustomEmoji } = require("../../../utils/discord/emoji");
 const { BUTTONS_PER_ROW } = require("../picker/constants");
-const { buildPickerClosedEmbed, formatSavedCharacterLine } = require("../picker/render");
+const {
+  buildPickerClosedEmbed,
+  formatClassIcon,
+  formatSavedCharacterLine,
+} = require("../picker/render");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
@@ -26,7 +32,7 @@ function createAddRosterViewBuilders({
     const link = buildSeedRosterLink(session.seedCharName);
     const lines = session.chars.map((c, i) => {
       const cp = c.combatScore || "?";
-      return `**${i + 1}.** ${c.charName} \u00b7 ${c.className} \u00b7 iLvl \`${c.itemLevel}\` \u00b7 CP \`${cp}\``;
+      return `**${i + 1}.** ${formatClassIcon(c.className)} ${c.charName} \u00b7 iLvl \`${c.itemLevel}\` \u00b7 CP \`${cp}\``;
     });
 
     const desc = [
@@ -42,7 +48,6 @@ function createAddRosterViewBuilders({
         selected: session.selectedIndices.size,
         total: session.chars.length,
       }),
-      t("raid-add-roster.picker.footerHint", lang, { iconInfo: UI.icons.info }),
     ];
 
     if (session.actingForOther) {
@@ -71,15 +76,21 @@ function createAddRosterViewBuilders({
       ButtonStyle,
       buttonsPerRow: BUTTONS_PER_ROW,
       customIdPrefix: "add-roster",
-      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      confirmLabel: t("raid-add-roster.picker.confirmLabel", session.lang, {
+        count: session.selectedIndices.size,
+      }),
       confirmDisabled: session.selectedIndices.size === 0,
       cancelLabel: t("raid-add-roster.picker.cancelLabel", session.lang),
       describeButton(c, index) {
         const isSelected = session.selectedIndices.has(index);
         const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
+        // The class icon rides on the button; a class without a known
+        // icon keeps its name in the label instead.
+        const emoji = parseCustomEmoji(getClassEmoji(c.className));
         return {
           selected: isSelected,
-          label: `${marker} ${index + 1}. ${c.charName} (${c.className})`,
+          label: emoji ? `${marker} ${c.charName}` : `${marker} ${c.charName} (${c.className})`,
+          emoji,
         };
       },
     });
@@ -112,7 +123,7 @@ function createAddRosterViewBuilders({
   function buildSavedEmbed(session, savedAccount, dmDelivery = null) {
     const lang = session.lang;
     const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map(formatSavedCharacterLine);
+    const summaryLines = savedAccount.characters.map((character) => formatSavedCharacterLine(character));
     const descriptionLines = [
       t("raid-add-roster.saved.rosterLine", lang, {
         accountName: savedAccount.accountName,
@@ -168,7 +179,7 @@ function createAddRosterViewBuilders({
   function buildTargetDMEmbed(session, savedAccount, guildName, targetLang) {
     const lang = targetLang;
     const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map(formatSavedCharacterLine);
+    const summaryLines = savedAccount.characters.map((character) => formatSavedCharacterLine(character));
     const guildLine = guildName
       ? t("raid-add-roster.targetDM.guildLine", lang, { guildName })
       : "";

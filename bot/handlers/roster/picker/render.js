@@ -1,5 +1,7 @@
 "use strict";
 
+const { getClassEmoji } = require("../../../models/Class");
+
 /**
  * The closing card of a roster picker: "expired" (the session timed out) or
  * "cancelled" (the caller pressed Cancel). Its copy lives under
@@ -36,12 +38,27 @@ function buildPickerClosedEmbed({
   return embed;
 }
 
-/** One saved-roster line: "1. Name · Class · `iLvl` · `combat score`". */
-function formatSavedCharacterLine(character, index) {
-  return `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``;
+/**
+ * A class's icon, or its name while the icon is not known.
+ * @param {string} className
+ * @returns {string}
+ */
+function formatClassIcon(className) {
+  return getClassEmoji(className) || className;
+}
+
+/**
+ * One saved-roster line: "<class icon> **Name** · `iLvl` · CP `combat score`".
+ * @param {{name: string, class: string, itemLevel: number, combatScore: string}} character
+ * @param {string} [mark=""] - text after the name, such as " 🆕"
+ * @returns {string}
+ */
+function formatSavedCharacterLine(character, mark = "") {
+  return `${formatClassIcon(character.class)} **${character.name}**${mark} · \`${character.itemLevel}\` · CP \`${character.combatScore || "?"}\``;
 }
 
 module.exports = {
   buildPickerClosedEmbed,
+  formatClassIcon,
   formatSavedCharacterLine,
 };

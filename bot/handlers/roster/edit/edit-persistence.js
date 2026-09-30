@@ -51,7 +51,7 @@ function createPersistEditedRoster({
       for (const [key, oldChar] of existingMap.entries()) {
         if (preservedKeys.has(key)) continue;
         if (!selectedNameSet.has(key)) {
-          summary.removed.push(getCharacterName(oldChar));
+          summary.removed.push(summarizeSavedCharacter(oldChar, { getCharacterName, getCharacterClass }));
         }
       }
 

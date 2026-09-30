@@ -26,12 +26,12 @@ function buildToggleButtonRows({
     const rowEnd = Math.min(rowStart + buttonsPerRow, session.chars.length);
     for (let index = rowStart; index < rowEnd; index += 1) {
       const description = describeButton(session.chars[index], index, session);
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${customIdPrefix}:toggle:${session.sessionId}:${index}`)
-          .setLabel(truncateButtonLabel(description.label))
-          .setStyle(description.selected ? ButtonStyle.Success : ButtonStyle.Secondary)
-      );
+      const button = new ButtonBuilder()
+        .setCustomId(`${customIdPrefix}:toggle:${session.sessionId}:${index}`)
+        .setLabel(truncateButtonLabel(description.label))
+        .setStyle(description.selected ? ButtonStyle.Success : ButtonStyle.Secondary);
+      if (description.emoji) button.setEmoji(description.emoji);
+      row.addComponents(button);
     }
     rows.push(row);
   }
