@@ -270,13 +270,12 @@ test("buildAccountFreshnessLine renders both refresh and sync badges with countd
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // Discord native timestamps render `<t:UNIX:R>` client-side; tests just
   // assert the shape is present + UNIX value is in the right ballpark.
-  // Wording uses "Refresh sẵn sàng" / "Sync sẵn sàng" + timestamp so both future
-  // ("in 14s") and past ("16s ago") tenses read cleanly without the
-  // "Next sync ... ago" awkwardness.
+  // A cooling-down action reads "Refresh lại" / "Sync lại" + timestamp, which
+  // Discord renders as "in 14s".
   assert.match(line, /Cập nhật <t:\d+:R>/);
-  assert.match(line, /Refresh sẵn sàng <t:\d+:R>/);
-  assert.match(line, /Sync gần nhất <t:\d+:R>/);
-  assert.match(line, /Sync sẵn sàng <t:\d+:R>/);
+  assert.match(line, /Refresh lại <t:\d+:R>/);
+  assert.match(line, /Sync lần cuối <t:\d+:R>/);
+  assert.match(line, /Sync lại <t:\d+:R>/);
 });
 
 test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
@@ -288,8 +287,8 @@ test("buildAccountFreshnessLine shows ready marker when cooldown expired", () =>
     lastAutoManageAttemptAt: now - 30 * 60_000, // 15m cooldown expired
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  assert.match(line, /Refresh sẵn sàng/);
-  assert.match(line, /Sync sẵn sàng/);
+  assert.match(line, /✅ Refresh được rồi/);
+  assert.match(line, /✅ Sync được rồi/);
 });
 
 test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
@@ -300,8 +299,8 @@ test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
   };
   const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
   assert.match(line, /Cập nhật <t:\d+:R>/);
-  assert.match(line, /⏳ Refresh sẵn sàng <t:\d+:R>/);
-  assert.doesNotMatch(line, /✅ Refresh sẵn sàng/);
+  assert.match(line, /⏳ Refresh lại <t:\d+:R>/);
+  assert.doesNotMatch(line, /✅ Refresh được rồi/);
 });
 
 test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {
@@ -354,7 +353,7 @@ test("buildAccountFreshnessLine uses the 15s sync cooldown for managers", () => 
   // Manager cooldown 15s; with the move to Discord native timestamps the
   // string is `<t:UNIX:R>` and Discord renders the relative text. Verify
   // the next-sync UNIX is within ~15s of now (manager cooldown window).
-  const nextMatch = line.match(/⏳ Sync sẵn sàng <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync lại <t:(\d+):R>/);
   assert.ok(nextMatch, `expected Next sync timestamp; got: ${line}`);
   const nextEligibleMs = Number(nextMatch[1]) * 1000;
   const remainingMs = nextEligibleMs - now;
@@ -373,13 +372,13 @@ test("buildAccountFreshnessLine keeps the 10m sync cooldown for non-managers", (
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // 7m remaining, encoded as Unix seconds. ~5-9 minute window allows
   // millisecond drift between line render + assertion.
-  const nextMatch = line.match(/⏳ Sync sẵn sàng <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync lại <t:(\d+):R>/);
   assert.ok(nextMatch);
   const remainingMs = Number(nextMatch[1]) * 1000 - now;
   assert.ok(remainingMs > 5 * 60_000 && remainingMs < 9 * 60_000);
 });
 
-test("buildAccountFreshnessLine flips to Sync sẵn sàng once the manager 15s window expires", () => {
+test("buildAccountFreshnessLine flips to Sync được rồi once the manager 15s window expires", () => {
   const now = Date.now();
   const account = { lastRefreshedAt: now - 60_000 };
   const userMeta = {
@@ -389,7 +388,7 @@ test("buildAccountFreshnessLine flips to Sync sẵn sàng once the manager 15s w
     lastAutoManageAttemptAt: now - 30_000, // past the 15s manager window
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  assert.match(line, /Sync sẵn sàng/);
+  assert.match(line, /✅ Sync được rồi/);
 });
 
 test("ensureFreshWeek preserves gate clears already inside the current reset window", () => {

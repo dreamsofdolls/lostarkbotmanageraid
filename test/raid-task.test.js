@@ -551,7 +551,7 @@ test("formatProgressTotals: standard 3-icon line", () => {
   const { formatProgressTotals } = require("../bot/utils/raid/common/shared");
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
   const out = formatProgressTotals({ done: 2, partial: 1, pending: 4 }, UI);
-  assert.equal(out, "🟢 2 done · 🟡 1 partial · ⚪ 4 pending");
+  assert.equal(out, "🟢 2 done · 🟡 1 đang dở · ⚪ 4 chưa clear");
 });
 
 test("formatProgressTotals: notEligible suffix only when > 0", () => {
@@ -561,12 +561,12 @@ test("formatProgressTotals: notEligible suffix only when > 0", () => {
     { done: 1, partial: 0, pending: 2, notEligible: 3 },
     UI
   );
-  assert.equal(withLock, "🟢 1 done · 🟡 0 partial · ⚪ 2 pending · 🔒 3 not eligible");
+  assert.equal(withLock, "🟢 1 done · 🟡 0 đang dở · ⚪ 2 chưa clear · 🔒 3 chưa đủ iLvl");
   const withoutLock = formatProgressTotals(
     { done: 1, partial: 0, pending: 2, notEligible: 0 },
     UI
   );
-  assert.doesNotMatch(withoutLock, /not eligible/);
+  assert.doesNotMatch(withoutLock, /chưa đủ iLvl/);
 });
 
 test("formatProgressTotals: missing fields default to 0", () => {
@@ -574,11 +574,11 @@ test("formatProgressTotals: missing fields default to 0", () => {
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
   assert.equal(
     formatProgressTotals({}, UI),
-    "🟢 0 done · 🟡 0 partial · ⚪ 0 pending"
+    "🟢 0 done · 🟡 0 đang dở · ⚪ 0 chưa clear"
   );
   assert.equal(
     formatProgressTotals(null, UI),
-    "🟢 0 done · 🟡 0 partial · ⚪ 0 pending"
+    "🟢 0 done · 🟡 0 đang dở · ⚪ 0 chưa clear"
   );
 });
 

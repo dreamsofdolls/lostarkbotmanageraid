@@ -122,8 +122,8 @@ const { buildStatusFooterText, buildAccountPageEmbed } = makeFactory();
 test("buildStatusFooterText: zero totals reads as 0/0/0 with no page counter", () => {
   const text = buildStatusFooterText({ progress: { completed: 0, partial: 0, total: 0 } });
   assert.match(text, /0 done/);
-  assert.match(text, /0 partial/);
-  assert.match(text, /0 pending/);
+  assert.match(text, /0 đang dở/);
+  assert.match(text, /0 chưa clear/);
   assert.doesNotMatch(text, /Page/);
 });
 
@@ -131,15 +131,15 @@ test("buildStatusFooterText: derives pending = total - completed - partial", () 
   const text = buildStatusFooterText({ progress: { completed: 3, partial: 2, total: 10 } });
   // 10 - 3 - 2 = 5 pending
   assert.match(text, /3 done/);
-  assert.match(text, /2 partial/);
-  assert.match(text, /5 pending/);
+  assert.match(text, /2 đang dở/);
+  assert.match(text, /5 chưa clear/);
 });
 
 test("buildStatusFooterText: clamps negative pending to 0 (defense against bad inputs)", () => {
   // Defensive: if completed + partial > total (data corruption / future
   // schema change), pending must not surface as a negative number.
   const text = buildStatusFooterText({ progress: { completed: 5, partial: 5, total: 8 } });
-  assert.match(text, /0 pending/);
+  assert.match(text, /0 chưa clear/);
 });
 
 test("buildStatusFooterText: page counter appears only when totalPages > 1", () => {
@@ -161,7 +161,7 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
   // (early-return cases). Helper must default everything to 0.
   const text = buildStatusFooterText({});
   assert.match(text, /0 done/);
-  assert.match(text, /0 pending/);
+  assert.match(text, /0 chưa clear/);
 });
 
 test("REGRESSION: raid-status reload preserves shared rosters and applies revoked access", async (t) => {
