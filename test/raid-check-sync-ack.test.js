@@ -6,11 +6,12 @@ const assert = require("node:assert/strict");
 const {
   createSyncUi,
 } = require("../bot/handlers/raid-check/views/sync-ui");
+const { createAutoManageReportEmbeds } = require("../bot/services/auto-manage/reports/embeds");
 const {
   clearUserLanguageCache,
   t: translate,
 } = require("../bot/services/i18n");
-const { EmbedBuilder, embedLength } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { UI } = require("../bot/utils/raid/common/shared");
 
 class FakeEmbedBuilder {
@@ -208,6 +209,59 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
   assert.equal(reply.embeds[0].fields.length, 3);
 });
 
+test("sync all DMs a member with new gates the report card of the roster as saved", async () => {
+  clearUserLanguageCache();
+  const doc = { discordId: "member", autoManageEnabled: true, accounts: [
+    { accountName: "Alpha", characters: [{ name: "Duskfox" }] },
+  ] };
+  const report = {
+    appliedTotal: 2,
+    perChar: [{ accountName: "Alpha", charName: "Duskfox", applied: [{ gate: "G1" }, { gate: "G2" }], error: null }],
+  };
+  const savedDoc = { ...doc, lastAutoManageSyncAt: 1 };
+  const User = {
+    find() {
+      return { select() { return this; }, lean: async () => [doc] };
+    },
+    findOne({ discordId }) {
+      return {
+        lean: async () => ({ language: discordId === "member" ? "vi" : "en" }),
+        then: (resolve, reject) => Promise.resolve(doc).then(resolve, reject),
+      };
+    },
+  };
+  const built = [];
+  const card = { card: "sync report" };
+  const sent = [];
+  const ui = createSyncUi({
+    EmbedBuilder: FakeEmbedBuilder, MessageFlags: { Ephemeral: 64 },
+    UI: { colors: { success: 1 }, icons: { done: "ok" } }, User,
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 1234,
+    autoManageEntryKey: (accountName, charName) => `${accountName}:${charName}`,
+    gatherAutoManageLogsForUserDoc: async () => ({ logs: true }),
+    commitAutoManageCollected: async () => ({ status: "synced-with-delta", report, snapshot: savedDoc }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {},
+    raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
+    buildAutoManageSyncReportEmbed: (...args) => { built.push(args); return card; },
+  });
+  await ui.handleRaidCheckSyncClick({
+    user: { id: "manager" },
+    client: { users: { fetch: async () => ({ createDM: async () => ({ send: async payload => sent.push(payload) }) }) } },
+    deferReply: async () => {},
+    editReply: async () => {},
+  });
+
+  assert.equal(built.length, 1);
+  const [builtReport, lang, options] = built[0];
+  assert.equal(builtReport, report);
+  assert.equal(lang, "vi");
+  assert.equal(options.userDoc, savedDoc);
+  assert.equal(options.intro, translate("raid-check.syncDm.intro", "vi", { n: 2 }));
+  assert.deepEqual(sent, [{ embeds: [card] }]);
+});
+
 test("sync all isolates per-user failures, rechecks consent, and releases only acquired slots", async () => {
   clearUserLanguageCache();
   const ids = ["lock-error", "busy", "gather-error", "changed-to-local", "ok-user"];
@@ -317,38 +371,49 @@ test("sync report adds a counter field only when that outcome happened", async (
   assert.match(embed.description, /2\*\* users were skipped/);
 });
 
-// `count` characters with eight new gates each, as a large Sync reports them.
-function buildSyncDelta(count) {
-  const labels = ["Act 4 Hard", "Kazeros Hard", "Serca Nightmare", "Horizon Level 3"];
-  return Array.from({ length: count }, (_, index) => ({
-    charName: `Charactername${String(index).padStart(3, "0")}`,
-    applied: Array.from({ length: 8 }, (_, gate) => ({
-      raidLabel: labels[Math.floor(gate / 2)],
-      gate: `G${(gate % 2) + 1}`,
-    })),
-  }));
-}
+test("sync DM is the sync report card, opened for a sync the Raid Manager ran", () => {
+  const { buildAutoManageSyncReportEmbed } = createAutoManageReportEmbeds({
+    EmbedBuilder,
+    UI,
+    getAutoManageCooldownMs: () => 10 * 60 * 1000,
+  });
+  const ui = createSyncUi({ EmbedBuilder, UI, buildAutoManageSyncReportEmbed });
+  const userDoc = {
+    discordId: "member",
+    lastAutoManageSyncAt: Date.now(),
+    lastAutoManageAttemptAt: Date.now(),
+    accounts: [{
+      accountName: "Alpha",
+      characters: [{
+        name: "Duskfox",
+        class: "Sorceress",
+        itemLevel: 1750,
+        assignedRaids: {
+          kazeros: {
+            modeKey: "hard",
+            G1: { difficulty: "Hard", completedDate: 200 },
+            G2: { difficulty: "Hard", completedDate: 0 },
+          },
+        },
+      }],
+    }],
+  };
+  const json = ui.buildRaidCheckSyncDMEmbed({
+    appliedTotal: 1,
+    perChar: [{
+      accountName: "Alpha",
+      charName: "Duskfox",
+      applied: [{ raidKey: "kazeros", modeKey: "hard", gate: "G1" }],
+      error: null,
+    }],
+  }, userDoc, "vi").toJSON();
 
-test("sync DM keeps its description under Discord's limit and counts the characters left out", () => {
-  const ui = createSyncUi({ EmbedBuilder, UI });
-  for (const lang of ["vi", "en", "jp"]) {
-    const json = ui.buildRaidCheckSyncDMEmbed(null, buildSyncDelta(60), lang).toJSON();
-    const shown = json.description.match(/Charactername\d{3}/g).length;
-
-    assert.ok(json.description.length <= 4096, `${lang}: ${json.description.length}`);
-    assert.ok(embedLength(json) <= 6000);
-    assert.ok(shown > 0 && shown < 60, `${lang}: ${shown} shown`);
-    assert.ok(json.description.includes(
-      translate("raid-status.embed.moreCharacters", lang, { n: 60 - shown })
-    ));
-    assert.ok(json.description.endsWith(translate("raid-check.syncDm.footer", lang)));
-  }
-});
-
-test("sync DM lists every character when they fit", () => {
-  const ui = createSyncUi({ EmbedBuilder, UI });
-  const json = ui.buildRaidCheckSyncDMEmbed(null, buildSyncDelta(3), "en").toJSON();
-
-  assert.equal(json.description.match(/Charactername\d{3}/g).length, 3);
-  assert.doesNotMatch(json.description, /more characters/);
+  assert.equal(json.title, `${UI.icons.done} ${translate("raid-check.syncDm.title", "vi")}`);
+  // The opening line alone: the member's own sync timer says nothing about
+  // a sync someone else ran.
+  assert.equal(json.description, translate("raid-check.syncDm.intro", "vi", { n: 1 }));
+  const cards = json.fields.filter((field) => field.name !== "​");
+  assert.equal(cards.length, 1);
+  assert.match(cards[0].name, /Duskfox · 1750/);
+  assert.match(cards[0].value, /Kazeros.* · 1\/2/);
 });

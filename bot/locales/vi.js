@@ -1319,11 +1319,8 @@ module.exports = {
       reportHintAllFailed: "Thử lại sau vài phút, hoặc nhờ từng người dùng `/raid-set` để ghi tay nha.",
     },
     syncDm: {
-      title: "{doneIcon} Artist vừa sync progress raid giúp cậu",
-      intro: "Chào cậu~ Có Raid Manager vừa nhờ Artist pull logs từ bible sync progress raid cho cậu đây nha. Sau khi sync xong, Artist thấy mấy gate mới này cho char của cậu:",
-      charLine: "**{charName}** · {n} gate mới: {gateInfo}",
-      gateInfoEmpty: "_(detail không có)_",
-      footer: "Cậu ghé `/raid-status` xem full progress nha~",
+      title: "Tiến độ raid vừa được sync",
+      intro: "Raid Manager vừa nhờ Artist kéo log trên Bible về cho cậu: **{n}** gate mới.",
     },
   },
   "raid-auto-manage": {

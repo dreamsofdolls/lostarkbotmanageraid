@@ -253,14 +253,17 @@ function createAutoManageReportEmbeds({
    * @param {object} options
    * @param {object} options.userDoc - the user document as the sync saved it
    * @param {string} [options.titleText] - title text in place of the report title
+   * @param {string} [options.intro] - opening line in place of the outcome
+   *   and the owner's sync-timer line, for a sync someone else ran
    * @returns {EmbedBuilder}
    */
-  function buildAutoManageSyncReportEmbed(report, lang, { userDoc, titleText }) {
+  function buildAutoManageSyncReportEmbed(report, lang, { userDoc, titleText, intro }) {
     const { appliedTotal, perChar } = report;
     const outcome = resolveSyncOutcome(perChar, appliedTotal);
     const descriptionLines = [
-      describeOutcome(outcome, perChar, appliedTotal, lang),
-      buildFreshnessLine(userDoc, lang),
+      ...(intro
+        ? [intro]
+        : [describeOutcome(outcome, perChar, appliedTotal, lang), buildFreshnessLine(userDoc, lang)]),
       ...(outcome.key === "allFailed" ? buildReasonLines(perChar, lang) : []),
     ];
 

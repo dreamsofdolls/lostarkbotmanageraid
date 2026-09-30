@@ -1297,11 +1297,8 @@ module.exports = {
       reportHintAllFailed: "数分後にもう一度試すか、各メンバーに `/raid-set` で手動記録してもらってね♪",
     },
     syncDm: {
-      title: "{doneIcon} アーティストがレイド進捗を同期しましたわ",
-      intro: "こんにちは～♪ レイドマネージャーさんがアーティストに bible からログを取得してレイド進捗を同期してと頼みましたわ。同期後、こんな新しいゲートを発見したよ:",
-      charLine: "**{charName}** · 新しいゲート {n} 個: {gateInfo}",
-      gateInfoEmpty: "_(詳細無し)_",
-      footer: "全体の進捗は `/raid-status` で確認してね♪",
+      title: "レイド進捗を同期しましたわ",
+      intro: "レイドマネージャーさんに頼まれて、Bible からログを取ってきましたわ: 新しいゲート **{n}** 個ですの。",
     },
   },
   "raid-auto-manage": {

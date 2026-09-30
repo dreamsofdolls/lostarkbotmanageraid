@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed
 - The `/raid-log` card drops its Duration, Total DMG and Team DPS row. The capture below already prints all three, and the history line keeps each log's duration.
 - `/raid-set` answers with the same "Raid Update" / "Reset Raid" card a clear post in the raid channel gets: the command as typed, the result, the character's `/raid-status` card after the write, and a footer with the next step. The old copy promised that clearing a later gate counts the earlier ones; it does not, so the footer no longer says so.
+- The DM a member gets when a Raid Manager's **Sync-check all** writes new gates is the same card as a `/raid-auto-manage` sync: "Tiến độ raid vừa được sync", one line with the number of new gates, then each changed character as `/raid-status` shows it. It used to list the gates as text lines. The member's own sync timer is left off, since it says nothing about this sync.
 
 ### Fixed
 - `/raid-bg set` and `edit` read an image's width and height from its header and refuse anything over about 25 megapixels before decoding it. The 8 MB file cap did not bound memory: a 269 KiB PNG declaring 8192x8192 decoded into about 256 MiB. Uploads from concurrent commands are processed one at a time, and the requirements card and `/raid-help` state the new limit in vi, en and jp.

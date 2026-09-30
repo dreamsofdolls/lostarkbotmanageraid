@@ -23,9 +23,6 @@ const {
   getAutoManageEntries,
 } = require("../../../services/auto-manage/reports/utils");
 
-// Discord's cap on an embed description.
-const SYNC_DM_DESCRIPTION_LIMIT = 4096;
-
 /**
  * Build the /raid-check Sync UI service: the DM embed builder and the Sync
  * click handler.
@@ -45,6 +42,7 @@ const SYNC_DM_DESCRIPTION_LIMIT = 4096;
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
  * @param {object} deps.raidCheckSyncLimiter - per-user concurrency cap
  * @param {object} deps.discordUserLimiter - Discord REST fan-out limiter
+ * @param {Function} deps.buildAutoManageSyncReportEmbed - the Bible sync report card
  * @returns {{
  *   buildRaidCheckSyncDMEmbed: Function,
  *   handleRaidCheckSyncClick: Function,
@@ -66,6 +64,7 @@ function createSyncUi({
   releaseAutoManageSyncSlot,
   raidCheckSyncLimiter,
   discordUserLimiter,
+  buildAutoManageSyncReportEmbed,
 }) {
 
   // Private logs are a user setting that no retry fixes, so a report whose
@@ -76,39 +75,22 @@ function createSyncUi({
       entries.every((entry) => isPublicLogDisabledError(entry?.error));
   }
 
-  function buildRaidCheckSyncDMEmbed(raidMeta, delta, lang = "vi") {
-    const lines = delta.map((entry) => {
-      const applied = Array.isArray(entry.applied) ? entry.applied : [];
-      const gateInfo = applied
-        .map((item) => `${item.raidLabel || item.raidKey} ${item.gate}`)
-        .join(", ");
-      return t("raid-check.syncDm.charLine", lang, {
-        charName: entry.charName,
-        n: applied.length,
-        gateInfo: gateInfo || t("raid-check.syncDm.gateInfoEmpty", lang),
-      });
+  /**
+   * The DM a member gets when a Raid Manager's Sync wrote new gates for
+   * them: the /raid-auto-manage sync report card, with its own title and
+   * opening line. The owner's sync-timer line is left out; it says nothing
+   * about a sync someone else ran.
+   * @param {{appliedTotal: number, perChar: object[]}} report - the sync report
+   * @param {object} userDoc - the member's user document as the sync saved it
+   * @param {string} [lang="vi"] - the member's language
+   * @returns {EmbedBuilder}
+   */
+  function buildRaidCheckSyncDMEmbed(report, userDoc, lang = "vi") {
+    return buildAutoManageSyncReportEmbed(report, lang, {
+      userDoc,
+      titleText: t("raid-check.syncDm.title", lang),
+      intro: t("raid-check.syncDm.intro", lang, { n: report.appliedTotal }),
     });
-
-    // Discord rejects a description past 4096 characters, which a large
-    // Sync reaches; keep as many character lines as fit, then "+N more".
-    const describe = (count) => [
-      t("raid-check.syncDm.intro", lang),
-      "",
-      ...lines.slice(0, count),
-      ...(count < lines.length
-        ? [t("raid-status.embed.moreCharacters", lang, { n: lines.length - count })]
-        : []),
-      "",
-      t("raid-check.syncDm.footer", lang),
-    ].join("\n");
-    let shown = lines.length;
-    while (shown > 0 && describe(shown).length > SYNC_DM_DESCRIPTION_LIMIT) shown -= 1;
-
-    return new EmbedBuilder()
-      .setColor(UI.colors.success)
-      .setTitle(t("raid-check.syncDm.title", lang, { doneIcon: UI.icons.done }))
-      .setDescription(describe(shown))
-      .setTimestamp();
   }
 
   async function loadAllRaidSyncSnapshot() {
@@ -187,7 +169,7 @@ function createSyncUi({
     let attemptedOnlyCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
-    const deltasPerUser = new Map();
+    const reportsWithNewGates = new Map();
 
     const syncStarted = Date.now();
     await Promise.all(
@@ -245,9 +227,8 @@ function createSyncUi({
                 attemptedOnlyCount += 1;
             }
 
-            const appliedEntries = getAppliedAutoManageEntries(committed?.report);
-            if (appliedEntries.length > 0) {
-              deltasPerUser.set(discordId, appliedEntries);
+            if (getAppliedAutoManageEntries(committed?.report).length > 0) {
+              reportsWithNewGates.set(discordId, { report: committed.report, userDoc: committed.snapshot });
             }
           } catch (err) {
             failedCount += 1;
@@ -263,7 +244,7 @@ function createSyncUi({
 
     const dmStarted = Date.now();
     const dmResults = await Promise.all(
-      [...deltasPerUser.entries()].map(([discordId, delta]) =>
+      [...reportsWithNewGates.entries()].map(([discordId, { report, userDoc }]) =>
         discordUserLimiter.run(async () => {
           try {
             const user = await interaction.client.users.fetch(discordId);
@@ -271,7 +252,7 @@ function createSyncUi({
             // DM is read by the target, render in their lang per the
             // viewer-language rule.
             const targetLang = await getUserLanguage(discordId, { UserModel: User });
-            const embed = buildRaidCheckSyncDMEmbed(null, delta, targetLang);
+            const embed = buildRaidCheckSyncDMEmbed(report, userDoc, targetLang);
             await dmChannel.send({ embeds: [embed] });
             return { ok: true };
           } catch {
@@ -313,7 +294,7 @@ function createSyncUi({
     const optionalCounters = [
       [UI.icons.pending, "noNewData", attemptedOnlyCount],
       ["⏳", "skipped", skippedCount],
-      ["🆕", "newGates", deltasPerUser.size],
+      ["🆕", "newGates", reportsWithNewGates.size],
     ];
     for (const [icon, key, count] of optionalCounters) {
       if (count === 0) continue;

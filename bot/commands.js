@@ -584,6 +584,7 @@ const {
   raidCheckRefreshLimiter,
   raidCheckSyncLimiter,
   discordUserLimiter,
+  buildAutoManageSyncReportEmbed,
   // raid-schedule bridge for the "📋 Đội đã xếp" dropdown (teams-view.js).
   RaidEvent,
   buildScheduleEmbed,

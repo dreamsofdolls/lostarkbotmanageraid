@@ -1296,11 +1296,8 @@ module.exports = {
       reportHintAllFailed: "Try again in a few minutes, or ask each member to record progress with `/raid-set`.",
     },
     syncDm: {
-      title: "{doneIcon} Artist synced your raid progress",
-      intro: "Hi~ A Raid Manager just asked Artist to pull logs from bible to sync your raid progress. After syncing, Artist found these new gates for your chars:",
-      charLine: "**{charName}** · {n} new gates: {gateInfo}",
-      gateInfoEmpty: "_(detail not available)_",
-      footer: "Check `/raid-status` for the full updated progress.",
+      title: "Your raid progress was synced",
+      intro: "A Raid Manager asked Artist to pull your logs from Bible: **{n}** new gates.",
     },
   },
   "raid-auto-manage": {
