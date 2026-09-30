@@ -221,6 +221,13 @@ function renderSvgBuffer(buffer) {
 }
 
 async function decodeBgImage(buffer, mime) {
+  // Native SVG decoding allocates at the source size; render a bounded bitmap first.
+  if (mime === "image/svg+xml") {
+    const rendered = renderSvgBuffer(buffer);
+    const img = await loadImage(rendered.buffer);
+    return { img, width: rendered.width, height: rendered.height };
+  }
+
   try {
     const img = await loadImage(buffer);
     return { img, width: img.width, height: img.height };
@@ -233,13 +240,7 @@ async function decodeBgImage(buffer, mime) {
       }
     }
 
-    if (mime !== "image/svg+xml" && !looksLikeSvg(buffer)) {
-      throw err;
-    }
-
-    const rendered = renderSvgBuffer(buffer);
-    const img = await loadImage(rendered.buffer);
-    return { img, width: rendered.width, height: rendered.height };
+    throw err;
   }
 }
 

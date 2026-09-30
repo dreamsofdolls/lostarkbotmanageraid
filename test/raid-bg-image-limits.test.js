@@ -7,6 +7,7 @@ const { createCanvas } = require("@napi-rs/canvas");
 const {
   processBgAttachment,
   validateBgAttachment,
+  RAID_BG_OUTPUT_WIDTH,
 } = require("../bot/handlers/raid/bg/image-pipeline");
 
 // Header-only files: the dimensions are declared, the pixel data is absent,
@@ -78,6 +79,40 @@ for (const [format, contentType] of [["JPEG", "image/jpeg"], ["WebP", "image/web
     assert.equal(validated.height, 900);
   });
 }
+
+for (const [shape, width, height, contentType] of [
+  ["square", 6000, 6000, "image/svg+xml"],
+  ["landscape", 12000, 900, "application/octet-stream"],
+  ["portrait", 800, 12000, "image/png"],
+]) {
+  test(`raid-bg bounds a large ${shape} SVG bitmap and preserves its source dimensions`, async () => {
+    const buffer = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#24a148"/></svg>`,
+    );
+    const validated = await validateBgAttachment({ size: buffer.length, contentType }, buffer);
+
+    assert.equal(validated.mime, "image/svg+xml");
+    assert.equal(validated.width, width);
+    assert.equal(validated.height, height);
+    assert.equal(Math.max(validated.img.width, validated.img.height), RAID_BG_OUTPUT_WIDTH);
+    const scale = RAID_BG_OUTPUT_WIDTH / Math.max(width, height);
+    assert.ok(Math.abs(validated.img.width - width * scale) <= 1);
+    assert.ok(Math.abs(validated.img.height - height * scale) <= 1);
+
+    const canvas = createCanvas(1, 1);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(validated.img, 0, 0, 1, 1);
+    assert.deepEqual([...ctx.getImageData(0, 0, 1, 1).data], [36, 161, 72, 255]);
+  });
+}
+
+test("raid-bg rejects a malformed SVG with the decode error", async () => {
+  const buffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">');
+  await assert.rejects(
+    validateBgAttachment({ size: buffer.length, contentType: "image/svg+xml" }, buffer),
+    (err) => err.key === "raidBg.errors.decodeFailed",
+  );
+});
 
 test("raid-bg processes one upload at a time", async (t) => {
   const canvas = createCanvas(1600, 900);
