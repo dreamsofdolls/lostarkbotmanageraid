@@ -11,19 +11,21 @@ async function readCaptureMemory(read = readFile) {
     ? [[names[index], result.value.trim().replace(/\s*\n\s*/g, "; ")]] : []));
 }
 
-// Allow for renderer/codec growth and the largest pair of decoded input/output
-// surfaces. Encoding is sequential. This is a conservative reserve, not an
+// Allow for renderer growth, encoded buffers and streamed PNG scanlines.
+// Framing no longer holds full decoded surfaces. This is a reserve, not an
 // exact peak prediction or an OOM guarantee.
 const MEMORY_RESERVE = 128 * 1024 * 1024;
 
-function shouldReleaseBrowser(memory, clips = []) {
+/**
+ * @param {{ max?: string, current?: string }} memory container byte counts
+ * @returns {boolean} whether the idle browser leaves too little renderer headroom
+ */
+function shouldReleaseBrowser(memory) {
   const limit = Number(memory.max);
   const current = Number(memory.current);
   if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(current) || current < 0
     || memory.current === "" || memory.current == null) return false;
-  const surfaces = Math.max(0, ...clips.map(({ width, height }) => width < Math.ceil(height * 4 / 3)
-    ? (width + Math.ceil(height * 4 / 3)) * height * 4 : 0));
-  return limit - current < MEMORY_RESERVE + surfaces;
+  return limit - current < MEMORY_RESERVE;
 }
 
 module.exports = { readCaptureMemory, shouldReleaseBrowser };

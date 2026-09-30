@@ -60,6 +60,30 @@ test("recent logs use stored Bible ids, ask for a profile only when they are mis
   assert.deepEqual([result.characters, result.logs, result.capped, result.timedOut, result.private], [2, 3, false, false, []]);
 });
 
+test("recent-history cache evicts inactive owners instead of retaining every roster indefinitely", async () => {
+  const f = fixture({ rowsByName: { Qiylyn: [bibleRow("q1", "Qiylyn", NOW)] } });
+  const accounts = [{ characters: [character("Qiylyn")] }];
+  for (let index = 0; index < 64; index++) await f.recent.load(`owner-${index}`, accounts);
+  await f.recent.load("owner-0", accounts);
+  await f.recent.load("owner-64", accounts);
+  await f.recent.load("owner-0", accounts);
+  assert.equal(f.calls.length, 65);
+  await f.recent.load("owner-1", accounts);
+  assert.equal(f.calls.length, 66);
+});
+
+test("recent-history metadata expires while idle before the next request", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture({ rowsByName: { Qiylyn: [bibleRow("q1", "Qiylyn", NOW)] } });
+  const accounts = [{ characters: [character("Qiylyn")] }];
+  await f.recent.load("owner", accounts);
+  f.advance(5 * 60_000);
+  t.mock.timers.tick(5 * 60_000);
+  f.advance(-5 * 60_000);
+  await f.recent.load("owner", accounts);
+  assert.equal(f.calls.length, 2);
+});
+
 test("characters Auto-sync saw private in the last day are skipped; Logs not enabled joins them; partial results are not cached", async () => {
   const f = fixture({ rowsByName: { Qiylyn: [bibleRow("q1", "Qiylyn", NOW)] }, errors: {
     Bori: Object.assign(new Error('Bible logs API returned HTTP 403 - {"error":"Logs not enabled"}'), { status: 403 }),

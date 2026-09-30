@@ -17,21 +17,21 @@ const figures = { dps: 1, ndps: 2, contribution: 3, damageShare: 4, stagger: 5, 
 const rowsFor = normalized => PLAYERS.map(p => ({ id: p.id, label: p.label, className: p.className,
   badges: p.className === "Bard" ? [82, 91] : [normalized ? 98 : 99], ...figures }));
 
-function fakePage({ startNormalized = false, literal } = {}) {
-  const state = { normalized: startNormalized, readEncounter: 0 };
+function fakePage({ startNormalized = false, literal, hasNormalized = true } = {}) {
+  const state = { normalized: startNormalized, readEncounter: 0, readParties: 0 };
   const encounter = literal === undefined ? JSON.stringify({ id: "testlog", encounter: { entityList: [
     { name: "Canameo", class: "Bard", entityType: "PLAYER", skills: { one: { rdpsContributed: { 1: 318 } } } },
     { name: "Yzan", class: "Bard", entityType: "PLAYER", skills: { one: { rdpsContributed: { 3: 143 } } } },
   ] } }) : literal;
   const page = {
     evaluate: async fn => {
-      if (fn === readPartyMetrics) return rowsFor(state.normalized);
+      if (fn === readPartyMetrics) { state.readParties++; return rowsFor(state.normalized); }
       if (fn === readEncounterLiteral) { state.readEncounter++; return encounter; }
       throw new Error("unexpected evaluate");
     },
     getByRole: (role, { name }) => {
       assert.equal(role, "switch", "metrics never open a detail view or return to overview");
-      return { isChecked: async () => state.normalized };
+      return { count: async () => Number(hasNormalized), isChecked: async () => { assert.ok(hasNormalized); return state.normalized; } };
     },
     locator: () => ({ filter: () => ({ click: async () => { state.normalized = !state.normalized; } }) }),
     waitForFunction: async () => {},
@@ -82,4 +82,14 @@ test("a team without supports does not transfer encounter data", async () => {
 test("no players means no page work", async () => {
   const page = { evaluate: async () => assert.fail("no evaluate expected") };
   assert.deepEqual(await collectTeamMetrics(page, [], options), []);
+});
+
+test("legacy logs read team figures once without waiting for an absent percentile switch", async () => {
+  const { page, state } = fakePage({ hasNormalized: false });
+  const players = await collectTeamMetrics(page, PLAYERS, options);
+  assert.equal(state.readParties, 1);
+  assert.equal(state.normalized, false);
+  assert.equal(players[0].dps, 1);
+  assert.deepEqual(players[0].badges.normalized, []);
+  assert.deepEqual(players.map(player => player.buffedShare), [null, 31.8, 14.3]);
 });

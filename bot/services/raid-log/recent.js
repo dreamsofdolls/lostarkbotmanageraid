@@ -16,6 +16,7 @@ const { isSupportClass } = require("../../models/Class");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
 const { normalizeCatalogLogs } = require("./catalog");
 const { RaidLogError, raidLogErrorCode } = require("./errors");
+const { createMemoryCache } = require("./memory-cache");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RECENT_CHARACTERS = 24;
@@ -33,7 +34,8 @@ function createRecentRaidLogs({
   bibleLimiter, client = createBibleClient({ bibleLimiter }), now = Date.now,
   ttlMs = 5 * 60_000, deadlineMs = 45_000, log = console,
 }) {
-  const cache = new Map();
+  const cache = createMemoryCache({ maxBytes: 2 * 1024 * 1024, maxEntries: 64, ttlMs, now,
+    sizeOf: entry => Buffer.byteLength(entry.key) + Buffer.byteLength(JSON.stringify(entry.value)) });
   const pending = new Map();
 
   function candidatesOf(accounts = []) {
@@ -75,7 +77,6 @@ function createRecentRaidLogs({
     const { chosen, capped } = candidatesOf(accounts);
     const candidates = chosen.map(snapshot);
     const key = JSON.stringify({ candidates, capped });
-    for (const [id, entry] of cache) if (entry.expires <= now()) cache.delete(id);
     const current = pending.get(ownerId);
     if (current?.key === key && (!refresh || current.refresh)) return current.promise;
     const cached = cache.get(ownerId);
@@ -85,7 +86,7 @@ function createRecentRaidLogs({
     pending.set(ownerId, request);
     request.promise = gather(candidates, capped).then(({ value, complete }) => {
       // Only the newest request for this roster may publish its result.
-      if (complete && pending.get(ownerId) === request) cache.set(ownerId, { key, value, expires: now() + ttlMs });
+      if (complete && pending.get(ownerId) === request) cache.set(ownerId, { key, value });
       return value;
     }).finally(() => {
       if (pending.get(ownerId) === request) pending.delete(ownerId);

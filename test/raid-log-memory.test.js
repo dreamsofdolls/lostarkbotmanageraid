@@ -17,19 +17,15 @@ test("missing cgroup files remain unavailable, and a partial read preserves avai
   assert.deepEqual(await readCaptureMemory(file => file.endsWith(".current") ? "123\n" : missing()), { current: "123" });
 });
 
-test("release policy accounts for finite headroom and both framing surfaces", () => {
+test("release policy keeps a renderer reserve without full decoded framing surfaces", () => {
   const limit = 512 * 1024 * 1024;
   const memory = free => ({ max: String(limit), current: String(limit - free) });
   assert.equal(shouldReleaseBrowser(memory(128 * 1024 * 1024)), false);
   assert.equal(shouldReleaseBrowser(memory(128 * 1024 * 1024 - 1)), true);
-  assert.equal(shouldReleaseBrowser(memory(140 * 1024 * 1024), [{ width: 1280, height: 1214 }]), true);
-  assert.equal(shouldReleaseBrowser(memory(160 * 1024 * 1024), [{ width: 1280, height: 1214 }]), false);
-  assert.equal(shouldReleaseBrowser(memory(130 * 1024 * 1024), [{ width: 1600, height: 900 }]), false);
+  assert.equal(shouldReleaseBrowser(memory(140 * 1024 * 1024)), false);
+  assert.equal(shouldReleaseBrowser(memory(160 * 1024 * 1024)), false);
+  assert.equal(shouldReleaseBrowser(memory(130 * 1024 * 1024)), false);
   assert.equal(shouldReleaseBrowser({ max: "512000000", current: "512000001" }), true);
-  // Sequential framing reserves only the largest pair, not every image at once.
-  assert.equal(shouldReleaseBrowser(memory(150 * 1024 * 1024), [
-    { width: 1280, height: 1214 }, { width: 1280, height: 1214 },
-  ]), false);
 });
 
 test("unlimited, missing or invalid readings do not invent memory pressure", () => {

@@ -1,7 +1,10 @@
 "use strict";
 
-// Runs in the page. Match the hero and content used by the capture inspectors.
-// Lazy images inside the capture must load even when below the viewport.
+/**
+ * Runs in the page. Lazy images in the capture must load below the viewport.
+ * @param {boolean} player whether the player detail is open
+ * @returns {Promise<boolean>} whether the current capture assets are decoded
+ */
 async function captureAssetsReady(player = false) {
   const hero = document.querySelector("h1")?.closest(".max-w-7xl");
   let card = player
@@ -13,7 +16,7 @@ async function captureAssetsReady(player = false) {
   const content = player ? card.parentElement : card;
   const images = [...document.images].filter(img => hero.contains(img) || content.contains(img));
   for (const img of images) if (img.loading === "lazy") img.loading = "eager";
-  if (document.fonts.status !== "loaded" || images.some(img => !img.complete)) return false;
+  if (document.fonts.status !== "loaded" || images.some(img => !img.complete || !img.naturalWidth)) return false;
   const sources = images.map(img => img.currentSrc || img.src);
   await Promise.all(images.map(img => img.decode().catch(() => {})));
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -22,7 +25,7 @@ async function captureAssetsReady(player = false) {
   const current = [...document.images].filter(img => hero.contains(img) || content.contains(img));
   return hero.isConnected && content.isConnected && document.fonts.status === "loaded"
     && current.length === images.length && current.every((img, index) => img === images[index]
-      && img.complete && (img.currentSrc || img.src) === sources[index]);
+      && img.complete && img.naturalWidth > 0 && (img.currentSrc || img.src) === sources[index]);
 }
 
 module.exports = { captureAssetsReady };

@@ -207,6 +207,43 @@ test("two-image cache accounts for both buffers and refresh invalidates every va
   assert.ok(cache.get("other:team"));
   cache.set("huge:detail", { images: [{ buffer: Buffer.alloc(6) }, { buffer: Buffer.alloc(6) }] });
   assert.equal(cache.get("huge:detail"), undefined);
+  cache.clear();
+});
+
+test("expired PNGs are released while idle, even when LRU order differs from expiry order", t => {
+  let now = 0;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const cache = createImageCache({ ttlMs: 10, now: () => now });
+  const result = id => ({ id, images: [{ buffer: Buffer.alloc(3) }] });
+  cache.set("old", result("old"));
+  now = 5;
+  t.mock.timers.tick(5);
+  cache.set("new", result("new"));
+  cache.get("old");
+  now = 10;
+  t.mock.timers.tick(5);
+  now = 0;
+  assert.equal(cache.get("old"), undefined, "the timer removed the expired buffer before any read");
+  assert.equal(cache.get("new").id, "new");
+  now = 15;
+  t.mock.timers.tick(5);
+  now = 0;
+  assert.equal(cache.get("new"), undefined);
+  cache.clear();
+});
+
+test("image cache also bounds entry metadata and clear releases buffers without disabling future captures", () => {
+  const cache = createImageCache({ maxEntries: 2 });
+  const result = { images: [{ buffer: Buffer.alloc(1) }] };
+  for (const key of ["a", "b", "c"]) cache.set(key, result);
+  assert.equal(cache.get("a"), undefined);
+  assert.equal(cache.get("b"), result);
+  cache.clear();
+  assert.equal(cache.get("b"), undefined);
+  assert.equal(cache.get("c"), undefined);
+  cache.set("d", result);
+  assert.equal(cache.get("d"), result);
+  cache.clear();
 });
 
 test("catalog refresh fetches once, keeps older history, updates existing metadata and enforces privacy", async () => {

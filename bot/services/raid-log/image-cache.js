@@ -1,34 +1,18 @@
 "use strict";
 
-function createImageCache({ maxBytes = 16 * 1024 * 1024, ttlMs = 5 * 60_000, now = Date.now } = {}) {
-  const entries = new Map();
-  let bytes = 0;
-  const sizeOf = result => result.images.reduce((sum, image) => sum + image.buffer.length, 0);
-  function remove(key) {
-    const entry = entries.get(key);
-    if (entry) bytes -= sizeOf(entry.result);
-    entries.delete(key);
-  }
+const { createMemoryCache } = require("./memory-cache");
+
+/**
+ * @param {{ maxBytes?: number, maxEntries?: number, ttlMs?: number, now?: Function }} [options]
+ * @returns {{ get: Function, set: Function, invalidateLog: Function, clear: Function }} bounded PNG cache
+ */
+function createImageCache({ maxBytes = 16 * 1024 * 1024, maxEntries = 64, ttlMs = 5 * 60_000, now = Date.now } = {}) {
+  const cache = createMemoryCache({ maxBytes, maxEntries, ttlMs, now,
+    sizeOf: result => result.images.reduce((sum, image) => sum + image.buffer.length, 0) });
   return {
-    get(key) {
-      const entry = entries.get(key);
-      if (!entry) return;
-      if (now() >= entry.expires) return remove(key);
-      entries.delete(key);
-      entries.set(key, entry);
-      return entry.result;
-    },
-    set(key, result) {
-      remove(key);
-      for (const [id, entry] of entries) if (now() >= entry.expires) remove(id);
-      const size = sizeOf(result);
-      if (size > maxBytes) return;
-      while (bytes + size > maxBytes) remove(entries.keys().next().value);
-      entries.set(key, { result, expires: now() + ttlMs });
-      bytes += size;
-    },
+    get: cache.get, set: cache.set, clear: cache.clear,
     invalidateLog(id) {
-      for (const key of entries.keys()) if (key.startsWith(`${id}:`)) remove(key);
+      cache.invalidate(key => key.startsWith(`${id}:`));
     },
   };
 }

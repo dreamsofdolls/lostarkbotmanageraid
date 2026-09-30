@@ -21,11 +21,14 @@ const { setNormalized } = require("./page-controls");
  */
 async function collectTeamMetrics(page, players, options) {
   if (!players.length) return players;
-  await setNormalized(page, false);
+  const hasNormalized = await setNormalized(page, false);
   const bracketed = await page.evaluate(readPartyMetrics);
-  await setNormalized(page, true);
-  const normalized = await page.evaluate(readPartyMetrics);
-  await setNormalized(page, false);
+  let normalized = [];
+  if (hasNormalized) {
+    await setNormalized(page, true);
+    normalized = await page.evaluate(readPartyMetrics);
+    await setNormalized(page, false);
+  }
   const rows = new Map(bracketed.map(row => [row.id, row]));
   const normalizedBadges = new Map(normalized.map(row => [row.id, row.badges]));
   const shares = players.some(player => isSupportClass(player.className))

@@ -6,6 +6,7 @@ const { BIBLE_ORIGIN, parsePublicLogUrl } = require("./source");
 const { readCaptureMemory, shouldReleaseBrowser } = require("./memory");
 const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
+const { createAssetCache } = require("./asset-cache");
 const { frameCaptureImage } = require("./image-frame");
 const { inspectPlayerPage, selectPlayer } = require("./detail");
 const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview, bibleButton, waitForPartyTables } = require("./page-controls");
@@ -14,6 +15,7 @@ const { captureAssetsReady } = require("./assets");
 const { createRenderQueue } = require("./render-queue");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_CONTEXT_NAVIGATIONS = 4;
 
 function isAllowedRequest(requestUrl, isNavigation, logUrl, resourceType) {
   try {
@@ -29,7 +31,11 @@ function isAllowedRequest(requestUrl, isNavigation, logUrl, resourceType) {
   }
 }
 
-// Runs in the page. Read the original UI without changing styles or data.
+/**
+ * Runs in the page. Read the original UI without changing styles or data.
+ * @param {{ expectedPlayers?: number, expectedParties?: number }} [options] baseline counts
+ * @returns {object} capture bounds and players, or an incomplete-page error
+ */
 function inspectDamagePage({ expectedPlayers, expectedParties } = {}) {
   const tables = Array.from(document.querySelectorAll("table"))
     .filter(table => table.getBoundingClientRect().height > 0);
@@ -73,7 +79,7 @@ function inspectDamagePage({ expectedPlayers, expectedParties } = {}) {
   // must not make an otherwise complete Damage capture fail.
   const images = Array.from(document.images).filter(img => hero.contains(img) || card.contains(img));
   if (document.fonts.status !== "loaded" || images.some(img => !img.complete || !img.naturalWidth)) {
-    return { error: "incomplete" };
+    return { error: "incomplete", pendingAssets: true };
   }
   return {
     title: document.title.replace(/\s*\|\s*lostark\.bible\s*$/i, ""),
@@ -88,6 +94,10 @@ function inspectDamagePage({ expectedPlayers, expectedParties } = {}) {
   };
 }
 
+/**
+ * @param {object} [options] browser, queue and image-processing dependencies
+ * @returns {Function} queued capture function with a close method for its idle browser and caches
+ */
 function createRaidLogCapture({
   bibleLimiter,
   launchBrowser = options => require("playwright").chromium.launch(options),
@@ -103,6 +113,8 @@ function createRaidLogCapture({
   let idleTimer;
   let disposing = Promise.resolve();
   const cache = createImageCache();
+  const assets = createAssetCache();
+  const pendingCaptures = new Map();
 
   function closeResource(resource) {
     if (!resource) return disposing;
@@ -146,14 +158,24 @@ function createRaidLogCapture({
           try {
             // Playwright's headless shell avoids the full Chrome process set.
             const browser = await launchBrowser({ headless: true, timeout: Math.min(deadline - Date.now(), 15_000) });
-            resource = { browser, url: log.url, crashed: false };
+            resource = { browser, url: log.url, crashed: false, navigations: 0 };
           } catch (error) {
             throw new RaidLogError("browser_unavailable", error);
           }
           if (expired) throw new RaidLogError("timeout");
           const opened = resource;
           opened.browser.on("disconnected", () => { opened.crashed = true; });
-          const context = await opened.browser.newContext({
+        }
+        // Playwright retains request/response bodies in the browser context.
+        // Periodic recycling bounds that history while keeping Chromium warm.
+        if (needsNavigation && resource.navigations >= MAX_CONTEXT_NAVIGATIONS) {
+          await resource.context.close();
+          resource.page = null;
+          resource.navigations = 0;
+        }
+        if (!resource.page) {
+          const opened = resource;
+          const context = opened.context = await opened.browser.newContext({
             // Keep the desktop layout at one pixel per CSS pixel.
             viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1,
             locale: "en-GB", timezoneId: "Asia/Ho_Chi_Minh",
@@ -161,11 +183,13 @@ function createRaidLogCapture({
           });
           await context.route("**/*", route => {
             const request = route.request();
-            return isAllowedRequest(request.url(), request.isNavigationRequest(), opened.url, request.resourceType())
-              ? route.continue() : route.abort();
+            if (!isAllowedRequest(request.url(), request.isNavigationRequest(), opened.url, request.resourceType())) return route.abort();
+            const asset = assets.get(request);
+            return asset ? assets.fulfill(route, asset) : route.continue();
           });
           opened.page = await context.newPage();
           opened.page.on("crash", () => { opened.crashed = true; });
+          opened.page.on("response", response => { assets.remember(response); });
         }
         controller.signal.throwIfAborted();
         const page = resource.page;
@@ -181,6 +205,7 @@ function createRaidLogCapture({
           resource.url = log.url;
           resource.baseline = null;
           resource.player = null;
+          resource.navigations++;
           stage = "navigation";
           const response = await resource.page.goto(log.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
           if (!response?.ok()) {
@@ -196,11 +221,25 @@ function createRaidLogCapture({
         await (bibleLimiter ? bibleLimiter.run(navigate, { signal: controller.signal }) : navigate());
       } else await preparePage();
       const page = resource.page;
+      async function readEvidence(inspect, options) {
+        let evidence = await page.evaluate(inspect, options);
+        // Hydration can replace icons between asset readiness and DOM readback.
+        // Resample only that transient state; invalid geometry still fails.
+        while (evidence.pendingAssets) {
+          controller.signal.throwIfAborted();
+          await page.waitForFunction(captureAssetsReady, inspect === inspectPlayerPage);
+          evidence = await page.evaluate(inspect, options);
+        }
+        return evidence;
+      }
       if (needsNavigation) {
+        // SSR controls can exist before hydration binds their events. Let
+        // the initial modules and percentile requests settle before clicking.
+        await page.waitForLoadState("networkidle", { timeout: 12_000 });
         await bibleButton(page, "Damage").click();
         await waitForPartyTables(page);
         await page.waitForFunction(captureAssetsReady, false);
-        resource.baseline = await page.evaluate(inspectDamagePage);
+        resource.baseline = await readEvidence(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
         stage = "team-metrics";
         resource.baseline.players = await collectTeamMetrics(page, resource.baseline.players, {
@@ -241,8 +280,8 @@ function createRaidLogCapture({
       await waitForCharts(page);
       await page.mouse.move(0, 0);
       const evidence = player
-        ? await page.evaluate(inspectPlayerPage, { player, playerCount: resource.baseline.playerCount, partyCount: resource.baseline.partyCount })
-        : await page.evaluate(inspectDamagePage, { expectedPlayers: resource.baseline.playerCount, expectedParties: resource.baseline.partyCount });
+        ? await readEvidence(inspectPlayerPage, { player, playerCount: resource.baseline.playerCount, partyCount: resource.baseline.partyCount })
+        : await readEvidence(inspectDamagePage, { expectedPlayers: resource.baseline.playerCount, expectedParties: resource.baseline.partyCount });
       if (evidence.error) throw new RaidLogError(evidence.error);
       stage = "screenshot";
       const filenameBase = `raid-log-${log.id}-${view}-${tab}-${bracketed ? "bracketed" : "normalized"}${player ? `-player-${player.id}` : ""}`;
@@ -257,17 +296,17 @@ function createRaidLogCapture({
         if (screenshot.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
         images.push({ buffer: screenshot, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
       }
-      // Capture both detail halves before disposing of the page. When memory
-      // is tight, Chromium must exit before native PNG surfaces are allocated.
+      // Capture both detail halves before disposing of the page. Reclaim
+      // Chromium under pressure before streaming the PNG frames.
       const beforeFraming = await readMemory();
-      if (idleMs <= 0 || shouldReleaseBrowser(beforeFraming, images.map(image => image.clip))) {
+      if (idleMs <= 0 || shouldReleaseBrowser(beforeFraming)) {
         if (idleMs > 0) logger.info?.(`[raid-log] releasing browser before PNG framing id=${log.id} max=${beforeFraming.max} current=${beforeFraming.current}`);
         await closeResource(resource);
       }
       stage = "image-frame";
       for (const image of images) {
         controller.signal.throwIfAborted();
-        const buffer = await frameImage(image.buffer, image.clip);
+        const buffer = await frameImage(image.buffer, image.clip, { signal: controller.signal });
         controller.signal.throwIfAborted();
         if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
         image.buffer = buffer;
@@ -312,9 +351,15 @@ function createRaidLogCapture({
     const fromCache = () => useCache && !refresh && cache.get(key);
     const cached = fromCache();
     if (cached) return { ...cached, cached: true };
+    if (refresh) {
+      // New requests must queue behind the refresh rather than join an older capture.
+      for (const pendingKey of pendingCaptures.keys()) if (pendingKey.startsWith(`${log.id}:`)) pendingCaptures.delete(pendingKey);
+    }
+    const shared = useCache && !refresh && pendingCaptures.get(key);
+    if (shared) return { ...await shared, cached: true };
     const started = Date.now();
     const deadline = started + timeoutMs;
-    return queue.run(async () => {
+    const capture = queue.run(async () => {
       const queueMs = Date.now() - started;
       // Another queued request may already have rendered this exact view.
       const ready = fromCache();
@@ -335,9 +380,15 @@ function createRaidLogCapture({
       if (useCache) cache.set(key, result);
       return { ...result, queueMs };
     }, deadline);
+    if (!useCache || refresh) return capture;
+    pendingCaptures.set(key, capture);
+    try { return await capture; }
+    finally { if (pendingCaptures.get(key) === capture) pendingCaptures.delete(key); }
   }
   captureRaidLog.close = () => {
     clearTimeout(idleTimer);
+    cache.clear();
+    assets.clear();
     const resource = warm;
     warm = null;
     return closeResource(resource);

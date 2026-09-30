@@ -52,11 +52,11 @@ test("command opens a guild-only experiment without slash options", () => {
   assert.deepEqual(data.options, []);
 });
 
-function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, onClick, overviewCount = 0,
+function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, onClick, overviewCount = 0, hasNormalized = true,
   closeError, players = [], metrics = [] } = {}) {
   let rejectNavigation;
   let normalized = false;
-  const state = { closed: 0, launches: 0, navigations: 0, routes: [], garbageCollections: 0 };
+  const state = { closed: 0, launches: 0, navigations: 0, contexts: 0, contextsClosed: 0, routes: [], garbageCollections: 0, loadWaits: 0 };
   const page = Object.assign(new EventEmitter(), {
     setDefaultTimeout() {},
     setViewportSize: async () => {},
@@ -73,11 +73,13 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
         await onClick?.(options.name, page);
         if (!["Settings", "Given"].includes(options.name)) state.tab = options.name;
       },
-      isChecked: async () => normalized, count: async () => (options.name === "Return to Overview" ? overviewCount : 0),
+      isChecked: async () => { assert.ok(hasNormalized); return normalized; },
+      count: async () => (role === "switch" ? Number(hasNormalized) : options.name === "Return to Overview" ? overviewCount : 0),
       filter: () => ({ locator: () => ({ isChecked: async () => true, click: async () => {} }) }),
     }),
     locator: () => ({ filter: () => ({ waitFor: async () => {}, click: async () => { normalized = !normalized; } }) }),
     waitForFunction: async () => {},
+    waitForLoadState: async stateName => { assert.equal(stateName, "networkidle"); state.loadWaits++; },
     evaluate: async fn => fn === inspectDamagePage ? {
       title: "Kazeros G2", header: "Hard\nKazeros\n09:15", playerCount: 8, partyCount: 2,
       team: { x: 0, y: 0, width: 1280, height: 400 }, full: { x: 0, y: 0, width: 1280, height: 800 },
@@ -95,8 +97,10 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
   });
   const browser = Object.assign(new EventEmitter(), {
     newContext: async options => {
+      state.contexts++;
       state.context = options;
-      return { route: async (pattern, fn) => state.routes.push(fn), newPage: async () => page };
+      return { route: async (pattern, fn) => state.routes.push(fn), newPage: async () => page,
+        close: async () => { state.contextsClosed++; } };
     },
     close: async () => {
       state.closed++;
@@ -239,7 +243,7 @@ test("low memory closes the browser before framing, preserves cached images and 
     launchBrowser: () => { const fake = fakeBrowser(); instances.push(fake); return fake.launchBrowser(); },
     frameImage: async buffer => {
       frameCalls++;
-      assert.equal(instances.at(-1).state.closed, 1, "Chromium has exited before native image work");
+      assert.equal(instances.at(-1).state.closed, 1, "Chromium has exited before PNG framing");
       return buffer;
     },
   });
@@ -545,6 +549,183 @@ test("concurrent requests for the same image reuse the first result without a se
   } finally { await capture.close(); }
 });
 
+test("repeated navigation recycles response history while retaining the browser and same-log tabs", async () => {
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  try {
+    await capture(URL);
+    for (let index = 0; index < 3; index++) await capture(URL, { refresh: true });
+    await capture(URL, { tab: "tanked" });
+    assert.equal(fake.state.contexts, 1);
+    assert.equal(fake.state.contextsClosed, 0);
+    await capture(URL, { refresh: true });
+    assert.equal(fake.state.contexts, 2);
+    assert.equal(fake.state.contextsClosed, 1);
+    assert.equal(fake.state.launches, 1);
+    assert.equal(fake.state.closed, 0);
+  } finally { await capture.close(); }
+});
+
+test("closing the capture service releases cached PNGs before a subsequent capture", async () => {
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  try {
+    await capture(URL, { useCache: true });
+    assert.equal((await capture(URL, { useCache: true })).cached, true);
+    await capture.close();
+    assert.equal((await capture(URL, { useCache: true })).cached, undefined);
+    assert.equal(fake.state.launches, 2);
+  } finally { await capture.close(); }
+});
+
+test("logs without a percentile switch still capture their original tables in either requested mode", async () => {
+  const players = [{ id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" }];
+  const fake = fakeBrowser({ hasNormalized: false, players, metrics: [{ ...players[0], dps: 123, badges: [] }] });
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  try {
+    for (const bracketed of [true, false]) {
+      const result = await capture(URL, { bracketed });
+      assert.equal(result.players[0].dps, 123);
+      assert.deepEqual(result.players[0].badges, { bracketed: [], normalized: [] });
+      assert.equal(result.images.length, 1);
+    }
+    assert.equal(fake.state.navigations, 1);
+  } finally { await capture.close(); }
+});
+
+test("icons replaced after asset readiness are awaited and re-inspected without reloading the log", async t => {
+  for (const pendingAt of [1, 2]) {
+    const fake = fakeBrowser();
+    const evaluate = fake.page.evaluate;
+    let inspections = 0;
+    t.mock.method(fake.page, "evaluate", async (...args) => {
+      if (args[0] === inspectDamagePage && ++inspections === pendingAt) return { error: "incomplete", pendingAssets: true };
+      return evaluate(...args);
+    });
+    const capture = createRaidLogCapture(fake);
+    const result = await capture(URL);
+    assert.equal(result.images.length, 1);
+    assert.equal(inspections, 3);
+    assert.equal(fake.state.navigations, 1);
+  }
+});
+
+test("identical pending images share a render without occupying the bounded queue", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser({ onScreenshot: async () => { screenshots++; enter(); await held; } });
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45000, maxPending: 1 });
+  const first = capture(URL, { useCache: true });
+  await entered;
+  const shared = Promise.all(Array.from({ length: 6 }, () => capture(URL, { useCache: true })));
+  const distinct = capture(URL, { useCache: true, tab: "tanked" });
+  try {
+    await assert.rejects(capture(URL, { tab: "shields" }), { code: "busy" });
+    finish();
+    const initial = await first;
+    for (const result of await shared) {
+      assert.equal(result.cached, true);
+      assert.equal(result.images[0].buffer, initial.images[0].buffer);
+    }
+    assert.equal((await distinct).tab, "tanked");
+    assert.equal(screenshots, 2);
+    assert.equal(fake.state.launches, 1);
+  } finally {
+    finish();
+    await Promise.allSettled([first, shared, distinct]);
+    await capture.close();
+  }
+});
+
+test("shared render failures release the pending key so a later request can retry", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser({ onScreenshot: async () => {
+    if (++screenshots === 1) { enter(); await held; throw new Error("Screenshot failed"); }
+  } });
+  const capture = createRaidLogCapture({ ...fake, maxPending: 0 });
+  const first = capture(URL, { useCache: true });
+  const failed = assert.rejects(first, /Screenshot failed/);
+  await entered;
+  const sameFailure = assert.rejects(capture(URL, { useCache: true }), /Screenshot failed/);
+  finish();
+  try {
+    await Promise.all([failed, sameFailure]);
+    assert.equal((await capture(URL, { useCache: true })).cached, undefined);
+    assert.equal(screenshots, 2);
+  } finally { await capture.close(); }
+});
+
+test("a refresh separates new image requests from an older in-flight capture", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser();
+  fake.page.screenshot = async () => {
+    const shot = ++screenshots;
+    if (shot === 1) { enter(); await held; }
+    return Buffer.from(`png-${shot}`);
+  };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45000 });
+  const first = capture(URL, { useCache: true });
+  await entered;
+  const refreshed = capture(URL, { useCache: true, refresh: true });
+  const following = capture(URL, { useCache: true });
+  finish();
+  try {
+    assert.equal((await first).images[0].buffer.toString(), "png-1");
+    const fresh = await refreshed;
+    assert.equal(fresh.images[0].buffer.toString(), "png-2");
+    assert.equal((await following).images[0].buffer, fresh.images[0].buffer);
+    assert.equal(screenshots, 2);
+    assert.equal(fake.state.navigations, 2);
+    assert.equal(fake.state.loadWaits, 2);
+  } finally {
+    finish();
+    await Promise.allSettled([first, refreshed, following]);
+    await capture.close();
+  }
+});
+
+test("capture passes its deadline abort signal into PNG framing", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, frameImage: async (buffer, clip, { signal }) => {
+    assert.equal(signal.aborted, false);
+    t.mock.timers.tick(60001);
+    signal.throwIfAborted();
+    return buffer;
+  } });
+  await assert.rejects(capture(URL, { useCache: true }), { code: "timeout" });
+  assert.equal(fake.state.closed, 1);
+});
+
+test("streamed tall-image framing retains a warm browser with enough renderer headroom", async () => {
+  const fake = fakeBrowser();
+  const evaluate = fake.page.evaluate;
+  fake.page.evaluate = async fn => {
+    const result = await evaluate(fn);
+    if (fn === inspectDamagePage) result.full.height = 4500;
+    return result;
+  };
+  const limit = 512 * 1024 * 1024;
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45000,
+    readMemory: async () => ({ max: String(limit), current: String(limit - 160 * 1024 * 1024) }),
+    frameImage: async buffer => { assert.equal(fake.state.closed, 0); return buffer; },
+  });
+  try {
+    await capture(URL);
+    await capture(URL, { tab: "tanked" });
+    assert.equal(fake.state.launches, 1);
+    assert.equal(fake.state.navigations, 1);
+  } finally { await capture.close(); }
+});
+
 function damageFixture(players = 8) {
   const dom = new JSDOM('<title>Kazeros G2 | lostark.bible</title><div class="max-w-7xl"><h1>Kazeros G2</h1></div><section>Total DMG: 99b</section>', { runScripts: "outside-only" });
   const { window } = dom;
@@ -607,6 +788,7 @@ test("capture waits only for its own images and eagerly loads its below-viewport
     assert.equal(await ready(), false);
     assert.equal(inside.loading, "eager");
     Object.defineProperty(inside, "complete", { value: true });
+    Object.defineProperty(inside, "naturalWidth", { value: 32 });
     let decoded = false;
     inside.decode = async () => { decoded = true; };
     assert.equal(await ready(), true);
@@ -619,6 +801,7 @@ test("asset readiness rechecks icons added or reloaded while the page hydrates",
   try {
     const inside = document.createElement("img");
     Object.defineProperty(inside, "complete", { value: true, configurable: true });
+    Object.defineProperty(inside, "naturalWidth", { value: 32 });
     inside.decode = async () => {};
     let mutate = () => document.querySelector("section").appendChild(inside);
     dom.window.requestAnimationFrame = callback => { const change = mutate; mutate = null; change?.(); callback(); };
@@ -629,6 +812,18 @@ test("asset readiness rechecks icons added or reloaded while the page hydrates",
     assert.equal(await ready(), false, "a reused img element can start loading another icon");
     Object.defineProperty(inside, "complete", { value: true });
     assert.equal(await ready(), true);
+  } finally { dom.window.close(); }
+});
+
+test("a completed but broken image is never accepted as capture-ready", async () => {
+  const { dom, document } = damageFixture();
+  try {
+    dom.window.requestAnimationFrame = callback => callback();
+    const image = document.querySelector("section").appendChild(document.createElement("img"));
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 0 });
+    image.decode = async () => { throw new Error("Image not found"); };
+    assert.equal(await dom.window.eval(`(${captureAssetsReady.toString()})()`), false);
   } finally { dom.window.close(); }
 });
 

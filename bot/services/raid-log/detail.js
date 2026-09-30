@@ -2,8 +2,11 @@
 
 const { bibleButton, OVERVIEW_BUTTON } = require("./page-controls");
 
-// Runs in the browser. Capture the whole selected-player section, including
-// the analysis cards and charts below the skill table, in two ordered images.
+/**
+ * Runs in the browser. Include player analysis cards in two ordered images.
+ * @param {{ player: object, playerCount: number, partyCount: number }} options selection and baseline counts
+ * @returns {object} detail capture bounds and metadata, or an incomplete-page error
+ */
 function inspectPlayerPage({ player, playerCount, partyCount }) {
   const hero = document.querySelector("h1")?.closest(".max-w-7xl");
   const back = document.querySelector('[aria-label="Return to Overview"]');
@@ -29,8 +32,10 @@ function inspectPlayerPage({ player, playerCount, partyCount }) {
   };
   const images = [...document.images].filter(img => hero.contains(img) || content.contains(img));
   if (x < 0 || y < 0 || full.width <= 0 || full.height <= 0 || full.height > 9800
-    || !tables.every(fits) || document.fonts.status !== "loaded"
-    || images.some(img => !img.complete || !img.naturalWidth)) return { error: "incomplete" };
+    || !tables.every(fits)) return { error: "incomplete" };
+  if (document.fonts.status !== "loaded" || images.some(img => !img.complete || !img.naturalWidth)) {
+    return { error: "incomplete", pendingAssets: true };
+  }
 
   // Prefer a gap between cards near the midpoint, then a row boundary. A small
   // overlap keeps the join readable even when the only possible cut is a chart.

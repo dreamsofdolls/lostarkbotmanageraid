@@ -46,10 +46,12 @@ async function selectCaptureTab(page, { tab, bracketed, player }) {
 /**
  * @param {object} page Playwright page on a Damage view
  * @param {boolean} on true for Normalized percentiles, false for Bracketed
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether the log supports percentile modes
  */
 async function setNormalized(page, on) {
   const toggle = page.getByRole("switch", { name: NORMALIZED_SWITCH });
+  // Older encounters have no percentile analysis or mode switch.
+  if (!await toggle.count()) return false;
   if (await toggle.isChecked() !== on) await page.locator("label").filter({ has: toggle }).click();
   // The input flips on click; the label's white text in Bracketed mode comes
   // with Bible's re-render, so waiting on both waits for the redrawn table.
@@ -57,6 +59,7 @@ async function setNormalized(page, on) {
     const input = document.querySelector(`input[aria-label="${name}"]`);
     return input?.checked === on && input.closest("label").querySelector("span").classList.contains("text-white") === !on;
   }, { name: NORMALIZED_SWITCH, on });
+  return true;
 }
 
 /**
