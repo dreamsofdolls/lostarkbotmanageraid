@@ -59,6 +59,15 @@ for (const [format, header, contentType] of [
   });
 }
 
+test("raid-bg refuses a PNG with no image data instead of crashing the process", async () => {
+  // @napi-rs/canvas 1.0.2 segfaulted on this input, which killed the bot.
+  const buffer = pngHeader(1600, 900);
+  await assert.rejects(
+    validateBgAttachment({ size: buffer.length, contentType: "image/png" }, buffer),
+    (err) => err.key === "raidBg.errors.decodeFailed",
+  );
+});
+
 for (const [format, contentType] of [["JPEG", "image/jpeg"], ["WebP", "image/webp"]]) {
   test(`raid-bg reads a real ${format} header and accepts it within the budget`, async () => {
     const canvas = createCanvas(1600, 900);
