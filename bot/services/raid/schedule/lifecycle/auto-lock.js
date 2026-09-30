@@ -19,6 +19,9 @@ const { editBoardMessage } = require("../board-io");
 
 const RAID_SCHEDULE_AUTO_LOCK_TICK_MS = 60 * 1000;
 const RAID_SCHEDULE_AUTO_LOCK_BATCH_SIZE = 25;
+// editBoardMessage reports a Discord outage and a deleted board the same
+// way, so a failed edit is retried for about ten minutes and then dropped.
+const BOARD_EDIT_RETRY_TICKS = 10;
 
 function createRaidScheduleAutoLockService({
   RaidEvent,
@@ -34,6 +37,10 @@ function createRaidScheduleAutoLockService({
   boardPayload = null,
 }) {
   let interval = null;
+  // Event id -> ticks left to retry. A locked event leaves the open-event
+  // scan, so a board whose edit failed would otherwise keep its Join
+  // buttons. Held in memory: a restart drops the retries.
+  const boardEditRetries = new Map();
 
   async function lockedBoardPayload(event, lang) {
     if (typeof boardPayload === "function") return boardPayload(event, lang);
@@ -55,7 +62,18 @@ function createRaidScheduleAutoLockService({
     ), { logLabel: "auto-lock board edit failed" });
   }
 
+  async function retryBoardEdits(client) {
+    for (const [eventId, ticksLeft] of boardEditRetries) {
+      // An event unlocked, cleared or removed since has a newer board.
+      const event = await RaidEvent.findOne({ _id: eventId, status: "locked" });
+      const settled = !event || await editBoard(client, event);
+      if (settled || ticksLeft === 1) boardEditRetries.delete(eventId);
+      else boardEditRetries.set(eventId, ticksLeft - 1);
+    }
+  }
+
   async function runRaidScheduleAutoLockTick(client, now = new Date()) {
+    await retryBoardEdits(client);
     const dueEvents = await RaidEvent.find({
       status: "open",
       autoLockAtStart: true,
@@ -71,7 +89,7 @@ function createRaidScheduleAutoLockService({
       );
       if (!updated) continue;
       locked += 1;
-      await editBoard(client, updated);
+      if (!(await editBoard(client, updated))) boardEditRetries.set(updated._id, BOARD_EDIT_RETRY_TICKS);
     }
     return { scanned: dueEvents.length, locked };
   }

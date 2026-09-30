@@ -156,6 +156,71 @@ test("auto-lock keeps the lead's board switcher when it refreshes the board", as
   assert.equal(editedPayload.components[0].components[0].data.disabled, true);
 });
 
+function autoLockRetryHarness({ lockedNow }) {
+  const due = makeEvent();
+  const locked = makeEvent({ status: "locked" });
+  let openEvents = [due];
+  const edits = [];
+  const RaidEvent = {
+    find: () => ({ limit: async () => openEvents }),
+    findOneAndUpdate: async () => {
+      openEvents = [];
+      return locked;
+    },
+    findOne: async (filter) => {
+      assert.deepEqual(filter, { _id: locked._id, status: "locked" });
+      return lockedNow() ? locked : null;
+    },
+  };
+  const client = {
+    channels: {
+      fetch: async () => ({
+        messages: {
+          fetch: async () => ({
+            edit: async (payload) => {
+              edits.push(payload);
+              if (edits.length === 1) throw Object.assign(new Error("Service Unavailable"), { status: 503 });
+            },
+          }),
+        },
+      }),
+    },
+  };
+  const service = createRaidScheduleAutoLockService({
+    RaidEvent, GuildConfig: null, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UI,
+  });
+  const tick = () => service.runRaidScheduleAutoLockTick(client, new Date(Date.UTC(2026, 4, 29, 13, 1)));
+  return { edits, tick };
+}
+
+test("auto-lock retries a board edit that failed after its event locked", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const { edits, tick } = autoLockRetryHarness({ lockedNow: () => true });
+
+  await tick();
+  await tick();
+  await tick();
+
+  assert.equal(edits.length, 2);
+  const joinButton = edits[1].components[0].components.find(
+    (component) => component.data.custom_id === "rse:join:abcdef123456",
+  );
+  assert.equal(joinButton.data.disabled, true);
+});
+
+test("auto-lock drops a board retry once its event is no longer locked", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  let stillLocked = true;
+  const { edits, tick } = autoLockRetryHarness({ lockedNow: () => stillLocked });
+
+  await tick();
+  stillLocked = false;
+  await tick();
+  await tick();
+
+  assert.equal(edits.length, 1);
+});
+
 test("auto-lock scheduler skips an interval while the previous tick is running", async () => {
   const originalSetInterval = global.setInterval;
   const originalWarn = console.warn;
@@ -192,6 +257,7 @@ test("auto-lock scheduler skips an interval while the previous tick is running",
       UI,
     });
     service.startRaidScheduleAutoLockScheduler({});
+    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(findCalls, 1);
 
     await intervalFn();
