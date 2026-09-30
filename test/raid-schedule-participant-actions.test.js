@@ -7,6 +7,27 @@ const {
   createScheduleParticipantActions,
 } = require("../bot/handlers/raid/schedule/actions/participant-actions");
 
+test("participant pick resolves a saved character ID after the roster order changes", async () => {
+  const event = {
+    guildId: "guild", status: "open", raidKey: "armoche", minItemLevel: 1700,
+    signups: [], save: async () => {},
+  };
+  const roster = { accounts: [{ accountName: "Roster", characters: [
+    { id: "gamma", name: "Gamma", class: "Bard", itemLevel: 1800 },
+    { id: "beta", name: "Beta", class: "Bard", itemLevel: 1800 },
+  ] }] };
+  const actions = createScheduleParticipantActions({
+    User: { findOne: () => ({ lean: async () => roster }) },
+    boardLang: async () => "en",
+    editBoardMessage: async () => true,
+    markSignups: (target, signups) => { target.signups = signups; },
+    editNotice: async (_interaction, _lang, severity) => assert.equal(severity, "success"),
+  });
+  await actions.handlePick({ user: { id: "owner" }, values: ["beta"] }, event, "en");
+  assert.equal(event.signups.length, 1);
+  assert.equal(event.signups[0].characterName, "Beta");
+});
+
 test("a waitlister promoted by an absent RSVP is pinged in a public follow-up", async () => {
   const event = {
     guildId: "guild-1",

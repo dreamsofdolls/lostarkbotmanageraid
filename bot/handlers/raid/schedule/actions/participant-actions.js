@@ -87,12 +87,12 @@ function createScheduleParticipantActions({
       return;
     }
 
-    const rowIndex = Number(interaction.values?.[0]);
+    const characterId = interaction.values?.[0];
     const row = await loadSelectableCharacterRow(
       User,
       interaction.user.id,
       event,
-      rowIndex
+      characterId
     );
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");

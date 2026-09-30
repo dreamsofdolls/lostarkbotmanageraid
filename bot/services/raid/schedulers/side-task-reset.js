@@ -2,6 +2,11 @@
 
 const SIDE_TASK_RESET_TICK_MS = 30 * 60 * 1000;
 
+/**
+ * Build task resets that invalidate older User document snapshots.
+ * @param {object} deps - User model and daily/weekly reset boundaries
+ * @returns {object} reset operations and scheduler lifecycle
+ */
 function createSideTaskResetService({
   User,
   dailyResetStartMs,
@@ -25,6 +30,7 @@ function createSideTaskResetService({
           "accounts.$[].characters.$[].sideTasks.$[task].completed": false,
           "accounts.$[].characters.$[].sideTasks.$[task].lastResetAt": dailyStart,
         },
+        $inc: { __v: 1 },
       },
       {
         arrayFilters: [
@@ -44,6 +50,7 @@ function createSideTaskResetService({
           "accounts.$[].characters.$[].sideTasks.$[task].completed": false,
           "accounts.$[].characters.$[].sideTasks.$[task].lastResetAt": weeklyStart,
         },
+        $inc: { __v: 1 },
       },
       {
         arrayFilters: [
@@ -64,6 +71,7 @@ function createSideTaskResetService({
           "accounts.$[].sharedTasks.$[task].completedAt": null,
           "accounts.$[].sharedTasks.$[task].lastResetAt": dailyStart,
         },
+        $inc: { __v: 1 },
       },
       {
         arrayFilters: [
@@ -84,6 +92,7 @@ function createSideTaskResetService({
           "accounts.$[].sharedTasks.$[task].completedAt": null,
           "accounts.$[].sharedTasks.$[task].lastResetAt": weeklyStart,
         },
+        $inc: { __v: 1 },
       },
       {
         arrayFilters: [

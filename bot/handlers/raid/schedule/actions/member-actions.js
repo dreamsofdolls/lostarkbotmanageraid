@@ -136,8 +136,8 @@ function createScheduleMemberActions({
       return;
     }
 
-    const rowIndex = Number(interaction.values?.[0]);
-    const row = await loadSelectableCharacterRow(User, targetId, event, rowIndex);
+    const characterId = interaction.values?.[0];
+    const row = await loadSelectableCharacterRow(User, targetId, event, characterId);
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
       return;

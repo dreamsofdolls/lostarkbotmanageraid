@@ -42,7 +42,7 @@ function hasClearedRaid(character, raidKey) {
  * Flatten a user's accounts into a per-character eligibility list.
  * @param {Array} accounts - User.accounts[]
  * @param {{raidKey: string, minItemLevel: number}} target - the event's raid + iLvl floor
- * @returns {Array<{accountName: string, name: string, className: string, itemLevel: number, role: "support"|"dps", eligible: boolean, deficit: number, alreadyCleared: boolean}>}
+ * @returns {Array<{characterId: string, accountName: string, name: string, className: string, itemLevel: number, role: "support"|"dps", eligible: boolean, deficit: number, alreadyCleared: boolean}>}
  */
 function listEligibleCharacters(accounts, { raidKey, minItemLevel }) {
   const rows = [];
@@ -51,6 +51,7 @@ function listEligibleCharacters(accounts, { raidKey, minItemLevel }) {
       const itemLevel = Number(ch?.itemLevel) || 0;
       const eligible = itemLevel >= minItemLevel;
       rows.push({
+        characterId: ch.id,
         accountName: account.accountName,
         name: ch.name,
         className: ch.class,

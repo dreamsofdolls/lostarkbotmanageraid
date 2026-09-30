@@ -28,23 +28,37 @@ function findOwnEligibleRows(userDoc, event) {
     raidKey: event.raidKey,
     minItemLevel: event.minItemLevel,
   });
-  return rows
-    .map((row, index) => ({ ...row, index }))
-    .filter((row) => row.eligible);
+  return rows.filter((row) => row.eligible);
 }
 
 function getSelectableCharacterRows(userDoc, event) {
   return partitionSelectable(findOwnEligibleRows(userDoc, event));
 }
 
-function findSelectableCharacterRow(userDoc, event, rowIndex) {
+/**
+ * Resolve a saved character ID against the current signup eligibility.
+ * @param {object} userDoc - owner's current roster
+ * @param {object} event - raid and item-level requirements
+ * @param {string} characterId - saved roster character ID
+ * @returns {object|null} selectable character row
+ */
+function findSelectableCharacterRow(userDoc, event, characterId) {
+  if (!characterId) return null;
   const { selectable } = getSelectableCharacterRows(userDoc, event);
-  return selectable.find((candidate) => candidate.index === Number(rowIndex)) || null;
+  return selectable.find((candidate) => candidate.characterId === characterId) || null;
 }
 
-async function loadSelectableCharacterRow(UserModel, discordId, event, rowIndex) {
+/**
+ * Reload the owner's roster before resolving a picker selection.
+ * @param {object} UserModel - User model
+ * @param {string} discordId - roster owner's Discord ID
+ * @param {object} event - raid and item-level requirements
+ * @param {string} characterId - saved roster character ID
+ * @returns {Promise<object|null>} current selectable character row
+ */
+async function loadSelectableCharacterRow(UserModel, discordId, event, characterId) {
   const userDoc = await UserModel.findOne({ discordId }).lean();
-  return findSelectableCharacterRow(userDoc, event, rowIndex);
+  return findSelectableCharacterRow(userDoc, event, characterId);
 }
 
 function characterRowOption(row, lang) {
@@ -54,7 +68,7 @@ function characterRowOption(row, lang) {
   const emoji = classEmojiOption(row.className);
   return {
     label: clip(row.name, 100),
-    value: String(row.index),
+    value: row.characterId,
     description: clip(
       `${row.accountName} \u00b7 ${row.itemLevel} \u00b7 ${roleLabel(row.role, lang)}${cleared}`,
       100,

@@ -121,7 +121,7 @@ test("schedule delete, kick, and add-member panels expose stable custom ids", ()
   assert.equal(addUserSelect.data.custom_id, `rse:adduser:${EVENT_ID}`);
 
   const addCharSelect = panels.addCharSelectPayload(event, "target1", [{
-    index: 7,
+    characterId: "char-qiylyn",
     accountName: "Main",
     name: "Qiylyn",
     className: "Bard",
@@ -130,7 +130,7 @@ test("schedule delete, kick, and add-member panels expose stable custom ids", ()
     alreadyCleared: false,
   }], "vi").components[0].components[0];
   assert.equal(addCharSelect.data.custom_id, `rse:addpick:target1:${EVENT_ID}`);
-  assert.equal(addCharSelect.options[0].data.value, "7");
+  assert.equal(addCharSelect.options[0].data.value, "char-qiylyn");
 });
 
 test("schedule kick picker spills past 25 signups so every signup can be kicked", () => {

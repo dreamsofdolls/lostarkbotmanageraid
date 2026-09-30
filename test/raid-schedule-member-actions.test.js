@@ -45,6 +45,7 @@ test("schedule member add-pick parses nested target id and adds that user's char
     accounts: [{
       accountName: "Roster A",
       characters: [{
+        id: "char-qiylyn",
         name: "Qiylyn",
         class: "Bard",
         itemLevel: 1725,
@@ -70,7 +71,7 @@ test("schedule member add-pick parses nested target id and adds that user's char
   };
   const interaction = {
     customId: "rse:addpick:target-user:event1",
-    values: ["0"],
+    values: ["char-qiylyn"],
     editReplyCalls: [],
     editReply(payload) {
       this.editReplyCalls.push(payload);
