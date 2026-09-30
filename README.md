@@ -95,8 +95,7 @@ on Bible. Its fields name 👑 MVP DMG (highest D%), 📈 DPS score (best percen
 badge, with nDPS) and 🎯 MVP Counter (most counters; ties go to STAG, then D%,
 then table order) on the DPS row; ✨ MVP Radiant Sup (highest bD%), 🤝 Sup
 contribution (best rContribution badge, with rCon%) and ⏱️ Sup uptime (best Buff
-Performance badge) on the support row; then duration, total DMG and team DPS in
-Bible's own wording. 📜 The raid's five latest logs follow, coloured by parse tier
+Performance badge) on the support row. 📜 The raid's five latest logs follow, coloured by parse tier
 with ▶ on the open log, and the side colour follows the open log's parse. New
 panels open on the full Damage tab with **Bracketed**; the image is the selected
 tab as captured from Bible, and a player view adds an image-only embed for the

@@ -2,8 +2,8 @@
 
 /**
  * bot/handlers/raid/log-view.js
- * The /raid-log log-book card (MVP, score and fight fields, the raid's
- * latest logs, the capture) and its controls.
+ * The /raid-log log-book card (MVP and score fields, the raid's latest
+ * logs, the capture) and its controls.
  */
 
 const { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
@@ -41,19 +41,6 @@ function splitLabel(label) {
   return { itemLevel, name };
 }
 
-/**
- * @param {string} summary Bible's fight summary text
- * @returns {{ duration: string|null, totalDamage: string|null, teamDps: string|null }} in Bible's own wording
- */
-function parseSummary(summary) {
-  const duration = /Duration:\s*([\d:]+)(?:\s*(\+[\d:]+))?/.exec(summary);
-  return {
-    duration: duration ? duration.slice(1).filter(Boolean).join(" ") : null,
-    totalDamage: /Total DMG:\s*([\d,]+)/.exec(summary)?.[1] ?? null,
-    teamDps: /Total DPS:\s*([\d,]+)/.exec(summary)?.[1] ?? null,
-  };
-}
-
 // One MVP field per pick. The chip reads "-" while the pick lacks `figure`;
 // without a pick at all the field shows `empty` ([values key, chip]) or a bare "-".
 const HIGHLIGHT_FIELDS = [
@@ -81,12 +68,6 @@ function highlightFields(players, bracketed, lang) {
       : empty ? `${t(`raid-log.values.${empty[0]}`, lang)}\n\`${empty[1]}\`` : "`-`";
     return field(emoji, key, value, lang);
   });
-}
-
-function fightFields(summary, lang) {
-  const fight = parseSummary(summary);
-  return [["⏱", "duration"], ["⚔", "totalDamage"], ["📊", "teamDps"]]
-    .map(([emoji, key]) => field(emoji, key, `\`${fight[key] ?? "-"}\``, lang));
 }
 
 // The figures after a log's headline percent, shared by the history and the log menu.
@@ -120,7 +101,7 @@ function historyField(state, support) {
 
 /**
  * @param {object} state panel session (catalog, selected log, player, bracketed, lang)
- * @param {object} result capture metadata: players, summary, url, links, images[].filename
+ * @param {object} result capture metadata: players, url, links, images[].filename
  * @param {{ EmbedBuilder: Function, UI: object }} builders
  * @returns {import("discord.js").EmbedBuilder[]} the card, plus an image-only embed for a player's lower image
  */
@@ -129,8 +110,7 @@ function buildLogEmbeds(state, result, { EmbedBuilder, UI }) {
   const color = parseTier(headlinePercent(state.selected, support, state.bracketed)).color ?? UI.colors.neutral;
   const card = new EmbedBuilder().setColor(color).setURL(result.url)
     .setTitle(`📜 ${t("raid-log.panel.title", state.lang, { raid: state.selected.raidLabel, character: state.catalog.profile.name })}`)
-    .addFields(...highlightFields(result.players, state.bracketed, state.lang), ...fightFields(result.summary, state.lang),
-      historyField(state, support))
+    .addFields(...highlightFields(result.players, state.bracketed, state.lang), historyField(state, support))
     .setImage(`attachment://${result.images[0].filename}`);
   if (state.player && result.links.length) {
     card.setDescription(`-# 🔗 ${result.links.map(link => `[${link.title.replace(/^View /, "")}](${link.url})`).join(" · ")}`);
@@ -306,6 +286,6 @@ function buildWaitingComponents(rows, { customId, values = [] }) {
 }
 
 module.exports = {
-  buildLogComponents, buildLogEmbeds, buildWaitingComponents, parseSummary, headlinePercent, openRaidLogs,
+  buildLogComponents, buildLogEmbeds, buildWaitingComponents, headlinePercent, openRaidLogs,
   raidLogCustomId, pagedChoices, PAGE_STEPS, PAGE_SIZE,
 };

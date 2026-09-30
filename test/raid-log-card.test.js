@@ -2,7 +2,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseSummary } = require("../bot/handlers/raid/log-view");
 const { fixture, logEntry, withClassIcons } = require("./helpers/raid-log-fixture");
 
 const AERO = "<:aeromancer:111111111111111111>";
@@ -17,7 +16,7 @@ const KAZEROS = [
 ];
 const card = f => f.payload.embeds[0].toJSON();
 
-test("the card names each MVP and score with a class icon, then the fight and the raid's latest logs", async t => {
+test("the card names each MVP and score with a class icon, then the raid's latest logs", async t => {
   withClassIcons(t, { Aeromancer: AERO, Bard: BARD });
   const f = fixture({ logs: KAZEROS });
   await f.run();
@@ -34,16 +33,13 @@ test("the card names each MVP and score with a class icon, then the fight and th
     ["✨ MVP Radiant Sup", `${BARD} **Canameo**\n\`31.8% bD%\``],
     ["🤝 Sup Perform",`${BARD} **Canameo**\n\`🟣 82 · 51.1% rCon\``],
     ["⏱️ Sup uptime", `${BARD} **Canameo**\n\`🟣 91\``],
-    ["⏱ Thời lượng", "`1:30`"],
-    ["⚔ Tổng DMG", "`100`"],
-    ["📊 DPS đội", "`1`"],
     ["📜 2 log gần nhất", [
       "▶ 🌸 G2 · 24/09 23:40 · **99%** · 1.06B DPS · 386M nDPS · ⏱ 7:27",
       "-# 🔵 G1 · 24/09 23:31 · **60%** · 953M DPS · 345M nDPS · ⏱ 4:48 · 💀",
     ].join("\n")],
   ]);
-  assert.ok(embed.fields.slice(0, 9).every(field => field.inline));
-  assert.equal(embed.fields[9].inline, undefined);
+  assert.ok(embed.fields.slice(0, 6).every(field => field.inline));
+  assert.equal(embed.fields[6].inline, undefined);
   assert.equal(embed.image.url, "attachment://capture.png");
 });
 
@@ -54,8 +50,8 @@ test("Normalized changes the dealer score, the side colour and each dealer perce
   const embed = card(f);
   assert.equal(embed.fields[1].value, "**Qiylyn**\n`🟠 98 · 386M nDPS`");
   assert.equal(embed.color, 0xa335ee);
-  assert.match(embed.fields[9].value, /^▶ 🟣 G2 · 24\/09 23:40 · \*\*90%\*\*/);
-  assert.match(embed.fields[9].value, /\n-# 🔵 G1 · 24\/09 23:31 · \*\*58%\*\*/);
+  assert.match(embed.fields[6].value, /^▶ 🟣 G2 · 24\/09 23:40 · \*\*90%\*\*/);
+  assert.match(embed.fields[6].value, /\n-# 🔵 G1 · 24\/09 23:31 · \*\*58%\*\*/);
 });
 
 test("a log without supports or counters says so instead of naming someone", async () => {
@@ -90,11 +86,11 @@ test("a looked-up support is judged by rContribution, and a missing percentile s
   await f.run();
   const embed = card(f);
   assert.equal(embed.color, 0xff8000);
-  assert.equal(embed.fields[9].value, [
+  assert.equal(embed.fields[6].value, [
     "▶ 🟠 G2 · 24/09 23:40 · **97%** · - uptime · 52.6% rCon · ⏱ 7:27",
     "-# ⚪ G1 · 24/09 23:31 · **-** · 79% uptime · - rCon · ⏱ 4:48",
   ].join("\n"));
-  assert.doesNotMatch(embed.fields[9].value, /\b0%/);
+  assert.doesNotMatch(embed.fields[6].value, /\b0%/);
 });
 
 test("the history shows the raid's newest five and keeps an older open log on the last line", async () => {
@@ -102,7 +98,7 @@ test("the history shows the raid's newest five and keeps an older open log on th
   const f = fixture({ logs });
   await f.run();
   await f.click(f.owner("log", "l6"));
-  const history = card(f).fields[9];
+  const history = card(f).fields[6];
   const lines = history.value.split("\n");
   assert.equal(history.name, "📜 5 log gần nhất");
   assert.equal(lines.length, 5);
@@ -126,11 +122,4 @@ test("the card has no raw locale keys in any language", async () => {
     await f.run();
     assert.doesNotMatch(JSON.stringify(f.payload.embeds), /raid-log\./);
   }
-});
-
-test("the fight fields keep Bible's wording and leave a missing value empty", () => {
-  assert.deepEqual(parseSummary("Duration:\n7:27\n+0:39\n·\nTotal DMG:\n1,928,393,107,867\n·\nTotal DPS:\n4,314,078,107\nDamage"),
-    { duration: "7:27 +0:39", totalDamage: "1,928,393,107,867", teamDps: "4,314,078,107" });
-  assert.deepEqual(parseSummary("Duration:\n7:04\n·\nTotal DMG:\n1,539,242,432,317"),
-    { duration: "7:04", totalDamage: "1,539,242,432,317", teamDps: null });
 });

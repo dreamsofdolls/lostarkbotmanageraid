@@ -240,9 +240,6 @@ module.exports = {
       mvpSupport: "MVP Radiant Sup",
       supportContribution: "Sup Perform",
       supportUptime: "Sup uptime",
-      duration: "Thời lượng",
-      totalDamage: "Tổng DMG",
-      teamDps: "DPS đội",
     },
     values: {
       counter: "{count} counter",
@@ -2002,7 +1999,7 @@ module.exports = {
         notes: [
           "Gọi lệnh không cần tham số để mở thẻ chọn nhân vật: **🔎 Tìm theo tên** cho bất kỳ ai ở NA, dropdown nhân vật trong roster đã lưu của chính người gọi (icon class, roster, iLvl), và **🕘 Log gần đây** gom trận mới nhất của cả roster (tối đa 24 nhân vật iLvl cao nhất, bỏ qua nhân vật chưa bật Public Log; mở được 25 trận mới nhất). Chưa có nhân vật đã lưu thì chỉ hiện tìm tên.",
           "Thẻ mở đầu và bảng log đều công khai, chỉ người gọi được bấm. Sau khi chọn nhân vật, thẻ chuyển thành bảng log public gần nhất ở NA, không giới hạn tuần hiện tại. Mọi lỗi hiện thành card riêng cho người bấm, kèm link log gốc khi lần chụp hỏng; log chuyển private giữa chừng thì bảng bị khoá và gỡ ảnh.",
-          "Chọn nhân vật thì thẻ thành nhật ký log: 👑 MVP DMG (D% cao nhất), 📈 Score DPS (badge + nDPS), 🎯 MVP Counter (một người: nhiều counter nhất, hoà thì STAG rồi D%), ✨ MVP Radiant Sup (bD% cao nhất), 🤝 Sup Perform (badge rContribution + rCon%), ⏱️ Sup uptime (badge Buff Performance), rồi thời lượng, tổng DMG, DPS đội. Không cần đăng ký roster hoặc bật Auto-sync.",
+          "Chọn nhân vật thì thẻ thành nhật ký log: 👑 MVP DMG (D% cao nhất), 📈 Score DPS (badge + nDPS), 🎯 MVP Counter (một người: nhiều counter nhất, hoà thì STAG rồi D%), ✨ MVP Radiant Sup (bD% cao nhất), 🤝 Sup Perform (badge rContribution + rCon%), ⏱️ Sup uptime (badge Buff Performance). Không cần đăng ký roster hoặc bật Auto-sync.",
           "📜 5 log gần nhất của raid đang xem tô màu theo parse, ▶ đánh dấu log đang mở; màu viền card theo parse của log đang mở. Ảnh là tab đang xem, chụp thẳng từ Bible.",
           "Hàng nút: ◀️ ▶️ đổi tab, 📐 Bracketed/Normalized, ↩️ Mặc định (giữ log, về Toàn đội / Damage / Bracketed). Bốn dropdown: raid (kèm ⏬ tải log cũ hơn, tối đa 250 log, và 🔄 Làm mới: tải lại danh sách và chụp lại ảnh đang xem, giữ lựa chọn), log, người xem (Toàn đội hoặc từng player), tab. Dropdown đóng vẫn đọc được số liệu chính. Chỉ người gọi được bấm, trong 15 phút.",
           "Toàn đội có Damage, Party/Self Buffs (tấn công hoặc đầy đủ), bốn chế độ Shields, Tanked và hai biểu đồ DPS. Chọn player để xem skill/buff và toàn bộ phân tích phía dưới bằng hai ảnh trên/dưới; Breakdown có By Source và By Category khi log hỗ trợ.",

@@ -690,8 +690,7 @@ test("handler acknowledges first, attaches a public image with source link in al
       jp: "📜 Kazeros · Saturnxd のログ帳" }[lang]);
     assert.equal(embed.footer, undefined);
     assert.equal(embed.description, undefined);
-    assert.deepEqual(embed.fields.slice(6, 9).map(field => field.value), ["`7:27 +0:39`", "`1,928,393,107,867`", "`4,314,078,107`"]);
-    assert.ok(embed.fields.slice(0, 9).every(field => field.inline));
+    assert.ok(embed.fields.slice(0, 6).every(field => field.inline));
     assert.equal(embed.image.url, "attachment://log.png");
     assert.equal(payload.files[0].name, "log.png");
     assert.doesNotMatch(JSON.stringify(embed), /raid-log\./);
