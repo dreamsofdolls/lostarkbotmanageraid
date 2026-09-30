@@ -45,6 +45,7 @@ function createGoldReplacementFlow(ctx) {
     reloadViewerAccounts,
     formatGold,
     truncateText,
+    canEditAccountFn,
   } = ctx;
   const sessions = new Map();
 
@@ -137,6 +138,15 @@ function createGoldReplacementFlow(ctx) {
 
     sessions.delete(token);
     const { replacement, writeDiscordId, targetAccountName } = pending;
+    // The owner can revoke the share while the prompt is open.
+    if (!(await canEditAccountFn(discordId, writeDiscordId))) {
+      console.log(
+        `[raid-status gold replace] share without edit rejected ` +
+        `executor=${discordId} owner=${writeDiscordId}`,
+      );
+      await warn(component);
+      return redraw();
+    }
     const targetRaid = localizedRaidLabel(replacement.targetRaid, lang);
     const removedRaid = (replacement.options || []).find((raid) => raid.raidKey === removedRaidKey);
     let replaceResult;

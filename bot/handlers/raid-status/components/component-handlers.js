@@ -54,6 +54,7 @@ const {
   tPick,
 } = require("../../../services/i18n");
 const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
+const { canEditAccount } = require("../../../services/access/access-control");
 
 function noRedraw() {
   return { redraw: false };
@@ -113,6 +114,7 @@ function createStatusComponentRouteHandlers(ctx) {
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
+    canEditAccountFn = canEditAccount,
     refreshLocalSyncSnapshot = async () => null,
     runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
     // The session's shared redraw (view/redraw.js); built here when not given.
@@ -136,18 +138,22 @@ function createStatusComponentRouteHandlers(ctx) {
     reloadViewerAccounts,
     formatGold,
     truncateText,
+    canEditAccountFn,
   });
 
-  function resolveCurrentAccountWriteContext({ logLabel, detail = "" }) {
+  // _sharedFrom was read when /raid-status opened, and the owner can revoke
+  // or downgrade the share while the card stays open, so writes to a shared
+  // roster ask RosterShare again instead of trusting it.
+  async function resolveCurrentAccountWriteContext({ logLabel, detail = "" }) {
     const targetAccount = session.accounts[session.currentPage];
     const targetAccountName = targetAccount?.accountName || "";
     if (!targetAccountName) return null;
 
     const sharedFrom = targetAccount?._sharedFrom;
     const detailSuffix = detail ? ` ${detail}` : "";
-    if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+    if (sharedFrom && !(await canEditAccountFn(discordId, sharedFrom.ownerDiscordId))) {
       console.log(
-        `[${logLabel}] view-only share rejected ` +
+        `[${logLabel}] share without edit rejected ` +
         `executor=${discordId} owner=${sharedFrom.ownerDiscordId}${detailSuffix}`,
       );
       return null;
@@ -334,14 +340,6 @@ function createStatusComponentRouteHandlers(ctx) {
         }).catch(() => {});
         return noRedraw();
       }
-      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
-        await replyNotice(component, EmbedBuilder, {
-          type: "lock",
-          title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
-          description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
-        }).catch(() => {});
-        return noRedraw();
-      }
       if (typeof runManualRosterRefresh !== "function") {
         await replyNotice(component, EmbedBuilder, {
           type: "error",
@@ -358,6 +356,17 @@ function createStatusComponentRouteHandlers(ctx) {
         return false;
       });
       if (!deferred) return noRedraw();
+
+      // Checked after the defer so the RosterShare read cannot use up
+      // Discord's three-second reply window.
+      if (sharedFrom && !(await canEditAccountFn(discordId, sharedFrom.ownerDiscordId))) {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "lock",
+          title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
+          description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
 
       const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
       try {
@@ -553,7 +562,7 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const writeContext = resolveCurrentAccountWriteContext({
+      const writeContext = await resolveCurrentAccountWriteContext({
         logLabel: "raid-status side-task toggle",
         detail: `kind=${parsed.kind}`,
       });
@@ -617,7 +626,7 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const writeContext = resolveCurrentAccountWriteContext({
+      const writeContext = await resolveCurrentAccountWriteContext({
         logLabel: "raid-status gold mode",
         detail: `raid=${parsed.raidKey}`,
       });
@@ -693,7 +702,7 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const writeContext = resolveCurrentAccountWriteContext({
+      const writeContext = await resolveCurrentAccountWriteContext({
         logLabel: "raid-status gold toggle",
         detail: `raid=${parsed.raidKey}`,
       });

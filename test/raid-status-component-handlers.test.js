@@ -113,6 +113,8 @@ function createHandlerHarness(overrides = {}) {
     buildEmbedAndCanvas: overrides.buildEmbedAndCanvas || (async () => ({})),
     buildComponents: overrides.buildComponents || (() => []),
     runManualStatusSync: async () => ({ outcome: null }),
+    runManualRosterRefresh: overrides.runManualRosterRefresh,
+    canEditAccountFn: overrides.canEditAccountFn || (async (viewerId, ownerId) => viewerId === ownerId),
     formatNextCooldownRemaining: () => "",
     formatGold,
     truncateText,
@@ -499,6 +501,149 @@ test("raid-status component handlers reject gold mode writes on view-only shares
   assert.deepEqual(result, { redraw: false });
   assert.equal(queried, false);
   assert.equal(harness.reloadCount, 0);
+});
+
+// The card still says "edit" because _sharedFrom was read when /raid-status
+// opened; the owner has revoked the share since.
+function staleEditShareSession() {
+  return {
+    accounts: [
+      { accountName: "Own" },
+      {
+        accountName: "Roster B",
+        _sharedFrom: { ownerDiscordId: "owner-1", ownerLabel: "Mira", accessLevel: "edit" },
+      },
+    ],
+    currentPage: 1,
+  };
+}
+
+for (const [action, value] of [
+  [STATUS_COMPONENT_ACTION.taskToggle, "Aki::side-1"],
+  [STATUS_COMPONENT_ACTION.goldToggle, "Goldie::horizon"],
+  [STATUS_COMPONENT_ACTION.goldMode, "Goldie::armoche::hard"],
+]) {
+  test(`raid-status ${action} re-checks a share revoked after the card opened`, async () => {
+    let queried = false;
+    const shareChecks = [];
+    const harness = createHandlerHarness({
+      session: staleEditShareSession(),
+      async canEditAccountFn(viewerId, ownerId) {
+        shareChecks.push([viewerId, ownerId]);
+        return false;
+      },
+      User: {
+        async findOne() {
+          queried = true;
+          return null;
+        },
+      },
+    });
+
+    const result = await harness.handlers[action]({ values: [value], async followUp() {} });
+
+    assert.deepEqual(result, { redraw: false });
+    assert.deepEqual(shareChecks, [["viewer", "owner-1"]]);
+    assert.equal(queried, false);
+  });
+}
+
+test("raid-status gold replacement re-checks a share revoked while the prompt was open", async () => {
+  let saved = 0;
+  let shareIsLive = true;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: {
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              },
+            },
+          },
+        ],
+      },
+    ],
+    markModified() {},
+    async save() {
+      saved += 1;
+    },
+  };
+  let promptPayload = null;
+  let noticePayload = null;
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => shareIsLive,
+    User: {
+      async findOne(query) {
+        assert.deepEqual(query, { discordId: "owner-1" });
+        return doc;
+      },
+    },
+    interaction: {
+      async editReply(payload) {
+        promptPayload = payload;
+      },
+    },
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    user: { id: "viewer" },
+  });
+  assert.equal(promptPayload.components.length, 1);
+
+  shareIsLive = false;
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
+    customId: getSelectCustomId(promptPayload.components[0]),
+    user: { id: "viewer" },
+    values: ["armoche"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(saved, 0);
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, undefined);
+  assert.equal(
+    noticePayload.embeds[0].description,
+    TRANSLATIONS.vi["raid-status"].goldView.toggleFailedDescription,
+  );
+});
+
+test("raid-status roster refresh re-checks a share revoked after the card opened", async () => {
+  let refreshed = false;
+  let noticePayload = null;
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => false,
+    async runManualRosterRefresh() {
+      refreshed = true;
+      return {};
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.rosterRefresh]({
+    async deferUpdate() {},
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(refreshed, false);
+  assert.ok(
+    noticePayload.embeds[0].title.includes(
+      TRANSLATIONS.vi["raid-status"].sync.rosterRefreshSharedLockedTitle,
+    ),
+  );
 });
 
 test("raid-status component handlers prompt for a gold replacement when locked raid would exceed 3/3", async () => {

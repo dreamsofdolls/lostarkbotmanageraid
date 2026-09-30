@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Fixed
 - `/raid-bg set` and `edit` read an image's width and height from its header and refuse anything over about 25 megapixels before decoding it. The 8 MB file cap did not bound memory: a 269 KiB PNG declaring 8192x8192 decoded into about 256 MiB. Uploads from concurrent commands are processed one at a time, and the requirements card and `/raid-help` state the new limit in vi, en and jp.
 - A truncated or malformed PNG, JPEG or WebP sent to `/raid-bg` no longer crashes the bot. `@napi-rs/canvas` 1.0.2 segfaulted while decoding one; 1.0.9 rejects it as an unreadable image.
+- Revoking or downgrading a roster share takes effect on `/raid-status` cards that are already open. Task toggles, gold mode and gold toggles, the gold replacement confirm and roster refresh check the share again before writing to the owner's roster, instead of trusting the access level read when the card opened.
 
 ## 2026-09-29
 
