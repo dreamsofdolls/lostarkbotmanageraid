@@ -9,6 +9,11 @@ const RAID_BG_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const RAID_BG_UPLOAD_MAX_MB = RAID_BG_UPLOAD_MAX_BYTES / 1024 / 1024;
 const RAID_BG_MIN_WIDTH = 800;
 const RAID_BG_MIN_HEIGHT = 600;
+// Decoding allocates width x height x 4 bytes before any resize, and a small,
+// well-compressed file can declare a huge canvas, so the pixel count is read
+// from the file header first. 25 MP (~95 MiB as RGBA) covers 4K/5K
+// screenshots and most phone photos.
+const RAID_BG_MAX_PIXELS = 25_000_000;
 const RAID_BG_ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
@@ -67,6 +72,79 @@ function isWebpBuffer(buffer) {
   return buffer.length >= 12
     && buffer.subarray(0, 4).toString("ascii") === "RIFF"
     && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+}
+
+function readPngDimensions(buffer) {
+  // The PNG spec puts IHDR first, so width and height sit at bytes 16-23.
+  if (buffer.length < 24 || buffer.toString("ascii", 12, 16) !== "IHDR") return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+// SOF markers carry the frame size. C4 (DHT), C8 (JPG) and CC (DAC) sit in the
+// same range but do not.
+const JPEG_FRAME_MARKERS = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+]);
+// Markers without a length field: TEM, RST0-RST7 and SOI.
+const JPEG_BARE_MARKERS = new Set([0x01, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8]);
+
+function jpegSegmentLength(buffer, offset) {
+  const marker = buffer[offset + 1];
+  if (marker === 0xff) return 1;
+  return JPEG_BARE_MARKERS.has(marker) ? 2 : 2 + buffer.readUInt16BE(offset + 2);
+}
+
+function readJpegDimensions(buffer) {
+  // A frame header must come before the first scan (SOS) or end (EOI) marker.
+  let offset = 2;
+  while (offset + 9 <= buffer.length && buffer[offset] === 0xff) {
+    const marker = buffer[offset + 1];
+    if (JPEG_FRAME_MARKERS.has(marker)) {
+      return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+    }
+    if (marker === 0xd9 || marker === 0xda) return null;
+    offset += jpegSegmentLength(buffer, offset);
+  }
+  return null;
+}
+
+const WEBP_DIMENSION_READERS = {
+  VP8X: (buffer) => ({ width: buffer.readUIntLE(24, 3) + 1, height: buffer.readUIntLE(27, 3) + 1 }),
+  "VP8 ": (buffer) => ({ width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff }),
+  VP8L: (buffer) => {
+    const bits = buffer.readUInt32LE(21);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+  },
+};
+
+function readWebpDimensions(buffer) {
+  if (buffer.length < 30) return null;
+  return WEBP_DIMENSION_READERS[buffer.toString("ascii", 12, 16)]?.(buffer) ?? null;
+}
+
+const RASTER_DIMENSION_READERS = [
+  [isPngBuffer, readPngDimensions],
+  [isJpegBuffer, readJpegDimensions],
+  [isWebpBuffer, readWebpDimensions],
+];
+
+function readRasterDimensions(buffer) {
+  const reader = RASTER_DIMENSION_READERS.find(([matches]) => matches(buffer));
+  return reader ? reader[1](buffer) : null;
+}
+
+function assertWithinPixelBudget(buffer) {
+  const dimensions = readRasterDimensions(buffer);
+  if (!dimensions) {
+    throw new RaidBgError("raidBg.errors.decodeFailed", { message: "unreadable image header" });
+  }
+  if (dimensions.width * dimensions.height > RAID_BG_MAX_PIXELS) {
+    throw new RaidBgError("raidBg.errors.tooLarge", {
+      width: dimensions.width,
+      height: dimensions.height,
+      maxMp: RAID_BG_MAX_PIXELS / 1_000_000,
+    });
+  }
 }
 
 function isPngCriticalChunk(type) {
@@ -177,6 +255,7 @@ async function validateBgAttachment(attachment, buffer) {
   if (mime && !RAID_BG_ALLOWED_MIME.has(mime)) {
     throw new RaidBgError("raidBg.errors.formatUnsupported", { mime });
   }
+  if (mime !== "image/svg+xml") assertWithinPixelBudget(buffer);
 
   let decoded;
   try {
@@ -268,22 +347,39 @@ async function resizeForStorage(img) {
   }
 }
 
+// Each upload holds its full-size bitmap until resize, so uploads from
+// concurrent commands take this single slot one at a time.
+let bgJobTail = Promise.resolve();
+
+function acquireBgJobSlot() {
+  let release;
+  const slot = new Promise((resolve) => { release = resolve; });
+  const turn = bgJobTail.then(() => release);
+  bgJobTail = bgJobTail.then(() => slot);
+  return turn;
+}
+
 async function processBgAttachment(attachment, fallbackFilename = "background.jpg") {
-  const buffer = await downloadAttachment(attachment);
-  const validated = await validateBgAttachment(attachment, buffer);
-  const resized = await resizeForStorage(validated.img);
-  return {
-    imageData: resized.buffer,
-    mime: resized.mime,
-    width: resized.width,
-    height: resized.height,
-    sizeBytes: resized.buffer.length,
-    originalWidth: validated.width,
-    originalHeight: validated.height,
-    originalFilename: attachment.name || fallbackFilename,
-    originalMime: validated.mime || "",
-    storageQuality: resized.quality,
-  };
+  const release = await acquireBgJobSlot();
+  try {
+    const buffer = await downloadAttachment(attachment);
+    const validated = await validateBgAttachment(attachment, buffer);
+    const resized = await resizeForStorage(validated.img);
+    return {
+      imageData: resized.buffer,
+      mime: resized.mime,
+      width: resized.width,
+      height: resized.height,
+      sizeBytes: resized.buffer.length,
+      originalWidth: validated.width,
+      originalHeight: validated.height,
+      originalFilename: attachment.name || fallbackFilename,
+      originalMime: validated.mime || "",
+      storageQuality: resized.quality,
+    };
+  } finally {
+    release();
+  }
 }
 
 module.exports = {
@@ -291,6 +387,7 @@ module.exports = {
   RAID_BG_UPLOAD_MAX_MB,
   RAID_BG_MIN_WIDTH,
   RAID_BG_MIN_HEIGHT,
+  RAID_BG_MAX_PIXELS,
   RAID_BG_OUTPUT_WIDTH,
   RAID_BG_OUTPUT_HEIGHT,
   downloadAttachment,

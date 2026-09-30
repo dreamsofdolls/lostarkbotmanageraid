@@ -2240,7 +2240,7 @@ module.exports = {
         notes: [
           "Upload 1-4 anime art / character render / wallpaper images per command · Artist stores them in a 6-scene library, maps scenes across your rosters, and attaches the selected one as the /raid-status embed image. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload up to 4 images per command. `action:overwrite` replaces the library; `action:extend` appends until the 6-scene cap. Each file may be up to 8 MB at any dimension ≥ 800x600 in PNG / JPG / WEBP / SVG. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload up to 4 images per command. `action:overwrite` replaces the library; `action:extend` appends until the 6-scene cap. Each file may be up to 8 MB, at least 800x600 and at most about 25 megapixels, in PNG / JPG / WEBP / SVG. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
           "**view** - Artist opens an interactive scene browser with one large preview, the roster map, and scene dropdown / pager controls.",
           "**edit [image:<file>]** - attach an image to replace a selected scene; omit `image` to enter delete mode and remove one scene or clear the whole library.",
           "",
@@ -2690,6 +2690,8 @@ module.exports = {
         "Artist opened the file but couldn't decode it: {message}",
       tooSmall:
         "That's too tiny ({width}x{height}). Artist needs at least {minW}x{minH} so the raid card stays crisp.",
+      tooLarge:
+        "That image is too large ({width}x{height}). Artist handles up to about {maxMp} megapixels; scale it down and upload again.",
       storageFailed:
         "Artist couldn't save the image to the database: {message}. Try again in a moment; if it keeps failing, ping an admin.",
     },
@@ -2698,7 +2700,7 @@ module.exports = {
       rejectTitle: "⚠️ Image doesn't meet Artist's spec",
       requirementsHeader: "Artist needs",
       requirementsLines:
-        "• Dimensions: minimum **{minW}x{minH}** (Artist auto-normalizes to a 1600x900 frame)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
+        "• Dimensions: minimum **{minW}x{minH}**, up to about **{maxMp}** megapixels (Artist auto-normalizes to a 1600x900 frame)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ Save failed",
       successTitle: "✅ Background tucked away",
       successDescription:

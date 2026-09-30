@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-30
+
+### Fixed
+- `/raid-bg set` and `edit` read an image's width and height from its header and refuse anything over about 25 megapixels before decoding it. The 8 MB file cap did not bound memory: a 269 KiB PNG declaring 8192x8192 decoded into about 256 MiB. Uploads from concurrent commands are processed one at a time, and the requirements card and `/raid-help` state the new limit in vi, en and jp.
+
 ## 2026-09-29
 
 ### Changed

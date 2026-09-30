@@ -13,6 +13,7 @@ const {
   RAID_BG_UPLOAD_MAX_MB,
   RAID_BG_MIN_WIDTH,
   RAID_BG_MIN_HEIGHT,
+  RAID_BG_MAX_PIXELS,
   RAID_BG_OUTPUT_WIDTH,
   RAID_BG_OUTPUT_HEIGHT,
   processBgAttachment,
@@ -43,11 +44,16 @@ function resolveSetMode({ modeOption, existing }) {
   return "even";
 }
 
+const VALIDATION_ERROR_KEYS = new Set([
+  "raidBg.errors.sizeTooBig",
+  "raidBg.errors.formatUnsupported",
+  "raidBg.errors.decodeFailed",
+  "raidBg.errors.tooSmall",
+  "raidBg.errors.tooLarge",
+]);
+
 function isValidationError(err) {
-  return err.key === "raidBg.errors.sizeTooBig"
-    || err.key === "raidBg.errors.formatUnsupported"
-    || err.key === "raidBg.errors.decodeFailed"
-    || err.key === "raidBg.errors.tooSmall";
+  return VALIDATION_ERROR_KEYS.has(err.key);
 }
 
 async function processUploads(attachments) {
@@ -77,6 +83,7 @@ async function replyUploadError({ interaction, EmbedBuilder, err, lang }) {
       value: t("raidBg.set.requirementsLines", lang, {
         minW: RAID_BG_MIN_WIDTH,
         minH: RAID_BG_MIN_HEIGHT,
+        maxMp: RAID_BG_MAX_PIXELS / 1_000_000,
         maxMb: RAID_BG_UPLOAD_MAX_MB.toFixed(0),
       }),
       inline: false,

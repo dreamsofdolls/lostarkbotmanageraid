@@ -2263,7 +2263,7 @@ module.exports = {
         notes: [
           "Upload 1-4 ảnh anime art / character render / wallpaper mỗi lần chạy lệnh, Artist sẽ lưu vào thư viện tối đa 6 cảnh, map chúng theo từng roster rồi gắn ảnh tương ứng vào embed /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600 và tối đa khoảng 25 triệu điểm ảnh, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
           "**view** - Artist mở browser tương tác: một preview lớn mỗi lần, map roster, dropdown chọn cảnh và nút ◀/▶ để lật trang.",
           "**edit [image:<file>]** - đính kèm ảnh để vào mode thay cảnh đã chọn; bỏ trống `image` để vào mode xoá một cảnh hoặc xoá cả thư viện.",
           "",
@@ -2723,6 +2723,8 @@ module.exports = {
         "Artist mở ảnh ra mà thấy nhoè nhoè không decode được: {message}",
       tooSmall:
         "Ảnh hơi tí xíu thôi cậu ({width}x{height}). Artist cần tối thiểu {minW}x{minH} để raid card vẫn căng + nét, không thì nhìn mờ tội nghiệp lắm~",
+      tooLarge:
+        "Ảnh này to quá cậu ơi ({width}x{height}). Artist chỉ xử lý được ảnh tối đa khoảng {maxMp} triệu điểm ảnh, cậu thu nhỏ lại rồi gửi lần nữa nhé.",
       storageFailed:
         "Tớ lưu vào database không xong: {message}. Cậu thử lại sau chút, nếu vẫn lỗi thì báo admin.",
     },
@@ -2731,7 +2733,7 @@ module.exports = {
       rejectTitle: "⚠️ Ảnh chưa đạt chuẩn của Artist",
       requirementsHeader: "Artist cần ảnh có",
       requirementsLines:
-        "• Kích thước: tối thiểu **{minW}x{minH}** (Artist tự normalize về frame 1600x900)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP / SVG",
+        "• Kích thước: tối thiểu **{minW}x{minH}**, tối đa khoảng **{maxMp}** triệu điểm ảnh (Artist tự normalize về frame 1600x900)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ Artist lưu ảnh không xong",
       successTitle: "✅ Background đã yên vị rồi nhé~",
       successDescription:
