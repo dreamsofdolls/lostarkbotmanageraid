@@ -1,7 +1,7 @@
 /**
  * services/raid-card/bg-loader.js
  *
- * In-memory LRU cache + Mongo loader for roster-aware background buffers.
+ * Byte-bounded, expiring LRU cache + Mongo loader for roster backgrounds.
  * A UserBackground document is keyed by owner discordId and stores a small
  * pool of resized JPEG buffers plus stable roster->image assignments.
  */
@@ -10,6 +10,7 @@
 
 const UserBackground = require("../../models/userBackground");
 const { createInFlightLoader } = require("../../utils/async/in-flight-loader");
+const { createMemoryCache } = require("../raid-log/memory-cache");
 
 // Roster pages for one owner share overlapping reads, but every later render
 // still checks Mongo's version. Completed documents are never cached here.
@@ -22,8 +23,14 @@ const loadBackgroundData = createInFlightLoader((discordId) =>
 );
 
 const CACHE_CAP = 40;
-
-const cache = new Map();
+const CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const cache = createMemoryCache({
+  maxBytes: CACHE_MAX_BYTES,
+  maxEntries: CACHE_CAP,
+  ttlMs: CACHE_TTL_MS,
+  sizeOf: (entry) => entry.buffer.length,
+});
 
 function normalizeAccountKey(accountName) {
   return String(accountName || "").trim().toLowerCase();
@@ -47,18 +54,6 @@ function hashString(value) {
     hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
   }
   return Math.abs(hash);
-}
-
-function touch(key, entry) {
-  cache.delete(key);
-  cache.set(key, entry);
-}
-
-function evictIfFull() {
-  while (cache.size >= CACHE_CAP) {
-    const oldest = cache.keys().next().value;
-    cache.delete(oldest);
-  }
 }
 
 function getDocUpdatedAt(doc, fallback = 0) {
@@ -112,6 +107,11 @@ function selectImageIndex(doc, accountName) {
   return accountKey ? hashString(accountKey) % images.length : 0;
 }
 
+/**
+ * @param {string} discordId Background owner.
+ * @param {{accountName?: string}} [options] Roster used to select the image.
+ * @returns {Promise<Buffer|null>} Current background, or null when unavailable.
+ */
 async function loadBackgroundBuffer(discordId, options = {}) {
   if (!discordId) return null;
   const accountName = options.accountName || "";
@@ -121,7 +121,7 @@ async function loadBackgroundBuffer(discordId, options = {}) {
   let metaUpdatedAt = 0;
   // Without a cached buffer, the full document is needed anyway and includes
   // its version. Cached images still get a fresh, small version query first.
-  if (cache.has(cacheKey)) {
+  if (cache.get(cacheKey)) {
     try {
       const meta = await loadBackgroundMeta(discordId);
       if (!meta) {
@@ -136,7 +136,6 @@ async function loadBackgroundBuffer(discordId, options = {}) {
 
     const cached = cache.get(cacheKey);
     if (cached && cached.updatedAt === metaUpdatedAt) {
-      touch(cacheKey, cached);
       return cached.buffer;
     }
   }
@@ -156,7 +155,6 @@ async function loadBackgroundBuffer(discordId, options = {}) {
     }
 
     const entry = { updatedAt: getDocUpdatedAt(doc, metaUpdatedAt), buffer };
-    evictIfFull();
     cache.set(cacheKey, entry);
     return buffer;
   } catch (err) {
@@ -165,6 +163,10 @@ async function loadBackgroundBuffer(discordId, options = {}) {
   }
 }
 
+/**
+ * @param {string} [discordId] Owner to invalidate; omitted clears all backgrounds.
+ * @returns {void}
+ */
 function clearBackgroundCache(discordId) {
   if (!discordId) {
     cache.clear();
@@ -175,11 +177,7 @@ function clearBackgroundCache(discordId) {
   loadBackgroundMeta.invalidate(discordId);
   loadBackgroundData.invalidate(discordId);
   const prefix = `${discordId}:`;
-  for (const key of Array.from(cache.keys())) {
-    if (key === discordId || key.startsWith(prefix)) {
-      cache.delete(key);
-    }
-  }
+  cache.invalidate((key) => key === discordId || key.startsWith(prefix));
 }
 
 module.exports = {
