@@ -223,7 +223,7 @@ module.exports = {
       mvpDamage: "MVP DMG",
       scoreDealer: "DPS score",
       mvpCounter: "MVP Counter",
-      mvpSupport: "MVP Radiant Sup",
+      mvpSupport: "MVP Sup",
       supportContribution: "Sup contribution",
       supportUptime: "Sup uptime",
     },
@@ -1976,7 +1976,7 @@ module.exports = {
         notes: [
           "Run without options to open a character picker: **🔎 Search by name** for anyone in NA, a menu of the caller's own saved characters (class icon, roster, item level), and **🕘 Recent logs**, the newest fights across that roster (the 24 highest item levels; characters with Public Log off are skipped; any of the newest 25 opens in the panel). Without saved characters, only name search appears.",
           "The opening card and log panel are public, and only the caller can use them. Selecting a character opens their latest public log in NA, without a current-week restriction. Every problem comes as a card only the clicker sees, with the original log linked when a capture fails; if the logs turn private mid-session, the panel locks and the image is removed.",
-          "Choosing a character opens the log book: 👑 MVP DMG (highest D%), 📈 DPS score (badge + nDPS), 🎯 MVP Counter (one player: most counters, then STAG, then D%), ✨ MVP Radiant Sup (highest bD%), 🤝 Sup contribution (rContribution badge + rCon%), ⏱️ Sup uptime (Buff Performance badge). No registered roster or Auto-sync opt-in is required.",
+          "Choosing a character opens the log book: 👑 MVP DMG (highest D%), 📈 DPS score (badge + nDPS), 🎯 MVP Counter (one player: most counters, then STAG, then D%), ✨ MVP Sup (highest bD%), 🤝 Sup contribution (rContribution badge + rCon%), ⏱️ Sup uptime (Buff Performance badge). No registered roster or Auto-sync opt-in is required.",
           "📜 The raid's five latest logs follow, coloured by parse, with ▶ on the open one; the card's side colour follows that log's parse. The image is the current tab, captured straight from Bible.",
           "Buttons: ◀️ ▶️ change tab, 📐 Bracketed/Normalized, ↩️ Defaults (keeps the log, returns to Whole team / Damage / Bracketed). Four menus: raid (with ⏬ Load older logs, up to 250, and 🔄 Refresh, which reloads history and recaptures the view while keeping your selection), log, who to view (the whole team or one player) and tab. A closed menu still shows the key figures. Only the caller can use them, for 15 minutes.",
           "Team tabs include Damage, Party/Self Buffs (offensive or all), four Shields modes, Tanked and two DPS charts. Select a player for skills/buffs and all lower analysis cards in two ordered images, including Source/Category breakdown where available.",

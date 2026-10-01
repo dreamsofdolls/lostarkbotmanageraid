@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-01
+
+### Changed
+- The `/raid-log` card's ✨ field reads **MVP Sup** instead of "MVP Radiant Sup", in vi, en and jp. Each MVP and score field puts its figures on separate lines, such as the badge above `410M nDPS` or `2 counter` above `54K STAG`, instead of one line that wrapped and left the unit on its own.
+
 ## 2026-09-30
 
 ### Changed

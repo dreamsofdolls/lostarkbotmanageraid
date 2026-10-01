@@ -3,7 +3,7 @@
 /**
  * bot/services/raid-log/highlights.js
  * Picks the players the /raid-log card names: MVP DMG, the best dealer
- * score, MVP Counter, MVP Radiant Sup and the two support scores. Each rule
+ * score, MVP Counter, MVP Sup and the two support scores. Each rule
  * falls through its tie-breaks and finally keeps table order.
  */
 

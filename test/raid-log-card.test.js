@@ -28,10 +28,10 @@ test("the card names each MVP and score with a class icon, then the raid's lates
   assert.equal(embed.footer, undefined);
   assert.deepEqual(embed.fields.map(field => [field.name, field.value]), [
     ["👑 MVP DMG", `${AERO} **Qiylyn**\n\`24.6% D%\``],
-    ["📈 Score DPS", `${AERO} **Qiylyn**\n\`🌸 99 · 386M nDPS\``],
+    ["📈 Score DPS", `${AERO} **Qiylyn**\n\`🌸 99\`\n\`386M nDPS\``],
     ["🎯 MVP Counter", `${AERO} **Qiylyn**\n\`3 counter\``],
-    ["✨ MVP Radiant Sup", `${BARD} **Canameo**\n\`31.8% bD%\``],
-    ["🤝 Sup Perform",`${BARD} **Canameo**\n\`🟣 82 · 51.1% rCon\``],
+    ["✨ MVP Sup", `${BARD} **Canameo**\n\`31.8% bD%\``],
+    ["🤝 Sup Perform",`${BARD} **Canameo**\n\`🟣 82\`\n\`51.1% rCon\``],
     ["⏱️ Sup uptime", `${BARD} **Canameo**\n\`🟣 91\``],
     ["📜 2 log gần nhất", [
       "▶ 🌸 G2 · 24/09 23:40 · **99%** · 1.06B DPS · 386M nDPS · ⏱ 7:27",
@@ -48,7 +48,7 @@ test("Normalized changes the dealer score, the side colour and each dealer perce
   await f.run();
   await f.click(f.owner("bracketed"));
   const embed = card(f);
-  assert.equal(embed.fields[1].value, "**Qiylyn**\n`🟠 98 · 386M nDPS`");
+  assert.equal(embed.fields[1].value, "**Qiylyn**\n`🟠 98`\n`386M nDPS`");
   assert.equal(embed.color, 0xa335ee);
   assert.match(embed.fields[6].value, /^▶ 🟣 G2 · 24\/09 23:40 · \*\*90%\*\*/);
   assert.match(embed.fields[6].value, /\n-# 🔵 G1 · 24\/09 23:31 · \*\*58%\*\*/);

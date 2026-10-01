@@ -41,30 +41,32 @@ function splitLabel(label) {
   return { itemLevel, name };
 }
 
-// One MVP field per pick. The chip reads "-" while the pick lacks `figure`;
+// One MVP field per pick; `chips` lists its figures. The chip reads "-" while the pick lacks `figure`;
 // without a pick at all the field shows `empty` ([values key, chip]) or a bare "-".
 const HIGHLIGHT_FIELDS = [
-  { emoji: "👑", key: "mvpDamage", pick: "damage", figure: "share", chip: pick => `${pick.share}% D%` },
+  { emoji: "👑", key: "mvpDamage", pick: "damage", figure: "share", chips: pick => [`${pick.share}% D%`] },
   { emoji: "📈", key: "scoreDealer", pick: "dealerScore", figure: "badge",
-    chip: pick => `${badgeText(pick.badge)} · ${formatCompact(pick.ndps)} nDPS` },
+    chips: pick => [badgeText(pick.badge), `${formatCompact(pick.ndps)} nDPS`] },
   { emoji: "🎯", key: "mvpCounter", pick: "counter", figure: "counters", empty: ["noCounter", "0"],
-    chip: (pick, lang) => [t("raid-log.values.counter", lang, { count: pick.counters }),
-      ...(pick.tied ? [`${formatCompact(pick.stagger)} STAG`] : [])].join(" · ") },
-  { emoji: "✨", key: "mvpSupport", pick: "support", figure: "share", empty: ["noSupport", "-"], chip: pick => `${pick.share}% bD%` },
+    chips: (pick, lang) => [t("raid-log.values.counter", lang, { count: pick.counters }),
+      ...(pick.tied ? [`${formatCompact(pick.stagger)} STAG`] : [])] },
+  { emoji: "✨", key: "mvpSupport", pick: "support", figure: "share", empty: ["noSupport", "-"], chips: pick => [`${pick.share}% bD%`] },
   { emoji: "🤝", key: "supportContribution", pick: "supportContribution", figure: "badge", empty: ["noSupport", "-"],
-    chip: pick => [badgeText(pick.badge), ...(pick.contribution === null ? [] : [`${pick.contribution}% rCon`])].join(" · ") },
+    chips: pick => [badgeText(pick.badge), ...(pick.contribution === null ? [] : [`${pick.contribution}% rCon`])] },
   { emoji: "⏱️", key: "supportUptime", pick: "supportUptime", figure: "badge", empty: ["noSupport", "-"],
-    chip: pick => badgeText(pick.badge) },
+    chips: pick => [badgeText(pick.badge)] },
 ];
 
-// Custom emoji do not render inside code spans, so the name sits above its chip.
+// Custom emoji do not render inside code spans, so the name sits above its chips.
+// Each figure gets its own code span and line: an inline field is a third of the
+// card wide, and one long span wraps wherever it runs out of room, stranding its unit.
 function highlightFields(players, bracketed, lang) {
   const picks = pickHighlights(players, bracketed);
-  const person = (pick, chip) => `${[getClassEmoji(pick.player.className), `**${splitLabel(pick.player.label).name}**`]
-    .filter(Boolean).join(" ")}\n\`${chip}\``;
-  return HIGHLIGHT_FIELDS.map(({ emoji, key, pick: pickKey, figure, empty, chip }) => {
+  const person = (pick, lines) => [[getClassEmoji(pick.player.className), `**${splitLabel(pick.player.label).name}**`]
+    .filter(Boolean).join(" "), ...lines.map(line => `\`${line}\``)].join("\n");
+  return HIGHLIGHT_FIELDS.map(({ emoji, key, pick: pickKey, figure, empty, chips }) => {
     const pick = picks[pickKey];
-    const value = pick ? person(pick, pick[figure] === null ? "-" : chip(pick, lang))
+    const value = pick ? person(pick, pick[figure] === null ? ["-"] : chips(pick, lang))
       : empty ? `${t(`raid-log.values.${empty[0]}`, lang)}\n\`${empty[1]}\`` : "`-`";
     return field(emoji, key, value, lang);
   });

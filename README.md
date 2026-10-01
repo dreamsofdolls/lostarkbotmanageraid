@@ -93,7 +93,7 @@ characters, no logs and mismatched identities produce a notice card instead of a
 The panel is a log book titled with the raid and character and linked to the log
 on Bible. Its fields name 👑 MVP DMG (highest D%), 📈 DPS score (best percentile
 badge, with nDPS) and 🎯 MVP Counter (most counters; ties go to STAG, then D%,
-then table order) on the DPS row; ✨ MVP Radiant Sup (highest bD%), 🤝 Sup
+then table order) on the DPS row; ✨ MVP Sup (highest bD%), 🤝 Sup
 contribution (best rContribution badge, with rCon%) and ⏱️ Sup uptime (best Buff
 Performance badge) on the support row. 📜 The raid's five latest logs follow, coloured by parse tier
 with ▶ on the open log, and the side colour follows the open log's parse. New
