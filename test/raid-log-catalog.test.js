@@ -54,6 +54,55 @@ test("catalog opens one page, loads older pages lazily, deduplicates and checks 
   await assert.rejects(catalog.more(more), { code: "invalid_selection" });
 });
 
+test("overlapping privacy checks and refreshes share one read, then verify privacy afresh", async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const requests = [];
+  let privateLogs = false;
+  const profile = { name: "Qiylyn", sn: "serial", cid: 1, rid: 2, className: "Aeromancer" };
+  const service = createRaidLogCatalog({ client: {
+    fetchBibleLogsWithLimiter: async args => {
+      requests.push(args);
+      if (privateLogs) throw Object.assign(new Error("Logs not enabled"), { status: 403 });
+      await held;
+      return [row("new")];
+    },
+  } });
+  const catalog = { profile, logs: [], page: 1, hasMore: false };
+  const checks = Array.from({ length: 8 }, () => service.verify(catalog));
+  const refresh = service.refresh(catalog);
+  release();
+  await Promise.all([...checks, refresh]);
+  assert.equal(requests.length, 1);
+  privateLogs = true;
+  await assert.rejects(service.verify(catalog), error => raidLogErrorCode(error) === "logs_private");
+  assert.equal(requests.length, 2, "completed reads must not cache a character's public status");
+});
+
+test("an explicitly cancellable catalog read cannot cancel another panel's privacy check", async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const requests = [];
+  const service = createRaidLogCatalog({ client: {
+    fetchBibleLogsWithLimiter: async (_, { signal }) => {
+      requests.push(signal);
+      await Promise.race([held, new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))]);
+      return [row("new")];
+    },
+  } });
+  const catalog = { profile: { name: "Qiylyn" }, logs: [], page: 1, hasMore: false };
+  const controller = new AbortController();
+  const check = service.verify(catalog);
+  const cancelled = service.verify(catalog, { signal: controller.signal });
+  const reason = new Error("panel cancelled");
+  const rejected = assert.rejects(cancelled, error => error === reason);
+  controller.abort(reason);
+  release();
+  await Promise.all([check, rejected]);
+  assert.equal(requests.length, 2);
+  assert.notEqual(requests[0], requests[1]);
+});
+
 test("empty or mismatching catalog never becomes a selectable panel", async () => {
   let reads = 0;
   const client = {

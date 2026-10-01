@@ -348,15 +348,23 @@ function createRaidLogCapture({
     if (!Object.hasOwn(tabsForPlayer(player), tab) || typeof bracketed !== "boolean"
       || (player && (view !== "full" || !/^\d+-\d+$/.test(player.id) || typeof player.label !== "string"))) throw new RaidLogError("invalid_selection");
     const key = `${log.id}:${view}:${tab}:${bracketed}:${player ? JSON.stringify([player.id, player.label]) : "team"}`;
-    const fromCache = () => useCache && !refresh && cache.get(key);
+    const prefix = `${log.id}:`;
+    const fromCache = () => {
+      if (!useCache || refresh) return;
+      // A refresh queued behind another log has not invalidated its images yet.
+      for (const [pendingKey, pending] of pendingCaptures) {
+        if (pending.refresh && pendingKey.startsWith(prefix)) return;
+      }
+      return cache.get(key);
+    };
     const cached = fromCache();
     if (cached) return { ...cached, cached: true };
+    const shared = (useCache || refresh) && pendingCaptures.get(key);
+    if (shared && (!refresh || shared.refresh)) return { ...await shared.promise, cached: true };
     if (refresh) {
       // New requests must queue behind the refresh rather than join an older capture.
-      for (const pendingKey of pendingCaptures.keys()) if (pendingKey.startsWith(`${log.id}:`)) pendingCaptures.delete(pendingKey);
+      for (const pendingKey of pendingCaptures.keys()) if (pendingKey.startsWith(prefix)) pendingCaptures.delete(pendingKey);
     }
-    const shared = useCache && !refresh && pendingCaptures.get(key);
-    if (shared) return { ...await shared, cached: true };
     const started = Date.now();
     const deadline = started + timeoutMs;
     const capture = queue.run(async () => {
@@ -380,10 +388,11 @@ function createRaidLogCapture({
       if (useCache) cache.set(key, result);
       return { ...result, queueMs };
     }, deadline);
-    if (!useCache || refresh) return capture;
-    pendingCaptures.set(key, capture);
+    if (!useCache && !refresh) return capture;
+    const pending = { promise: capture, refresh };
+    pendingCaptures.set(key, pending);
     try { return await capture; }
-    finally { if (pendingCaptures.get(key) === capture) pendingCaptures.delete(key); }
+    finally { if (pendingCaptures.get(key) === pending) pendingCaptures.delete(key); }
   }
   captureRaidLog.close = () => {
     clearTimeout(idleTimer);

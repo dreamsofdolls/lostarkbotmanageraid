@@ -55,12 +55,28 @@ function mergeLogs(previous, incoming) {
     .sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id));
 }
 
+/**
+ * @param {object} options Bible client, limiter and request timeout
+ * @returns {{ open: Function, verify: Function, refresh: Function, more: Function }} public log catalog
+ */
 function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bibleLimiter }), timeoutMs = 30_000 }) {
+  const pending = new Map();
   // One page of the profile's logs: Bible's rows and the logs normalized from them.
-  async function readLogs(profile, page, signal = AbortSignal.timeout(timeoutMs)) {
-    const rows = await client.fetchBibleLogsWithLimiter({
-      serial: profile.sn, cid: profile.cid, rid: profile.rid, className: profile.className, page,
-    }, { signal });
+  async function readLogs(profile, page, signal) {
+    const key = JSON.stringify([profile.sn, profile.cid, profile.rid, profile.className, page]);
+    let request = !signal && pending.get(key);
+    if (!request) {
+      request = client.fetchBibleLogsWithLimiter({
+        serial: profile.sn, cid: profile.cid, rid: profile.rid, className: profile.className, page,
+      }, { signal: signal || AbortSignal.timeout(timeoutMs) });
+      // Share only active reads. A caller's own abort signal stays isolated;
+      // completed responses must not cache whether the character is public.
+      if (!signal) {
+        request = request.finally(() => pending.delete(key));
+        pending.set(key, request);
+      }
+    }
+    const rows = await request;
     return { rows, logs: normalizeCatalogLogs(rows, profile.name) };
   }
   // Page 1 decides whether the character still shares logs at all.

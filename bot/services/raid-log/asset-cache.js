@@ -9,6 +9,7 @@ const compress = promisify(brotliCompress);
 const decompress = promisify(brotliDecompress);
 const MAX_ASSET_BYTES = 4 * 1024 * 1024;
 const MIN_COMPRESS_BYTES = 4 * 1024;
+const MAX_PENDING_ASSETS = 64;
 
 function isImmutableAsset(request) {
   if (request.method() !== "GET" || request.isNavigationRequest()) return false;
@@ -28,13 +29,17 @@ function createAssetCache() {
   let pending = Promise.resolve();
   let fulfilling = Promise.resolve();
   let generation = 0;
+  const queued = new Set();
   return {
     get(request) {
       return isImmutableAsset(request) ? cache.get(request.url()) : undefined;
     },
     remember(response) {
       if (response.status() !== 200 || !isImmutableAsset(response.request()) || cache.get(response.url())) return;
+      const url = response.url();
+      if (queued.has(url) || queued.size >= MAX_PENDING_ASSETS) return;
       const current = generation;
+      queued.add(url);
       // Read one decoded response at a time instead of copying every module
       // into Node while the page is still loading.
       pending = pending.then(async () => {
@@ -59,11 +64,11 @@ function createAssetCache() {
             asset.encoding = "br";
           }
         }
-        if (current === generation) cache.set(response.url(), asset, expires - Date.now());
+        if (current === generation) cache.set(url, asset, expires - Date.now());
       }).catch(() => {
         // Navigation or browser disposal may discard a body before it is read.
         // The next request continues through the original network route.
-      });
+      }).finally(() => { if (current === generation) queued.delete(url); });
       return pending;
     },
     fulfill(route, asset) {
@@ -81,6 +86,7 @@ function createAssetCache() {
     clear() {
       generation++;
       cache.clear();
+      queued.clear();
     },
   };
 }

@@ -29,6 +29,10 @@ function requireOption(options, value) {
   if (!options.some(option => option.value === value)) throw new RaidLogError("invalid_selection");
 }
 
+/**
+ * @param {object} options Discord builders, data services and session limits
+ * @returns {{ handleRaidLogCommand: Function, handleRaidLogComponent: Function }} public log handlers
+ */
 function createRaidLogCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User, captureRaidLog, logCatalog, recentLogs,
   loadCaller = id => User.findOne({ discordId: id }).select(
@@ -40,10 +44,26 @@ function createRaidLogCommand({
   sessionMs = 15 * 60_000, maxSessions = 64, now = Date.now, log = console,
 }) {
   const sessions = new Map();
+  let expiryTimer;
   const builders = { EmbedBuilder, UI };
   const embeds = (state, result) => buildLogEmbeds(state, result, builders);
+  function expireSessions() {
+    clearTimeout(expiryTimer);
+    const time = now();
+    let next = Infinity;
+    for (const [id, state] of sessions) {
+      // Active handlers still need their state; their finally block rechecks expiry.
+      if (state.busy) continue;
+      if (state.expires <= time) sessions.delete(id);
+      else next = Math.min(next, state.expires);
+    }
+    if (next < Infinity) {
+      expiryTimer = setTimeout(expireSessions, Math.max(1, next - time));
+      expiryTimer.unref?.();
+    }
+  }
   function remember(state) {
-    for (const [id, entry] of sessions) if (entry.expires <= now() && !entry.busy) sessions.delete(id);
+    expireSessions();
     if (sessions.size >= maxSessions) {
       const oldest = [...sessions.values()].find(entry => !entry.busy);
       if (!oldest) throw new RaidLogError("busy");
@@ -117,7 +137,10 @@ function createRaidLogCommand({
       log.warn(`[raid-log] ${code}: ${error.message}`);
       await interaction.editReply({ content: null, embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang })],
         components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
-    } finally { if (state) state.busy = false; }
+    } finally {
+      if (state) state.busy = false;
+      expireSessions();
+    }
   }
 
   async function selectCharacter(interaction, state, action) {
@@ -297,6 +320,7 @@ function createRaidLogCommand({
       }
     } finally {
       state.busy = false;
+      expireSessions();
       log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
     }
   }

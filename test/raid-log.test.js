@@ -692,6 +692,65 @@ test("a refresh separates new image requests from an older in-flight capture", a
   }
 });
 
+test("parallel refreshes share one fresh render without filling the capture queue", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser();
+  fake.page.screenshot = async () => {
+    const shot = ++screenshots;
+    enter();
+    await held;
+    return Buffer.from(`png-${shot}`);
+  };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000, maxPending: 1 });
+  const first = capture(URL, { useCache: true, refresh: true });
+  await entered;
+  const shared = Array.from({ length: 8 }, () => capture(URL, { useCache: true, refresh: true }));
+  const following = capture(URL, { useCache: true });
+  const results = Promise.allSettled([first, ...shared, following]);
+  finish();
+  try {
+    const settled = await results;
+    assert.ok(settled.every(result => result.status === "fulfilled"), "shared refreshes must not consume extra queue slots");
+    assert.equal(screenshots, 1);
+    assert.equal(fake.state.navigations, 1);
+    for (const result of settled) assert.equal(result.value.images[0].buffer, settled[0].value.images[0].buffer);
+  } finally { await capture.close(); }
+});
+
+test("a queued refresh prevents a later request from returning the old cached image", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser();
+  fake.page.screenshot = async () => {
+    const shot = ++screenshots;
+    if (shot === 2) { enter(); await held; }
+    return Buffer.from(`png-${shot}`);
+  };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  await capture(URL, { useCache: true });
+  const blocking = capture("https://lostark.bible/logs/another");
+  await entered;
+  const refreshing = capture(URL, { useCache: true, refresh: true });
+  const following = capture(URL, { useCache: true });
+  finish();
+  try {
+    await blocking;
+    const fresh = await refreshing;
+    assert.equal(fresh.images[0].buffer.toString(), "png-3");
+    assert.equal((await following).images[0].buffer, fresh.images[0].buffer);
+    assert.equal(screenshots, 3);
+  } finally {
+    finish();
+    await Promise.allSettled([blocking, refreshing, following]);
+    await capture.close();
+  }
+});
+
 test("capture passes its deadline abort signal into PNG framing", async t => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const fake = fakeBrowser();

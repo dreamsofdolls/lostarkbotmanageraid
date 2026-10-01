@@ -216,6 +216,49 @@ test("acknowledgement visibly shows waiting before Bible work, keeps the images 
   assert.equal(f.payload.content, null);
 });
 
+test("idle expired sessions release their catalogs without another command", async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  const f = fixture({ sessionMs: 100, now: () => Date.now() });
+  await f.run();
+  const sessionId = control(f, "tab_next").custom_id.split(":")[1];
+  const remove = Map.prototype.delete;
+  let released = false;
+  t.mock.method(Map.prototype, "delete", function (key) {
+    if (key === sessionId) released = true;
+    return remove.call(this, key);
+  });
+  t.mock.timers.tick(100);
+  assert.equal(released, true);
+  const before = captures(f).length;
+  await f.click(f.owner("tab_next"));
+  assert.equal(captures(f).length, before);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
+});
+
+test("session expiry waits for active work and releases it when the operation finishes", async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  const f = fixture({ sessionMs: 100, now: () => Date.now() });
+  await f.run();
+  const sessionId = control(f, "tab_next").custom_id.split(":")[1];
+  const remove = Map.prototype.delete;
+  let released = false;
+  t.mock.method(Map.prototype, "delete", function (key) {
+    if (key === sessionId) released = true;
+    return remove.call(this, key);
+  });
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  f.beforeVerify = async () => { enter(); await held; };
+  const changing = f.click(f.owner("tab_next"));
+  await entered;
+  t.mock.timers.tick(100);
+  assert.equal(released, false);
+  finish();
+  await changing;
+  assert.equal(released, true);
+});
+
 test("expired and evicted panels retain their explicit limits", async () => {
   let now = 0;
   const f = fixture({ sessionMs: 100, now: () => now, maxSessions: 1 });

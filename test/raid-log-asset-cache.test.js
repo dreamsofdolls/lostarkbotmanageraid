@@ -163,6 +163,42 @@ test("body reads run serially and a late response cannot repopulate a cleared ca
   cache.clear();
 });
 
+test("overlapping responses for one immutable URL read and compress its body once", async () => {
+  const cache = createAssetCache();
+  let release, enter;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const body = Buffer.from("module-content\n".repeat(1000));
+  const first = fixture({ read: () => { enter(); return new Promise(resolve => { release = resolve; }); } });
+  const duplicates = Array.from({ length: 12 }, () => fixture({ body }));
+  const remembered = cache.remember(first.response);
+  await entered;
+  const pending = duplicates.map(f => cache.remember(f.response));
+  release(body);
+  try {
+    await Promise.all([remembered, ...pending]);
+    assert.equal(first.reads + duplicates.reduce((sum, f) => sum + f.reads, 0), 1);
+    assert.deepEqual(brotliDecompressSync(cache.get(first.request).body), body);
+  } finally { cache.clear(); }
+});
+
+test("the immutable asset backlog is bounded while a body read is held", async () => {
+  const cache = createAssetCache();
+  let release, enter;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = fixture({ read: () => { enter(); return new Promise(resolve => { release = resolve; }); } });
+  const first = cache.remember(held.response);
+  await entered;
+  const queued = Array.from({ length: 100 }, (_, index) => fixture({ url: URL.replace(".js", `-queued-${index}.js`) }));
+  const pending = queued.map(f => cache.remember(f.response));
+  release(held.body);
+  try {
+    await Promise.all([first, ...pending]);
+    assert.equal(held.reads + queued.reduce((sum, f) => sum + f.reads, 0), 64);
+    await cache.remember(queued.at(-1).response);
+    assert.equal(queued.at(-1).reads, 1, "a response skipped under pressure can be cached on a later navigation");
+  } finally { cache.clear(); }
+});
+
 test("a discarded response body leaves the network fallback available for the next request", async () => {
   const cache = createAssetCache();
   const failed = fixture({ read: async () => { throw new Error("Browser closed"); } });
