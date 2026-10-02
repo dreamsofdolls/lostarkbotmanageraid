@@ -2223,7 +2223,7 @@ module.exports = {
           "",
           "**11 loại**:",
           "• `weekly-reset` - Wed 17 VN reset tuần",
-          "• `daily-roster-sync` - tổng kết sau khi chu kỳ refresh roster lúc 00:00 VN hoàn tất",
+          "• `daily-roster-sync` - tổng kết làm mới roster lúc 00:00 VN; đi kèm tin dọn kênh khi guild bật dọn kênh và chưa đặt kênh riêng cho loại này",
           "• `stuck-nudge` - tag user toàn char private log",
           "• `set-greeting` - chào sau /raid-channel set",
           "• `hourly-cleanup` - notice sau cleanup",
@@ -2608,7 +2608,7 @@ module.exports = {
 
   announcements: {
     "daily-roster-sync": {
-      body: "🔄 Lượt đồng bộ khi kết thúc ngày **{targetDayKey}** đã hoàn tất: **{userCount}** người dùng · **{rosterCount}** roster đã đăng ký với Artist.\n✅ **{syncedCount}** người dùng đồng bộ thành công · ℹ️ **{settledCount}** không có log khả dụng · ⚠️ **{retryExhaustedCount}** vẫn gặp lỗi sau các lần thử lại.\nRoster được làm mới cho mọi chế độ; tiến độ Local-sync dùng kết quả đã gửi từ Local Reader.",
+      body: "🔄 Roster ngày **{date}** đã làm mới xong: **{userCount}** người · **{rosterCount}** roster\n✅ **{syncedCount}** thành công · ℹ️ **{settledCount}** không có log · ⚠️ **{retryExhaustedCount}** vẫn lỗi",
     },
     "weekly-reset": {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",

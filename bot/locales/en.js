@@ -2200,7 +2200,7 @@ module.exports = {
           "",
           "**11 types**:",
           "• `weekly-reset` - Wed 10:00 UTC weekly reset",
-          "• `daily-roster-sync` - aggregate completion summary for the 00:00 VN daily roster cycle",
+          "• `daily-roster-sync` - summary of the 00:00 VN roster refresh; rides the cleanup notice when channel cleanup is on and this type has no channel of its own",
           "• `stuck-nudge` - nudges users with all-private-log rosters",
           "• `set-greeting` - greeting after /raid-channel set",
           "• `hourly-cleanup` - cleanup notice",
@@ -2575,7 +2575,7 @@ module.exports = {
 
   announcements: {
     "daily-roster-sync": {
-      body: "🔄 The refresh after **{targetDayKey}** has finished: **{userCount}** users · **{rosterCount}** rosters registered with Artist.\n✅ **{syncedCount}** users synced successfully · ℹ️ **{settledCount}** have no available logs · ⚠️ **{retryExhaustedCount}** still failed after bounded retries.\nRoster details refresh in every mode; Local Sync progress uses results submitted by the Local Reader.",
+      body: "🔄 Rosters for **{date}** are refreshed: **{userCount}** users · **{rosterCount}** rosters\n✅ **{syncedCount}** synced · ℹ️ **{settledCount}** no logs · ⚠️ **{retryExhaustedCount}** still failing",
     },
     "weekly-reset": {
       body: "New week, fresh raid progress. Artist just reset everyone's weekly raid progress - time to start over. Have a good raid week. This notice self-deletes in 30 minutes.",

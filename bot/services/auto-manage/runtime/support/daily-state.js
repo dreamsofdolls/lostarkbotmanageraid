@@ -27,6 +27,7 @@ const AUTO_MANAGE_DAILY_OUTCOME = Object.freeze({
   noActionable: "no-actionable",
   retryScheduled: "retry-scheduled",
   retryExhausted: "retry-exhausted",
+  rateLimited: "rate-limited",
   disabled: "disabled",
   noRoster: "no-roster",
 });
@@ -230,6 +231,22 @@ function applyAutoManageDailyReportState({
   });
 }
 
+/**
+ * Hand a claimed attempt back after Bible rate limiting. The throttle is not
+ * the user's doing, so it must not use up one of their bounded retries; the
+ * user stays due and the next tick after the backoff tries again.
+ * @param {object} userDoc - the leased document
+ * @param {number} attemptCount - the attempt number the claim wrote
+ * @returns {{bucket: string, outcome: string, nextAttemptAt: null}}
+ */
+function deferAutoManageDailyAttempt(userDoc, attemptCount) {
+  userDoc.autoManageDailyAttemptCount = Math.max(0, attemptCount - 1);
+  userDoc.lastAutoManageDailyOutcome = AUTO_MANAGE_DAILY_OUTCOME.rateLimited;
+  userDoc.autoManageDailyNextAttemptAt = null;
+  clearAutoManageDailyLease(userDoc);
+  return { bucket: "skipped", outcome: AUTO_MANAGE_DAILY_OUTCOME.rateLimited, nextAttemptAt: null };
+}
+
 function releaseAutoManageDailyLeaseWithoutFinishing(
   userDoc,
   outcome = AUTO_MANAGE_DAILY_OUTCOME.disabled
@@ -251,5 +268,6 @@ module.exports = {
   resetAutoManageDailyState,
   scheduleAutoManageDailyRetry,
   applyAutoManageDailyReportState,
+  deferAutoManageDailyAttempt,
   releaseAutoManageDailyLeaseWithoutFinishing,
 };

@@ -332,3 +332,85 @@ test("disabled daily roster announcements are skipped without a claim", async ()
 
   assert.equal(claimed, false);
 });
+
+function cleanupRider(overrides = {}) {
+  return {
+    guildId: "guild-1",
+    raidChannelId: "channel-1",
+    autoCleanupEnabled: true,
+    lastDailyRosterSyncKey: "2026-10-01",
+    announcements: { dailyRosterSync: { enabled: true, channelId: null } },
+    ...overrides,
+  };
+}
+// 02:00 VN on 2026-10-03: the finished day is TARGET_DAY_KEY.
+const AFTER_TARGET_DAY = new Date("2026-10-02T19:00:00.000Z");
+const ownChannel = { dailyRosterSync: { enabled: true, channelId: "channel-2" } };
+
+test("a guild whose cleanup notice carries the report gets no separate post", async () => {
+  const posts = [];
+  const service = makeService({
+    User: completeUser().model,
+    GuildConfig: makeGuildConfigCursor([cleanupRider()]),
+    posts,
+  });
+
+  const result = await service.notifyDailyRosterSync(makeClient(), { targetDayKey: TARGET_DAY_KEY });
+
+  assert.deepEqual(result, { notifiedCount: 0, reason: "no-deliverable-guilds" });
+  assert.equal(posts.length, 0);
+});
+
+test("a report with its own channel still posts alone when cleanup is on", async () => {
+  const posts = [];
+  const cfg = cleanupRider({ announcements: ownChannel });
+  const GuildConfig = makeGuildConfigCursor([cfg]);
+  GuildConfig.findOneAndUpdate = async () => ({ ...cfg });
+  const service = makeService({ User: completeUser().model, GuildConfig, posts });
+
+  const result = await service.notifyDailyRosterSync(makeClient("channel-2"), { targetDayKey: TARGET_DAY_KEY });
+
+  assert.equal(result.notifiedCount, 1);
+  assert.equal(posts.length, 1);
+});
+
+test("the cleanup notice claims the finished day's report once, dated in the guild language", async () => {
+  for (const [lang, date] of [["vi", "02/10"], ["jp", "10/02"], ["en", "2 Oct"]]) {
+    const claims = [];
+    const GuildConfig = {
+      findOneAndUpdate: async (filter, update) => {
+        claims.push({ filter, update });
+        return claims.length === 1 ? cleanupRider() : null;
+      },
+    };
+    const service = makeService({ User: completeUser().model, GuildConfig });
+
+    const digest = await service.claimCleanupDigest({ cfg: cleanupRider(), lang, now: AFTER_TARGET_DAY });
+
+    assert.match(digest.content, new RegExp(`^announcements\\.daily-roster-sync\\.body:${lang}:`));
+    assert.equal(JSON.parse(digest.content.split(`:${lang}:`)[1]).date, date);
+    assert.equal(claims[0].update.$set.lastDailyRosterSyncKey, TARGET_DAY_KEY);
+    assert.equal(
+      await service.claimCleanupDigest({ cfg: cleanupRider(), lang, now: AFTER_TARGET_DAY }),
+      null,
+      "an overlapping replica loses the claim"
+    );
+  }
+});
+
+test("the cleanup notice carries no report before every roster settles, after it was sent, or when it has its own channel", async () => {
+  const GuildConfig = { findOneAndUpdate: async () => assert.fail("nothing to claim") };
+  const busy = makeService({
+    User: { exists: async () => ({ _id: "busy" }), aggregate: async () => assert.fail("still unfinished") },
+    GuildConfig,
+  });
+  const done = makeService({ User: completeUser().model, GuildConfig });
+
+  assert.equal(await busy.claimCleanupDigest({ cfg: cleanupRider(), lang: "vi", now: AFTER_TARGET_DAY }), null);
+  assert.equal(await done.claimCleanupDigest({
+    cfg: cleanupRider({ lastDailyRosterSyncKey: TARGET_DAY_KEY }), lang: "vi", now: AFTER_TARGET_DAY,
+  }), null);
+  assert.equal(await done.claimCleanupDigest({
+    cfg: cleanupRider({ announcements: ownChannel }), lang: "vi", now: AFTER_TARGET_DAY,
+  }), null);
+});

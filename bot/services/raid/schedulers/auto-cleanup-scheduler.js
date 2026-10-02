@@ -116,6 +116,7 @@ async function runCleanupPhase(context, {
     cfg,
     channel,
     cleanupAndRefreshRaidChannel,
+    claimDailyRosterDigest,
     getAnnouncementsConfig,
     guildLang,
     postChannelAnnouncement,
@@ -149,13 +150,27 @@ async function runCleanupPhase(context, {
     console.log(
       `[raid-channel] ${phaseName} guild=${cfg.guildId} ${logState} deleted=${deleted} skippedOld=${skippedOld}`
     );
-    if (isAnnouncementEnabled(announcements, announcementKey)) {
-      await postChannelAnnouncement(
-        channel,
-        pickNoticeContent(deleted, guildLang),
-        noticeTtlMs,
-        `raid-channel ${phaseName}`
-      );
+    // The finished daily roster report rides this notice and leaves with it.
+    const digest = await claimDailyRosterDigest({ cfg, lang: guildLang, now: context.now })
+      .catch((err) => {
+        console.warn(
+          `[raid-channel] ${phaseName} daily roster report failed guild=${cfg.guildId}:`,
+          err?.message || err
+        );
+        return null;
+      });
+    const content = [
+      isAnnouncementEnabled(announcements, announcementKey) ? pickNoticeContent(deleted, guildLang) : null,
+      digest?.content,
+    ].filter(Boolean).join("\n");
+    if (content) {
+      let sent = null;
+      try {
+        sent = await postChannelAnnouncement(channel, content, noticeTtlMs, `raid-channel ${phaseName}`);
+      } finally {
+        // An unsent report is claimed again by a later cleanup notice.
+        if (!sent) await digest?.release();
+      }
     }
   } catch (err) {
     if (claimPrevious && !cleanupFinished) {
@@ -225,6 +240,7 @@ function createAutoCleanupSchedulerService({
   cleanupAndRefreshRaidChannel,
   getGuildLanguage,
   postChannelAnnouncement,
+  claimDailyRosterDigest = async () => null,
   nowDate = () => new Date(),
 }) {
   async function runAutoCleanupTick(client) {
@@ -253,6 +269,7 @@ function createAutoCleanupSchedulerService({
         channel,
         client,
         cleanupAndRefreshRaidChannel,
+        claimDailyRosterDigest,
         getAnnouncementsConfig,
         dayKey: getTargetDayKeyForLang(now, guildLang),
         guildLang,

@@ -2,6 +2,9 @@
 
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const {
+  getAutoManageDailyContext,
+} = require("../../auto-manage/runtime/support/daily-backfill");
+const {
   claimGuildState,
   releaseGuildClaim,
 } = require("./guild-state-claim");
@@ -9,6 +12,35 @@ const {
 const ANNOUNCEMENT_SUBDOC_KEY = "dailyRosterSync";
 const DEDUP_FIELD = "lastDailyRosterSyncKey";
 const MESSAGE_KEY = "announcements.daily-roster-sync.body";
+const EN_SHORT_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+// ICU writes a year-less vi-VN date as "02-10", so vi and jp are built from the key.
+const DAY_KEY_FORMATS = {
+  vi: (dayKey) => `${dayKey.slice(8, 10)}/${dayKey.slice(5, 7)}`,
+  jp: (dayKey) => `${dayKey.slice(5, 7)}/${dayKey.slice(8, 10)}`,
+  en: (dayKey) => EN_SHORT_DATE.format(new Date(`${dayKey}T00:00:00Z`)),
+};
+
+/**
+ * @param {string} dayKey - VN calendar key, YYYY-MM-DD
+ * @param {string} lang - guild language
+ * @returns {string} the day as the guild language writes a short date
+ */
+function formatDayKey(dayKey, lang) {
+  return (DAY_KEY_FORMATS[lang] || DAY_KEY_FORMATS.en)(dayKey);
+}
+
+/**
+ * Whether the report rides the guild's raid-channel cleanup notice instead
+ * of posting alone: cleanup runs there and the report has no channel of its own.
+ * @param {object} cfg - guild config with autoCleanupEnabled and raidChannelId
+ * @param {{channelId: string|null}} conf - normalized dailyRosterSync setting
+ * @returns {boolean}
+ */
+function ridesCleanupNotice(cfg, conf) {
+  return cfg.autoCleanupEnabled === true
+    && Boolean(cfg.raidChannelId)
+    && (!conf.channelId || conf.channelId === cfg.raidChannelId);
+}
 
 /**
  * @param {string} targetDayKey VN calendar key being completed.
@@ -73,7 +105,7 @@ function buildDailyRosterGuildQuery(targetDayKey) {
 function createDailyRosterGuildCursor(GuildConfig, targetDayKey) {
   return GuildConfig.find(buildDailyRosterGuildQuery(targetDayKey))
     .select(
-      `guildId raidChannelId ${DEDUP_FIELD} `
+      `guildId raidChannelId autoCleanupEnabled ${DEDUP_FIELD} `
       + `announcements.${ANNOUNCEMENT_SUBDOC_KEY}`
     )
     .lean()
@@ -96,7 +128,7 @@ async function claimDailyRosterAnnouncement({ GuildConfig, cfg, conf, targetDayK
 
 function buildDailyRosterAnnouncementContent({ t, lang, targetDayKey, summary }) {
   return t(MESSAGE_KEY, lang, {
-    targetDayKey,
+    date: formatDayKey(targetDayKey, lang),
     userCount: summary.userCount,
     rosterCount: summary.rosterCount,
     syncedCount: summary.syncedCount,
@@ -120,7 +152,7 @@ function createDailyRosterAnnouncementService({
 }) {
   async function resolveGuildDelivery(client, cfg) {
     const conf = getAnnouncementsConfig(cfg)?.[ANNOUNCEMENT_SUBDOC_KEY];
-    if (!conf || conf.enabled === false) return null;
+    if (!conf || conf.enabled === false || ridesCleanupNotice(cfg, conf)) return null;
     const channelId = conf.channelId || cfg.raidChannelId;
     if (!channelId) return null;
 
@@ -130,6 +162,18 @@ function createDailyRosterAnnouncementService({
       channelId
     );
     return channel ? { cfg, conf, channel } : null;
+  }
+
+  async function loadDailyRosterSummary(targetDayKey) {
+    if (await User.exists(buildUnfinishedRosterQuery(targetDayKey))) {
+      return { summary: null, reason: "unfinished" };
+    }
+    const [summary = null] = await User.aggregate(
+      buildDailyRosterSummaryPipeline(targetDayKey)
+    );
+    return summary && Number(summary.userCount) > 0
+      ? { summary, reason: null }
+      : { summary: null, reason: "no-rosters" };
   }
 
   async function notifyGuild({ delivery, summary, targetDayKey }) {
@@ -227,15 +271,8 @@ function createDailyRosterAnnouncementService({
         return { notifiedCount: 0, reason: "no-deliverable-guilds" };
       }
 
-      const unfinished = await User.exists(buildUnfinishedRosterQuery(targetDayKey));
-      if (unfinished) return { notifiedCount: 0, reason: "unfinished" };
-
-      const [summary = null] = await User.aggregate(
-        buildDailyRosterSummaryPipeline(targetDayKey)
-      );
-      if (!summary || Number(summary.userCount) <= 0) {
-        return { notifiedCount: 0, reason: "no-rosters" };
-      }
+      const { summary, reason } = await loadDailyRosterSummary(targetDayKey);
+      if (!summary) return { notifiedCount: 0, reason };
 
       if (await notifyGuild({ delivery: firstDelivery, summary, targetDayKey })) {
         notifiedCount += 1;
@@ -265,7 +302,40 @@ function createDailyRosterAnnouncementService({
     }
   }
 
-  return { notifyDailyRosterSync };
+  /**
+   * Claim the finished day's report for a guild whose cleanup notice carries it.
+   * @param {object} options
+   * @param {object} options.cfg - guild config as the cleanup tick loaded it
+   * @param {string} options.lang - guild language
+   * @param {Date} options.now - cleanup tick clock
+   * @returns {Promise<{content: string, release: () => Promise<boolean>}|null>}
+   *   the report lines and a release for a notice that failed to post, or
+   *   null when there is nothing to carry or another replica claimed it
+   */
+  async function claimCleanupDigest({ cfg, lang, now }) {
+    const conf = getAnnouncementsConfig(cfg)?.[ANNOUNCEMENT_SUBDOC_KEY];
+    const { targetDayKey } = getAutoManageDailyContext(now);
+    if (!conf?.enabled || !ridesCleanupNotice(cfg, conf) || cfg[DEDUP_FIELD] === targetDayKey) {
+      return null;
+    }
+    const { summary } = await loadDailyRosterSummary(targetDayKey);
+    if (!summary) return null;
+
+    const claimPrevious = await claimDailyRosterAnnouncement({ GuildConfig, cfg, conf, targetDayKey });
+    if (!claimPrevious) return null;
+    return {
+      content: buildDailyRosterAnnouncementContent({ t, lang, targetDayKey, summary }),
+      release: () => releaseGuildClaim(
+        { GuildConfig, guildId: cfg.guildId, claimedState: { [DEDUP_FIELD]: targetDayKey }, previousState: claimPrevious },
+        (rollbackError) => console.error(
+          `[daily-roster-sync] guild=${cfg.guildId} cleanup claim rollback failed:`,
+          rollbackError?.message || rollbackError
+        )
+      ),
+    };
+  }
+
+  return { notifyDailyRosterSync, claimCleanupDigest };
 }
 
 module.exports = {

@@ -2201,7 +2201,7 @@ module.exports = {
           "",
           "**11 種別**:",
           "• `weekly-reset` - 水曜 19:00 JST 週次リセット",
-          "• `daily-roster-sync` - 00:00 VN の日次ロスター周期が完了した時の集計結果",
+          "• `daily-roster-sync` - 00:00 VN のロスター更新の集計。チャンネル掃除が有効で、この種別に専用チャンネルがなければ掃除のお知らせに同梱しますわ",
           "• `stuck-nudge` - プライベートログのユーザー全員にメンション",
           "• `set-greeting` - /raid-channel set 後のごあいさつ",
           "• `hourly-cleanup` - クリーンアップ後の通知",
@@ -2576,7 +2576,7 @@ module.exports = {
 
   announcements: {
     "daily-roster-sync": {
-      body: "🔄 **{targetDayKey}** 終了後の同期が完了しましたわ。Artist に登録済みの **{userCount}** 人・**{rosterCount}** ロスターが対象です。\n✅ **{syncedCount}** 人が同期成功 · ℹ️ **{settledCount}** 人は利用可能なログなし · ⚠️ **{retryExhaustedCount}** 人は再試行後もエラーです。\nロスター情報は全モードで更新します。Local Sync の進行状況は Local Reader から送信済みの結果を使いますわ。",
+      body: "🔄 **{date}** のロスター更新が終わりましたわ：**{userCount}** 人・**{rosterCount}** ロスター\n✅ **{syncedCount}** 人成功 · ℹ️ **{settledCount}** 人ログなし · ⚠️ **{retryExhaustedCount}** 人エラー",
     },
     "weekly-reset": {
       body: "新しい週が来ましたわね～♪ 今週のレイド進捗をアーティストがリセットしましたわ、皆さんは最初からまた挑戦してくださいませ。素敵なレイド週間をお過ごしくださいね♪ この案内は30分後にお片付けしますの。",

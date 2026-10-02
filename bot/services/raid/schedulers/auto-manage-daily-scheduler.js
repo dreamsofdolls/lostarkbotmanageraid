@@ -11,8 +11,14 @@ const {
   ownsAutoManageDailyLease,
   scheduleAutoManageDailyRetry,
   applyAutoManageDailyReportState,
+  deferAutoManageDailyAttempt,
   releaseAutoManageDailyLeaseWithoutFinishing,
 } = require("../../auto-manage/runtime/support/daily-state");
+const {
+  BIBLE_ERROR_KIND,
+  classifyBibleError,
+  createBibleCharacterNotFoundError,
+} = require("../../auto-manage/bible/error-kinds");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { normalizeName } = require("../../../utils/raid/common/shared");
 
@@ -20,6 +26,9 @@ const { normalizeName } = require("../../../utils/raid/common/shared");
 // Short ticks drain due users in small batches through the shared Bible limiter.
 const AUTO_MANAGE_DAILY_TICK_MS = 5 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
+// Every roster refreshes in the minutes after midnight. Back-to-back requests
+// tripped Bible's 429, whose backoff blocks every Bible feature for 1-5 min.
+const DAILY_ROSTER_REFRESH_GAP_MS = 1500;
 const OUTCOME_COUNTER_KEY_BY_BUCKET = new Map([
   ["synced", "syncedCount"],
   ["settled", "settledCount"],
@@ -229,24 +238,35 @@ async function persistCollectedDailyReport({
     // before the metadata merge can rename that account or character.
     report = bibleAllowed
       ? applyAutoManageCollected(fresh, weekResetStart, collected)
-      : { perChar: refreshedAccounts.map(() => ({ error: null })) };
+      : { perChar: [] };
     applyStaleAccountRefreshes(fresh, dueRefreshes);
-    const failedRefreshes = refreshedAccounts.filter(account =>
-      !(Number(account.lastRefreshedAt) >= refreshBoundary)
-    );
-    const dailyReport = {
-      perChar: [
-        ...report.perChar,
-        ...failedRefreshes.map(account => ({ error: `Roster refresh unavailable: ${account.accountName}` })),
-      ],
-    };
-    transition = applyAutoManageDailyReportState({
-      userDoc: fresh,
-      report: dailyReport,
-      targetDayKey: dailyContext.targetDayKey,
-      attemptCount,
-      nowMs,
+    const failureKindByName = new Map(refreshCollected
+      .filter(entry => entry?.accountName)
+      .map(entry => [normalizeName(entry.accountName), entry.failureKind]));
+    // A not-found error settles the day the way a missing character does in
+    // the clear-log report; any other refresh failure is worth a retry.
+    const refreshEntries = refreshedAccounts.map(account => {
+      if (Number(account.lastRefreshedAt) >= refreshBoundary) return { error: null };
+      return failureKindByName.get(normalizeName(account.accountName)) === BIBLE_ERROR_KIND.notFound
+        ? { error: createBibleCharacterNotFoundError(account.accountName).message }
+        : { error: `Roster refresh unavailable: ${account.accountName}` };
     });
+    const dailyReport = {
+      perChar: bibleAllowed
+        ? [...report.perChar, ...refreshEntries.filter(entry => entry.error)]
+        : refreshEntries,
+    };
+    const rateLimited = refreshCollected.some(entry => entry?.failureKind === BIBLE_ERROR_KIND.rateLimit)
+      || dailyReport.perChar.some(entry => entry.error && classifyBibleError(entry.error) === BIBLE_ERROR_KIND.rateLimit);
+    transition = rateLimited
+      ? deferAutoManageDailyAttempt(fresh, attemptCount)
+      : applyAutoManageDailyReportState({
+        userDoc: fresh,
+        report: dailyReport,
+        targetDayKey: dailyContext.targetDayKey,
+        attemptCount,
+        nowMs,
+      });
     fresh.lastDailyRosterAttemptAt = nowMs;
     if (bibleAllowed && transition.outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
       fresh.lastAutoManageSyncAt = nowMs;
@@ -312,6 +332,7 @@ async function syncCandidate({
     applyAutoManageCollected,
     collectAccountRefresh,
     applyStaleAccountRefreshes,
+    waitFn,
   } = deps;
 
   const guard = await acquireAutoManageSyncSlot(discordId);
@@ -347,10 +368,15 @@ async function syncCandidate({
     const refreshBoundary = dailyRosterBoundaryMs(dailyContext);
     for (const account of seedDoc.accounts) {
       if (account.characters?.length > 0 && !(Number(account.lastRefreshedAt) >= refreshBoundary)) {
-        refreshCollected.push(await collectAccountRefresh(seedDoc, account.accountName));
+        await waitFn(DAILY_ROSTER_REFRESH_GAP_MS);
+        const refreshed = await collectAccountRefresh(seedDoc, account.accountName);
+        refreshCollected.push(refreshed);
+        // The backoff a 429 opens would refuse every later request.
+        if (refreshed?.failureKind === BIBLE_ERROR_KIND.rateLimit) break;
       }
     }
-    bibleAttempted = seedDoc.autoManageEnabled && !seedDoc.localSyncEnabled;
+    const rateLimited = refreshCollected.at(-1)?.failureKind === BIBLE_ERROR_KIND.rateLimit;
+    bibleAttempted = !rateLimited && seedDoc.autoManageEnabled && !seedDoc.localSyncEnabled;
     const collected = bibleAttempted
       ? await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart)
       : null;
@@ -414,6 +440,8 @@ function createAutoManageDailySchedulerService({
   collectAccountRefresh,
   applyStaleAccountRefreshes,
   notifyDailyRosterSync = null,
+  getBibleBackoffRemainingMs = () => 0,
+  waitFn = (ms) => new Promise(resolve => setTimeout(resolve, ms)),
   processEnv = process.env,
 }) {
   async function runAutoManageDailyTick(client, now = new Date()) {
@@ -432,7 +460,13 @@ function createAutoManageDailySchedulerService({
 
     const counters = createOutcomeCounters();
     const weekResetStart = weekResetStartMs();
-    for (const { discordId } of candidates) {
+    for (const [index, { discordId }] of candidates.entries()) {
+      // The backoff refuses every Bible request, so starting a roster now
+      // would only fail it; the rest of the batch waits for a later tick.
+      if (getBibleBackoffRemainingMs() > 0) {
+        console.warn(`[auto-manage daily] Bible backoff active - ${candidates.length - index} candidate(s) wait for the next tick`);
+        break;
+      }
       const outcome = await syncCandidate({
         discordId,
         weekResetStart,
@@ -448,6 +482,7 @@ function createAutoManageDailySchedulerService({
           applyAutoManageCollected,
           collectAccountRefresh,
           applyStaleAccountRefreshes,
+          waitFn,
         },
       });
       applyOutcomeCounter(counters, outcome.bucket);
@@ -480,6 +515,7 @@ function createAutoManageDailySchedulerService({
 
 module.exports = {
   AUTO_MANAGE_DAILY_BATCH_SIZE,
+  DAILY_ROSTER_REFRESH_GAP_MS,
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,
   applyOutcomeCounter,

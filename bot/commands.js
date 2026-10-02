@@ -751,6 +751,7 @@ const {
   applyAutoManageCollected,
   collectAccountRefresh,
   applyStaleAccountRefreshes,
+  getBibleBackoffRemainingMs: () => bibleLimiter.getBackoffRemainingMs(),
 });
 
 // Announcement timing reads each scheduler's start time and tick length.

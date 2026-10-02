@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-02
+
+### Added
+- Every registered roster, Local Sync included, refreshes from lostark.bible each day from 00:00 VN, and the guild gets one `daily-roster-sync` summary once every user has settled.
+
+### Changed
+- The `daily-roster-sync` summary rides Artist's next raid-channel cleanup notice, or the morning wakeup greeting when the run ends during quiet hours, and leaves with it. A guild without channel cleanup, or with its own channel set for this announcement, still gets a separate post. The date reads `02/10` in vi, `10/02` in jp and `2 Oct` in en.
+
+### Fixed
+- The midnight refresh no longer trips lostark.bible's 429, which blocked every Bible feature for 1-5 minutes: roster refreshes are spaced 1.5 s apart, the run pauses while a Bible backoff is active, and a user interrupted by one keeps the attempt instead of drifting toward "still failing".
+- A roster that lostark.bible no longer has settles the day instead of being retried four times and counted as still failing.
+
 ## 2026-10-01
 
 ### Changed

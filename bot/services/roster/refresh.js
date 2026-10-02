@@ -12,6 +12,7 @@
  */
 
 const { findAccountByName } = require("../../utils/user-doc");
+const { BIBLE_ERROR_KIND } = require("../auto-manage/bible/error-kinds");
 const {
   isBibleRateLimitError,
 } = require("../auto-manage/bible/rate-limit");
@@ -263,7 +264,14 @@ function createRosterRefreshService(deps) {
       }
     }
 
-    return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted };
+    // Bible answers an unknown character with an empty roster page, so every
+    // seed coming back empty without an error means the roster is gone.
+    let failureKind = BIBLE_ERROR_KIND.other;
+    if (rateLimitedAbort) failureKind = BIBLE_ERROR_KIND.rateLimit;
+    else if (attempted && seedFailures.length === 0 && zeroOverlapCount === 0) {
+      failureKind = BIBLE_ERROR_KIND.notFound;
+    }
+    return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted, failureKind };
   }
 
   function collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts) {

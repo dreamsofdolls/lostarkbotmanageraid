@@ -136,6 +136,26 @@ test("collectStaleAccountRefreshes aborts seed loop on first HTTP 429", async ()
   assert.doesNotMatch(warnings[0], /seed "Alpha" failed/);
 });
 
+test("a failed account refresh names why it failed", async () => {
+  const user = makeStaleUser();
+  user.accounts[0].characters.push({ name: "Beta", class: "Bard", itemLevel: 1700 });
+  const failureKindFor = async (fetchRosterCharacters) => {
+    const result = await makeService(fetchRosterCharacters).collectAccountRefresh(user, "Alpha");
+    return result.failureKind;
+  };
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal(await failureKindFor(async () => { throw new Error("LostArk Bible HTTP 429"); }), "rateLimit");
+    // Bible answers an unknown character with an empty roster page.
+    assert.equal(await failureKindFor(async () => []), "notFound");
+    assert.equal(await failureKindFor(async () => { throw new Error("LostArk Bible HTTP 500"); }), "other");
+    assert.equal(await failureKindFor(async () => [{ charName: "Stranger", itemLevel: 1700 }]), "other");
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("collectStaleAccountRefreshes stays quiet while the global Bible backoff is active", async () => {
   const service = makeService(async () => {
     const error = new Error("LostArk Bible HTTP 429 - global backoff active for 42s");

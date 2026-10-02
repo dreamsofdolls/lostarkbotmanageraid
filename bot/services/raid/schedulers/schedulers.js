@@ -61,11 +61,21 @@ function createRaidSchedulerService({
   applyAutoManageCollected,
   collectAccountRefresh,
   applyStaleAccountRefreshes,
+  getBibleBackoffRemainingMs,
 }) {
   const sideTaskResetService = createSideTaskResetService({
     User,
     dailyResetStartMs,
     weekResetStartMs,
+  });
+
+  const { notifyDailyRosterSync, claimCleanupDigest } = createDailyRosterAnnouncementService({
+    User,
+    GuildConfig,
+    getAnnouncementsConfig,
+    getGuildLanguage,
+    postChannelAnnouncement,
+    t,
   });
 
   const autoCleanupService = createAutoCleanupSchedulerService({
@@ -74,6 +84,7 @@ function createRaidSchedulerService({
     cleanupAndRefreshRaidChannel,
     getGuildLanguage,
     postChannelAnnouncement,
+    claimDailyRosterDigest: claimCleanupDigest,
   });
 
   const maintenanceService = createMaintenanceSchedulerService({
@@ -91,14 +102,6 @@ function createRaidSchedulerService({
     t,
   });
 
-  const { notifyDailyRosterSync } = createDailyRosterAnnouncementService({
-    User,
-    GuildConfig,
-    getAnnouncementsConfig,
-    getGuildLanguage,
-    postChannelAnnouncement,
-    t,
-  });
   const autoManageDailyService = createAutoManageDailySchedulerService({
     User,
     saveWithRetry,
@@ -111,6 +114,7 @@ function createRaidSchedulerService({
     collectAccountRefresh,
     applyStaleAccountRefreshes,
     notifyDailyRosterSync,
+    getBibleBackoffRemainingMs,
   });
 
   return {

@@ -39,9 +39,9 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Daily roster sync",
     subdocKey: "dailyRosterSync",
     channelOverridable: true,
-    trigger: "00:00 VN starts the daily roster refresh. A notice follows once every registered user reaches a terminal result; bounded retries can delay it.",
+    trigger: "00:00 VN starts the daily roster refresh. Once every registered user reaches a terminal result, the summary rides the next raid-channel cleanup notice (or the wakeup greeting after quiet hours); without channel cleanup, or with its own channel, it posts alone. Bounded retries can delay it.",
     dedup: "Once per completed VN day per guild (`lastDailyRosterSyncKey`); restart catches up without repeating settled roster work.",
-    messageTtl: "Kept until the channel's normal cleanup",
+    messageTtl: "Leaves with the cleanup notice it rides; a separate post stays until the channel's normal cleanup",
     previewContent: "Daily roster refresh finished: registered users and rosters, successful users, unavailable logs, and exhausted retries.",
   },
   "weekly-reset": {

@@ -307,3 +307,67 @@ test("failed cleanup conditionally rolls its slot claim back for retry", async (
     options: { new: true },
   });
 });
+
+async function runNormalCleanupWithDigest({ cleanupNoticeEnabled = true, postResult = { id: "notice-1" } } = {}) {
+  const now = new Date(Date.UTC(2026, 3, 22, 2, 0, 0, 0));
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: "channel-1",
+    lastArtistWakeupKey: getTargetDayKeyForLang(now, "vi"),
+    lastAutoCleanupKey: "old-slot",
+  };
+  const posts = [];
+  const digestCalls = [];
+  let releases = 0;
+  const service = createAutoCleanupSchedulerService({
+    GuildConfig: {
+      find: () => ({ lean: async () => [cfg] }),
+      findOneAndUpdate: async () => ({ ...cfg }),
+    },
+    getAnnouncementsConfig: () => ({
+      hourlyCleanupNotice: { enabled: cleanupNoticeEnabled },
+      artistBedtime: { enabled: true },
+      artistWakeup: { enabled: true },
+    }),
+    cleanupAndRefreshRaidChannel: async () => ({ deleted: 3, skippedOld: 0 }),
+    getGuildLanguage: async () => "vi",
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return postResult;
+    },
+    claimDailyRosterDigest: async (options) => {
+      digestCalls.push(options);
+      return { content: "🔄 roster report", release: async () => { releases += 1; return true; } };
+    },
+    nowDate: () => now,
+  });
+  await service.runAutoCleanupTick({
+    user: { id: "bot" },
+    guilds: { cache: new Map([["guild-1", makeGuild({})]]) },
+  });
+  return { cfg, now, posts, digestCalls, releases };
+}
+
+test("the cleanup notice carries the finished daily roster report", async () => {
+  const { cfg, now, posts, digestCalls, releases } = await runNormalCleanupWithDigest();
+
+  assert.deepEqual(digestCalls, [{ cfg, lang: "vi", now }]);
+  assert.equal(posts.length, 1);
+  const [notice, report] = posts[0][1].split("\n");
+  assert.ok(notice.length > 0, "the cleanup line comes first");
+  assert.equal(report, "🔄 roster report");
+  assert.equal(releases, 0);
+});
+
+test("the daily roster report still posts when the cleanup notice is turned off", async () => {
+  const { posts } = await runNormalCleanupWithDigest({ cleanupNoticeEnabled: false });
+
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0][1], "🔄 roster report");
+});
+
+test("a cleanup notice that fails to post hands the daily roster report back", async () => {
+  const { releases } = await runNormalCleanupWithDigest({ postResult: null });
+
+  assert.equal(releases, 1);
+});

@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   AUTO_MANAGE_DAILY_BATCH_SIZE,
+  DAILY_ROSTER_REFRESH_GAP_MS,
   applyOutcomeCounter,
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,
@@ -35,6 +36,7 @@ function createAutoManageDailySchedulerService(deps) {
     },
     applyStaleAccountRefreshes: () => {},
     notifyDailyRosterSync: async () => {},
+    waitFn: async () => {},
     ...deps,
   });
 }
@@ -1169,4 +1171,113 @@ test("auto-manage daily scheduler processes candidates sequentially in batches o
   assert.equal(chain.selectArg, "discordId");
   assert.equal(maxInFlight, 1);
   assert.deepEqual(seen, candidates.slice(0, 6).map(candidate => candidate.discordId));
+});
+
+// Metadata-only users (auto-manage off), each with one stale roster.
+function createRosterBatchHarness({ ids, collectAccountRefresh, ...deps }) {
+  const docs = new Map(ids.map(discordId => [discordId, {
+    discordId,
+    autoManageEnabled: false,
+    accounts: [{ accountName: `${discordId}-main`, lastRefreshedAt: 0, characters: [{ name: `${discordId}-char` }] }],
+    async save() { this.saves = (this.saves || 0) + 1; },
+  }]));
+  const slots = [];
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain(ids.map(discordId => ({ discordId }))),
+      findOne: async ({ discordId }) => docs.get(discordId),
+      updateOne: async (filter, update) => {
+        Object.assign(docs.get(filter.discordId), update.$set);
+        return { modifiedCount: 1 };
+      },
+    },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async (discordId) => { slots.push(discordId); return { acquired: true }; },
+    releaseAutoManageSyncSlot: () => {},
+    gatherAutoManageLogsForUserDoc: async () => assert.fail("metadata-only users gather no clear logs"),
+    applyAutoManageCollected: () => assert.fail("metadata-only users apply no raid progress"),
+    collectAccountRefresh,
+    processEnv: {},
+    ...deps,
+  });
+  return { service, docs, slots };
+}
+
+const failedRefresh = (accountName, failureKind) => ({
+  accountName, fetchedChars: null, resolvedSeed: null, attempted: true, failureKind,
+});
+
+test("a roster Bible no longer has settles the day instead of retrying", async () => {
+  const now = new Date("2026-10-02T17:05:00.000Z");
+  const { service, docs } = createRosterBatchHarness({
+    ids: ["gone"],
+    collectAccountRefresh: async (_userDoc, accountName) => failedRefresh(accountName, "notFound"),
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  const doc = docs.get("gone");
+  assert.equal(doc.lastAutoManageDailyFinishedDayKey, getAutoManageDailyContext(now).targetDayKey);
+  assert.equal(doc.lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.noActionable);
+});
+
+test("a rate-limited refresh hands its attempt back and stops the batch", async () => {
+  const now = new Date("2026-10-02T17:05:00.000Z");
+  let backoffMs = 0;
+  const { service, docs, slots } = createRosterBatchHarness({
+    ids: ["first", "second"],
+    // A 429 opens the shared limiter's backoff, as BibleRequestLimiter does.
+    collectAccountRefresh: async (_userDoc, accountName) => {
+      backoffMs = 60_000;
+      return failedRefresh(accountName, "rateLimit");
+    },
+    getBibleBackoffRemainingMs: () => backoffMs,
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  assert.deepEqual(slots, ["first"], "the rest of the batch waits for the next tick");
+  const doc = docs.get("first");
+  assert.equal(doc.saves, 1);
+  assert.equal(doc.autoManageDailyAttemptCount, 0, "a Bible throttle does not use up a retry");
+  assert.equal(doc.lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.rateLimited);
+  assert.equal(doc.autoManageDailyNextAttemptAt, null);
+  assert.equal(doc.autoManageDailyLeaseToken, "");
+  assert.equal(doc.lastAutoManageDailyFinishedDayKey, undefined);
+});
+
+test("a tick starts no roster while the Bible backoff is active", async () => {
+  let notified = 0;
+  const { service, slots } = createRosterBatchHarness({
+    ids: ["waiting"],
+    collectAccountRefresh: async () => assert.fail("no Bible request while the backoff is active"),
+    getBibleBackoffRemainingMs: () => 30_000,
+    notifyDailyRosterSync: async () => { notified += 1; },
+  });
+
+  await service.runAutoManageDailyTick({}, new Date("2026-10-02T17:05:00.000Z"));
+
+  assert.deepEqual(slots, []);
+  assert.equal(notified, 1, "the completion check needs no Bible request");
+});
+
+test("daily roster refreshes are spaced out so the midnight run does not trip Bible's limit", async () => {
+  const events = [];
+  const { service } = createRosterBatchHarness({
+    ids: ["one", "two"],
+    collectAccountRefresh: async (_userDoc, accountName) => {
+      events.push(`refresh:${accountName}`);
+      return failedRefresh(accountName, "other");
+    },
+    waitFn: async (ms) => { events.push(`wait:${ms}`); },
+  });
+
+  await service.runAutoManageDailyTick({}, new Date("2026-10-02T17:05:00.000Z"));
+
+  assert.deepEqual(events, [
+    `wait:${DAILY_ROSTER_REFRESH_GAP_MS}`, "refresh:one-main",
+    `wait:${DAILY_ROSTER_REFRESH_GAP_MS}`, "refresh:two-main",
+  ]);
 });

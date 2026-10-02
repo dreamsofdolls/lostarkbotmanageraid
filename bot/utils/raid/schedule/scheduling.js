@@ -171,7 +171,7 @@ function createSchedulingHelpers({
       ),
       disabledWhen: ({ autoManageDisabled }) => autoManageDisabled,
       disabledText: "Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)",
-      note: "Roster refresh starts at 00:00 VN. The notice waits for every registered user to finish; five-minute batches, retries and restart catch-up can delay it.",
+      note: "Roster refresh starts at 00:00 VN. The notice waits for every registered user to finish, then rides the next cleanup notice when channel cleanup is on; five-minute batches, retries, Bible backoffs and restart catch-up can delay it.",
     },
     "weekly-reset": {
       eligibleBoundary: nextWeeklyResetBoundaryMs,
