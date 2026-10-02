@@ -7,9 +7,12 @@ const { brotliDecompressSync } = require("node:zlib");
 const { createAssetCache } = require("../bot/services/raid-log/asset-cache");
 
 const URL = "https://lostark.bible/_app/immutable/chunks/fixture.js";
-function fixture({ url = URL, method = "GET", navigation = false, status = 200, headers = {}, body = Buffer.from("module"), read } = {}) {
+const CLASS_ICON_URL = "https://lostark.bible/i/classes/204.png";
+function fixture({ url = URL, method = "GET", navigation = false, resourceType = "script", requestHeaders = {},
+  status = 200, headers = {}, body = Buffer.from("module"), read } = {}) {
   let reads = 0;
-  const request = { url: () => url, method: () => method, isNavigationRequest: () => navigation };
+  const request = { url: () => url, method: () => method, isNavigationRequest: () => navigation,
+    resourceType: () => resourceType, headers: () => requestHeaders };
   const response = { url: () => url, request: () => request, status: () => status,
     allHeaders: async () => ({ "cache-control": "public, max-age=31536000, immutable", "content-type": "text/javascript", ...headers }),
     body: async () => { reads++; return read ? read() : body; } };
@@ -25,6 +28,85 @@ test("only public immutable app assets are reused, with decoded bodies and the o
     assert.deepEqual(cache.get(f.request), { status: 200, contentType: "text/javascript", body: f.body });
     await cache.remember(f.response);
     assert.equal(f.reads, 1, "a fulfilled asset does not copy its body back into the cache");
+  } finally { cache.clear(); }
+});
+
+test("fresh numeric class PNGs are reused without Brotli recompression", async () => {
+  const cache = createAssetCache();
+  const body = Buffer.alloc(16 * 1024, 0x89);
+  const f = fixture({ url: CLASS_ICON_URL, resourceType: "image", headers: {
+    "cache-control": "max-age=14400", age: "7117", "content-type": "image/png", vary: "Accept-Encoding",
+  }, body });
+  try {
+    await cache.remember(f.response);
+    const asset = cache.get(f.request);
+    assert.equal(asset.contentType, "image/png");
+    assert.equal(asset.encoding, undefined);
+    assert.equal(asset.body, body);
+    let delivered;
+    await cache.fulfill({ fulfill: async options => { delivered = options; } }, asset);
+    assert.deepEqual(delivered, { status: 200, contentType: "image/png", body });
+    await cache.remember(f.response);
+    assert.equal(f.reads, 1);
+  } finally { cache.clear(); }
+});
+
+test("class icon support does not admit arbitrary images, foreign origins or mismatched MIME types", async () => {
+  const cache = createAssetCache();
+  try {
+    for (const options of [
+      { url: "https://lostark.bible/i/classes/bard.png", resourceType: "image", headers: { "content-type": "image/png" } },
+      { url: "https://lostark.bible/i/classes/204.webp", resourceType: "image", headers: { "content-type": "image/png" } },
+      { url: "https://lostark.bible/i/skills/204.png", resourceType: "image", headers: { "content-type": "image/png" } },
+      { url: "https://cdn.ags.lol/i/classes/204.png", resourceType: "image", headers: { "content-type": "image/png" } },
+      { url: `${CLASS_ICON_URL}?character=private`, resourceType: "image", headers: { "content-type": "image/png" } },
+      { url: CLASS_ICON_URL, headers: { "content-type": "image/png" } },
+      { url: CLASS_ICON_URL, resourceType: "image", headers: { "content-type": "image/webp" } },
+      { headers: { "content-type": "image/png" } },
+    ]) {
+      const f = fixture(options);
+      await cache.remember(f.response);
+      assert.equal(cache.get(f.request), undefined);
+      assert.equal(f.reads, 0);
+    }
+  } finally { cache.clear(); }
+});
+
+test("class icons require fresh max-age and reject private responses before reading the body", async () => {
+  const cache = createAssetCache();
+  try {
+    const policies = [
+      { "cache-control": "public, immutable" },
+      { "cache-control": "max-age=10", age: "10" },
+      ...["private", "no-store", "no-cache"].map(directive => ({ "cache-control": `max-age=14400, ${directive}` })),
+      { "cache-control": "max-age=14400, s-maxage=0" },
+      { "cache-control": "max-age=14400", "set-cookie": "session=private" },
+      { "cache-control": "max-age=14400", vary: "Cookie" },
+      { "cache-control": "max-age=14400", "content-length": String(4 * 1024 * 1024 + 1) },
+    ];
+    for (const headers of policies) {
+      const f = fixture({ url: CLASS_ICON_URL, resourceType: "image",
+        headers: { "content-type": "image/png", ...headers } });
+      await cache.remember(f.response);
+      assert.equal(cache.get(f.request), undefined);
+      assert.equal(f.reads, 0);
+    }
+  } finally { cache.clear(); }
+});
+
+test("authorized class icon requests neither consume nor populate the unauthenticated cache", async () => {
+  const cache = createAssetCache();
+  const publicIcon = fixture({ url: CLASS_ICON_URL, resourceType: "image",
+    headers: { "cache-control": "max-age=14400", "content-type": "image/png" } });
+  const authorized = fixture({ url: CLASS_ICON_URL, resourceType: "image",
+    requestHeaders: { Authorization: "Bearer private" },
+    headers: { "cache-control": "max-age=14400", "content-type": "image/png" } });
+  try {
+    await cache.remember(publicIcon.response);
+    assert.ok(cache.get(publicIcon.request));
+    assert.equal(cache.get(authorized.request), undefined);
+    await cache.remember(authorized.response);
+    assert.equal(authorized.reads, 0);
   } finally { cache.clear(); }
 });
 

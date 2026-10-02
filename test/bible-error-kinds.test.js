@@ -23,13 +23,7 @@ const NOT_FOUND_PAGE = [
 ].join("\n");
 
 function fakeResponse(status, body) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: () => null },
-    text: async () => body,
-    json: async () => JSON.parse(body),
-  };
+  return new Response(body, { status });
 }
 
 function clientAnswering(status, body) {

@@ -8,6 +8,8 @@ const BIBLE_REGION = "NA";
 const BIBLE_USER_AGENT = "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)";
 const BIBLE_REQUEST_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_LOG_PAGES = 10;
+const MAX_CHARACTER_HTML_BYTES = 8 * 1024 * 1024;
+const MAX_IDENTITY_SCAN_LENGTH = 64 * 1024;
 
 function defaultFetch(...args) {
   return fetch(...args);
@@ -18,13 +20,63 @@ function createRequestSignal(signal) {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+async function readCharacterHtml(res, charName, includeProfile) {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks = [];
+  let overlap = "";
+  let metadataText;
+  let hasMetadata = false;
+  let hasHeaderEnd = false;
+  let hasProfileTitle = !includeProfile;
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return chunks.join("") + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > MAX_CHARACTER_HTML_BYTES) throw new Error(`Bible roster page exceeded 8 MiB for "${charName}"`);
+      const decoded = decoder.decode(value, { stream: true });
+      chunks.push(decoded);
+      const fragment = overlap + decoded;
+      let headerFragment = fragment;
+      if (metadataText === undefined) {
+        const start = fragment.indexOf("header:{id:");
+        if (start >= 0) metadataText = headerFragment = fragment.slice(start);
+      } else if (!hasMetadata) metadataText += decoded;
+      if (metadataText !== undefined) {
+        // A digit at a chunk boundary may still belong to an unfinished rid.
+        hasMetadata ||= /header:\{id:(\d+),sn:"([^"]+)",rid:(\d+)(?=[,}\s])/.test(metadataText.slice(0, MAX_IDENTITY_SCAN_LENGTH));
+        hasHeaderEnd ||= headerFragment.includes("redirectedFrom:");
+        if (hasMetadata) metadataText = "";
+        // Long or changed headers fall back to the bounded full-page parser
+        // instead of rescanning an ever-growing candidate after every chunk.
+        else if (metadataText.length > MAX_IDENTITY_SCAN_LENGTH) metadataText = undefined;
+      }
+      if (!hasProfileTitle && bytes <= MAX_IDENTITY_SCAN_LENGTH && fragment.includes("</title>")) {
+        hasProfileTitle = /<title>[^<]+ \(NA\) \| lostark\.bible<\/title>/.test(chunks.join(""));
+      }
+      // Fixed markers can cross chunks; unrelated HTML needs only this overlap.
+      overlap = fragment.slice(-"redirectedFrom:".length + 1);
+      if (hasMetadata && (!includeProfile || (hasHeaderEnd && hasProfileTitle))) {
+        // The remaining roster cards are irrelevant to this character's identity.
+        return chunks.join("");
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 /**
  * Fetch a character's lostark.bible identifiers (serial / cid / rid) by
  * loading their roster page and regex-extracting the SSR SvelteKit bootstrap
  * data. These IDs are required to call the logs API but only need to be
  * fetched once per character - caller caches them on the character doc.
  */
-async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch, signal } = {}) {
+async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch, signal } = {}, includeProfile = false) {
   const url = `https://lostark.bible/character/${BIBLE_REGION}/${encodeURIComponent(charName)}/roster`;
   const res = await fetchImpl(url, {
     headers: {
@@ -37,12 +89,13 @@ async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch, sig
     signal: createRequestSignal(signal),
   });
   if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
     throw createBibleHttpError(
       `Bible roster page returned HTTP ${res.status} for "${charName}"`,
       res
     );
   }
-  const html = await res.text();
+  const html = await readCharacterHtml(res, charName, includeProfile);
   // SSR SvelteKit bootstrap data: {header:{id:<cid>,sn:"<serial>",rid:<rid>,...}}
   const match = html.match(/header:\{id:(\d+),sn:"([^"]+)",rid:(\d+)/);
   if (!match) {
@@ -60,7 +113,7 @@ async function fetchBibleCharacterMeta(charName, options) {
 // The same page contains both identity and class. /raid-log does not need to
 // fetch it again or parse every roster card to resolve one character.
 async function fetchBibleCharacterProfile(charName, options) {
-  const { html, meta } = await fetchBibleCharacterPage(charName, options);
+  const { html, meta } = await fetchBibleCharacterPage(charName, options, true);
   const name = html.match(/<title>([^<]+) \(NA\) \| lostark\.bible<\/title>/)?.[1];
   const headerStart = html.indexOf("header:{id:");
   const headerEnd = html.indexOf("redirectedFrom:", headerStart);

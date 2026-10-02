@@ -284,6 +284,7 @@ function createRaidLogCommand({
     state.busy = true;
     const started = now();
     let waitingShown = false;
+    let completed = false;
     try {
       if (action !== "search") {
         // Acknowledge and show progress in one request, before any DB/Bible work.
@@ -297,6 +298,7 @@ function createRaidLogCommand({
         waitingShown = true;
       }
       await stages[state.stage](interaction, state, action);
+      completed = true;
     } catch (error) {
       const code = raidLogErrorCode(error);
       log.warn(`[raid-log] ${code}: ${error.message}`);
@@ -319,6 +321,8 @@ function createRaidLogCommand({
         else await interaction.reply(payload);
       }
     } finally {
+      // Renew the idle lifetime only after a successful action on the current session.
+      if (completed && sessions.get(id) === state) state.expires = now() + sessionMs;
       state.busy = false;
       expireSessions();
       log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);

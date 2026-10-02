@@ -11,16 +11,25 @@ const MAX_ASSET_BYTES = 4 * 1024 * 1024;
 const MIN_COMPRESS_BYTES = 4 * 1024;
 const MAX_PENDING_ASSETS = 64;
 
-function isImmutableAsset(request) {
+function getStaticAssetKind(request) {
   if (request.method() !== "GET" || request.isNavigationRequest()) return false;
   const url = new URL(request.url());
-  return url.origin === BIBLE_ORIGIN && !url.username && !url.password && !url.search
-    && url.pathname.startsWith("/_app/immutable/") && /\.(?:js|css|woff2?)$/.test(url.pathname);
+  if (url.origin !== BIBLE_ORIGIN || url.username || url.password || url.search) return false;
+  if (url.pathname.startsWith("/_app/immutable/") && /\.(?:js|css|woff2?)$/.test(url.pathname)) return "app";
+  if (request.resourceType() === "image" && /^\/i\/classes\/\d+\.png$/.test(url.pathname)
+    && !Object.keys(request.headers()).some(name => name.toLowerCase() === "authorization")) return "class-icon";
+  return false;
+}
+
+function hasExpectedContentType(kind, contentType) {
+  if (kind === "class-icon") return /^image\/png(?:;|$)/i.test(contentType);
+  return /^(?:text\/(?:javascript|css)|application\/(?:javascript|x-javascript)|font\/woff2?)(?:;|$)/i.test(contentType);
 }
 
 /**
  * Routing disables Chromium's HTTP cache. Retain only Bible's public,
- * immutable app assets across navigations and short browser lifetimes.
+ * immutable app assets and explicitly fresh numeric class icons across
+ * navigations and short browser lifetimes.
  * @returns {{ get: Function, remember: Function, fulfill: Function, clear: Function }} bounded static-asset cache
  */
 function createAssetCache() {
@@ -32,10 +41,11 @@ function createAssetCache() {
   const queued = new Set();
   return {
     get(request) {
-      return isImmutableAsset(request) ? cache.get(request.url()) : undefined;
+      return getStaticAssetKind(request) ? cache.get(request.url()) : undefined;
     },
     remember(response) {
-      if (response.status() !== 200 || !isImmutableAsset(response.request()) || cache.get(response.url())) return;
+      const kind = getStaticAssetKind(response.request());
+      if (response.status() !== 200 || !kind || cache.get(response.url())) return;
       const url = response.url();
       if (queued.has(url) || queued.size >= MAX_PENDING_ASSETS) return;
       const current = generation;
@@ -48,16 +58,17 @@ function createAssetCache() {
         const policy = headers["cache-control"] || "";
         const maxAge = Number(/(?:^|,)\s*max-age=(\d+)\s*(?:,|$)/i.exec(policy)?.[1]);
         const expires = Date.now() + (maxAge - Number(headers.age || 0)) * 1000;
-        if (!/\bpublic\b/i.test(policy) || !/\bimmutable\b/i.test(policy)
+        if ((kind === "app" && (!/\bpublic\b/i.test(policy) || !/\bimmutable\b/i.test(policy)))
+          || (kind === "class-icon" && /\bs-maxage\s*=/i.test(policy))
           || /\b(?:private|no-store|no-cache)\b/i.test(policy) || headers["set-cookie"]
-          || !/^(?:text\/(?:javascript|css)|application\/(?:javascript|x-javascript)|font\/woff2?)(?:;|$)/i.test(headers["content-type"] || "")
+          || !hasExpectedContentType(kind, headers["content-type"] || "")
           || (headers.vary && headers.vary.toLowerCase() !== "accept-encoding")
           || Number(headers["content-length"]) > MAX_ASSET_BYTES || !(expires > Date.now())) return;
         const body = await response.body();
         if (current !== generation || body.length > MAX_ASSET_BYTES) return;
         const asset = { status: 200, contentType: headers["content-type"], body };
         // Large app modules fit the small cache in compressed form.
-        if (body.length > MIN_COMPRESS_BYTES && !asset.contentType.startsWith("font/")) {
+        if (kind === "app" && body.length > MIN_COMPRESS_BYTES && !asset.contentType.startsWith("font/")) {
           const encoded = await compress(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } });
           if (encoded.length < body.length) {
             asset.body = encoded;

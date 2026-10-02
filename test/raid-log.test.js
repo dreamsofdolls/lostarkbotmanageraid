@@ -278,6 +278,45 @@ test("memory pressure after encoding or before warm reuse closes the retained br
   }
 });
 
+test("memory reads respect the capture deadline without retaining the render queue", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fake = fakeBrowser();
+  let blocked = true;
+  const capture = createRaidLogCapture({ ...fake, timeoutMs: 25,
+    readMemory: () => blocked ? new Promise(() => {}) : Promise.resolve({ max: "max" }),
+  });
+  try {
+    const pending = capture(URL);
+    await Promise.resolve();
+    t.mock.timers.tick(25);
+    await assert.rejects(pending, { code: "timeout" });
+    assert.equal(fake.state.launches, 0);
+    blocked = false;
+    assert.equal((await capture(URL)).images.length, 1);
+  } finally {
+    blocked = false;
+    await capture.close();
+  }
+});
+
+test("a failed memory read still closes a warm browser", async () => {
+  const fake = fakeBrowser();
+  let fail = false;
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000,
+    readMemory: async () => {
+      if (fail) throw new Error("Memory stats unavailable");
+      return { max: "max" };
+    },
+  });
+  try {
+    await capture(URL);
+    assert.equal(fake.state.closed, 0);
+    fail = true;
+    await assert.rejects(capture(URL, { tab: "tanked" }), /Memory stats unavailable/);
+    assert.equal(fake.state.closed, 1);
+  } finally { await capture.close(); }
+});
+
 test("both player screenshots finish before a memory-driven close and sequential framing", async () => {
   const player = { id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" };
   const fake = fakeBrowser({ players: [player] });

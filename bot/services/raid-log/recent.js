@@ -17,6 +17,7 @@ const { getCharacterName, getCharacterClass } = require("../../utils/raid/common
 const { normalizeCatalogLogs } = require("./catalog");
 const { RaidLogError, raidLogErrorCode } = require("./errors");
 const { createMemoryCache } = require("./memory-cache");
+const { normalizeCharacterName } = require("./source");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RECENT_CHARACTERS = 24;
@@ -42,7 +43,16 @@ function createRecentRaidLogs({
     const characters = accounts.flatMap(account => (account.characters || [])
       .filter(character => String(getCharacterName(character)).trim()));
     characters.sort((a, b) => b.itemLevel - a.itemLevel);
-    return { chosen: characters.slice(0, MAX_RECENT_CHARACTERS), capped: characters.length > MAX_RECENT_CHARACTERS };
+    // Legacy/corrupt rosters can hold the same character under two accounts.
+    // Keep the highest-iLvl copy before applying the cap so it consumes one
+    // Bible request and cannot displace another real character.
+    const unique = new Map();
+    for (const character of characters) {
+      const key = normalizeCharacterName(getCharacterName(character));
+      if (!unique.has(key)) unique.set(key, character);
+    }
+    const candidates = [...unique.values()];
+    return { chosen: candidates.slice(0, MAX_RECENT_CHARACTERS), capped: candidates.length > MAX_RECENT_CHARACTERS };
   }
 
   function snapshot(character) {

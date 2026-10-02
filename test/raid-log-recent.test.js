@@ -127,6 +127,36 @@ test("only the 24 highest item levels are read", async () => {
   assert.equal(f.recent.countCandidates([{ accountName: "Main", characters }]), 24);
 });
 
+test("duplicate normalized names use the highest item-level identity before the 24-character cap", async () => {
+  const characters = [
+    character("\u00c9owyn", { itemLevel: 2000, bibleSerial: "sn-high" }),
+    character(" E\u0301OWYN ", { itemLevel: 1999, bibleSerial: "sn-low" }),
+    ...Array.from({ length: 24 }, (_, index) => character(`Char${index}`, { itemLevel: 1900 - index })),
+  ];
+  const f = fixture();
+  const accounts = [{ accountName: "Main", characters }];
+  const result = await f.recent.load("owner", accounts);
+  const names = f.calls.map(call => call[1]);
+  assert.deepEqual([result.characters, result.capped, f.recent.countCandidates(accounts)], [24, true, 24]);
+  assert.ok(names.includes("high"));
+  assert.ok(!names.includes("low"));
+  assert.ok(names.includes("Char22"), "a duplicate must not displace the next unique character");
+  assert.ok(!names.includes("Char23"));
+});
+
+test("the same character saved in two accounts produces one Bible read and one recent entry", async () => {
+  const shared = bibleRow("q1", "Qiylyn", NOW);
+  const f = fixture({ rowsByName: { high: [shared], low: [shared] } });
+  const accounts = [
+    { accountName: "Main", characters: [character("Qiylyn", { itemLevel: 1780, bibleSerial: "sn-high" })] },
+    { accountName: "Alt", characters: [character(" qIYLYN ", { itemLevel: 1770, bibleSerial: "sn-low" })] },
+  ];
+  const result = await f.recent.load("owner", accounts);
+  assert.deepEqual(f.calls.map(call => call.slice(0, 2)), [["logs", "high"]]);
+  assert.deepEqual(result.entries.map(entry => [entry.id, entry.character]), [["q1", "Qiylyn"]]);
+  assert.deepEqual([result.characters, result.logs, f.recent.countCandidates(accounts)], [1, 1, 1]);
+});
+
 test("a character that never answers does not hold the rest past the deadline", async t => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const f = fixture({ hang: ["Slow"], rowsByName: { Qiylyn: [bibleRow("q1", "Qiylyn", NOW - HOUR)] } });

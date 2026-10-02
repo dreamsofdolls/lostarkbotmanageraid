@@ -235,7 +235,38 @@ test("idle expired sessions release their catalogs without another command", asy
   assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
 });
 
-test("session expiry waits for active work and releases it when the operation finishes", async t => {
+test("successful panel activity renews the idle expiry from completion", async () => {
+  let now = 0;
+  const f = fixture({ sessionMs: 1000, now: () => now });
+  await f.run();
+  now = 900;
+  await f.click(f.owner("tab_next"));
+  assert.equal(captures(f).length, 2);
+  now = 1899;
+  await f.click(f.owner("bracketed"));
+  assert.equal(captures(f).length, 3);
+  now = 2900;
+  await f.click(f.owner("tab_next"));
+  assert.equal(captures(f).length, 3);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
+});
+
+test("failed panel work does not renew the idle expiry", async () => {
+  let now = 0;
+  const f = fixture({ sessionMs: 1000, now: () => now });
+  await f.run();
+  now = 900;
+  f.failure = new RaidLogError("timeout");
+  await f.click(f.owner("tab_next"));
+  assert.equal(captures(f).length, 2);
+  f.failure = null;
+  now = 1001;
+  await f.click(f.owner("bracketed"));
+  assert.equal(captures(f).length, 2);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
+});
+
+test("session expiry waits for active work and restarts from successful completion", async t => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
   const f = fixture({ sessionMs: 100, now: () => Date.now() });
   await f.run();
@@ -256,6 +287,8 @@ test("session expiry waits for active work and releases it when the operation fi
   assert.equal(released, false);
   finish();
   await changing;
+  assert.equal(released, false);
+  t.mock.timers.tick(100);
   assert.equal(released, true);
 });
 

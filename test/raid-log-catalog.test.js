@@ -394,8 +394,8 @@ test("real Bible client opens a character with exactly two limited HTTP requests
     bibleLimiter: { run: fn => { limitedCalls++; return fn(); } },
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return { ok: true, text: async () => html,
-        json: async () => [{ id: "ABC", name: "Saturnxd", boss: "Death Incarnate Kazeros", timestamp: 100 }] };
+      return new Response(options.method === "POST"
+        ? JSON.stringify([{ id: "ABC", name: "Saturnxd", boss: "Death Incarnate Kazeros", timestamp: 100 }]) : html);
     },
   });
   const opened = await createRaidLogCatalog({ client }).open("saturnxd");

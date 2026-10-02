@@ -137,14 +137,24 @@ function createRaidLogCapture({
     let clip;
     let memoryAtScreenshot;
     const controller = new AbortController();
-    const memoryBefore = await readMemory();
+    let rejectDeadline;
+    let settleDeadline;
+    const deadlineReached = new Promise((resolve, reject) => {
+      settleDeadline = resolve;
+      rejectDeadline = reject;
+    });
     const timer = setTimeout(() => {
       expired = true;
-      controller.abort(new RaidLogError("timeout"));
+      const error = new RaidLogError("timeout");
+      controller.abort(error);
+      rejectDeadline(error);
       void closeResource(resource);
     }, Math.max(1, deadline - Date.now()));
     timer.unref?.();
+    const readMemoryBeforeDeadline = () => Promise.race([readMemory(), deadlineReached]);
+    let memoryBefore;
     try {
+      memoryBefore = await readMemoryBeforeDeadline();
       await disposing;
       if (expired || Date.now() >= deadline) throw new RaidLogError("timeout");
       if (resource && (resource.crashed || shouldReleaseBrowser(memoryBefore))) {
@@ -289,7 +299,7 @@ function createRaidLogCapture({
       for (const [index, region] of (player ? evidence.clips : [evidence[view]]).entries()) {
         clip = region;
         if (player) await page.requestGC();
-        memoryAtScreenshot = await readMemory();
+        memoryAtScreenshot = await readMemoryBeforeDeadline();
         controller.signal.throwIfAborted();
         const screenshot = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
         controller.signal.throwIfAborted();
@@ -298,7 +308,7 @@ function createRaidLogCapture({
       }
       // Capture both detail halves before disposing of the page. Reclaim
       // Chromium under pressure before streaming the PNG frames.
-      const beforeFraming = await readMemory();
+      const beforeFraming = await readMemoryBeforeDeadline();
       if (idleMs <= 0 || shouldReleaseBrowser(beforeFraming)) {
         if (idleMs > 0) logger.info?.(`[raid-log] releasing browser before PNG framing id=${log.id} max=${beforeFraming.max} current=${beforeFraming.current}`);
         await closeResource(resource);
@@ -311,7 +321,7 @@ function createRaidLogCapture({
         if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
         image.buffer = buffer;
       }
-      if (!resource.closing && shouldReleaseBrowser(await readMemory())) await closeResource(resource);
+      if (!resource.closing && shouldReleaseBrowser(await readMemoryBeforeDeadline())) await closeResource(resource);
       controller.signal.throwIfAborted();
       if (Date.now() >= deadline) throw new RaidLogError("timeout");
       succeeded = true;
@@ -322,7 +332,7 @@ function createRaidLogCapture({
         logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
           id: log.id, view, tab, bracketed, player: player?.label || "team", stage, clip, deviceScaleFactor: 1,
           browserMode: "headless-shell", memoryBefore, memoryAtScreenshot,
-          memoryAfter: await readMemory(), cause: error.cause?.message || error.message,
+          memoryAfter: await readMemoryBeforeDeadline(), cause: error.cause?.message || error.message,
         })}`);
         const crashed = new RaidLogError("browser_crashed", error);
         crashed.stage = stage;
@@ -331,6 +341,7 @@ function createRaidLogCapture({
       throw error;
     } finally {
       clearTimeout(timer);
+      settleDeadline();
       if (succeeded && idleMs > 0 && !expired && !resource.crashed && !resource.closing) {
         warm = resource;
         idleTimer = setTimeout(() => {
