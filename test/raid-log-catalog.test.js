@@ -423,3 +423,55 @@ test("catalog keeps Bible's per-log performance fields, with null for missing or
   const [bare] = normalizeCatalogLogs([{ ...row("bare"), percentile: null, dps: "fast", buffs: "x" }], "Qiylyn");
   assert.deepEqual([bare.spec, bare.dps, bare.percentile, bare.rContribution, bare.buffs], ["", null, null, null, null]);
 });
+
+test("overlapping default opens share fresh profile and log reads without sharing mutable catalogs", async () => {
+  let profiles = 0;
+  let logReads = 0;
+  let privateLogs = false;
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async () => {
+      profiles++;
+      await new Promise(resolve => setImmediate(resolve));
+      return { name: "Qiylyn", sn: "serial", cid: 1, rid: 2, className: "Bard" };
+    },
+    fetchBibleLogsWithLimiter: async () => { logReads++; return privateLogs ? [] : [row("latest")]; },
+  } });
+  const opened = await Promise.all(Array.from({ length: 8 }, (_, index) => catalog.open(index % 2 ? "Qiylyn" : "qiylyn")));
+  assert.deepEqual([profiles, logReads], [1, 1]);
+  opened[0].logs.pop();
+  opened[0].profile.name = "Changed";
+  assert.equal(opened[1].logs.length, 1);
+  assert.equal(opened[1].profile.name, "Qiylyn");
+  privateLogs = true;
+  await assert.rejects(catalog.open("Qiylyn"), { code: "no_logs" });
+  assert.deepEqual([profiles, logReads], [2, 2], "a later open rechecks current privacy");
+  privateLogs = false;
+  assert.equal((await catalog.open("Qiylyn")).logs[0].id, "latest");
+  assert.deepEqual([profiles, logReads], [3, 3], "a failed open does not block a later retry");
+});
+
+test("an explicitly cancelled open remains independent from a default open", async () => {
+  let profiles = 0;
+  const controller = new AbortController();
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: (name, { signal }) => {
+      profiles++;
+      return new Promise((resolve, reject) => {
+        const abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        setImmediate(() => {
+          signal.removeEventListener("abort", abort);
+          if (!signal.aborted) resolve({ name: "Qiylyn" });
+        });
+      });
+    },
+    fetchBibleLogsWithLimiter: async () => [row("latest")],
+  } });
+  const cancelled = catalog.open("Qiylyn", { signal: controller.signal });
+  const completed = catalog.open("Qiylyn");
+  const rejected = assert.rejects(cancelled, error => error === controller.signal.reason);
+  controller.abort(new DOMException("Panel closed", "AbortError"));
+  await rejected;
+  assert.equal((await completed).logs[0].id, "latest");
+  assert.equal(profiles, 2);
+});

@@ -61,6 +61,7 @@ function mergeLogs(previous, incoming) {
  */
 function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bibleLimiter }), timeoutMs = 30_000 }) {
   const pending = new Map();
+  const pendingOpens = new Map();
   // One page of the profile's logs: Bible's rows and the logs normalized from them.
   async function readLogs(profile, page, signal) {
     const key = JSON.stringify([profile.sn, profile.cid, profile.rid, profile.className, page]);
@@ -85,18 +86,31 @@ function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bible
     if (!page.logs.length) throw new RaidLogError("no_logs");
     return page;
   }
+  async function openCatalog(character, logId, signal) {
+    const profile = await client.fetchBibleCharacterProfileWithLimiter(character, { signal });
+    if (normalizeCharacterName(profile.name) !== normalizeCharacterName(character)) throw new RaidLogError("character_mismatch");
+    const { rows, logs } = await readFirstPage(profile, signal);
+    let result = { profile, logs: mergeLogs([], logs), page: 1, hasMore: rows.length === BIBLE_PAGE_SIZE };
+    // A Recent selection may have moved beyond page 1 since that list was read.
+    while (logId && !result.logs.some(entry => entry.id === logId) && result.hasMore) {
+      result = await catalog.more(result, { signal });
+    }
+    return result;
+  }
   const catalog = {
-    async open(input, { logId, signal = AbortSignal.timeout(timeoutMs) } = {}) {
+    async open(input, { logId, signal } = {}) {
       const { character } = parseRaidLogSource({ character: input });
-      const profile = await client.fetchBibleCharacterProfileWithLimiter(character, { signal });
-      if (normalizeCharacterName(profile.name) !== normalizeCharacterName(character)) throw new RaidLogError("character_mismatch");
-      const { rows, logs } = await readFirstPage(profile, signal);
-      let result = { profile, logs: mergeLogs([], logs), page: 1, hasMore: rows.length === BIBLE_PAGE_SIZE };
-      // A Recent selection may have moved beyond page 1 since that list was read.
-      while (logId && !result.logs.some(entry => entry.id === logId) && result.hasMore) {
-        result = await catalog.more(result, { signal });
+      if (signal) return openCatalog(character, logId, signal);
+      const key = JSON.stringify([normalizeCharacterName(character), logId || null]);
+      let request = pendingOpens.get(key);
+      if (!request) {
+        request = openCatalog(character, logId, AbortSignal.timeout(timeoutMs))
+          .finally(() => pendingOpens.delete(key));
+        pendingOpens.set(key, request);
       }
-      return result;
+      const opened = await request;
+      // Share active I/O, while each panel owns its mutable catalog containers.
+      return { ...opened, profile: { ...opened.profile }, logs: [...opened.logs] };
     },
     // Do this before serving even a cached image. A newly private character
     // must revoke the panel instead of continuing from a stale screenshot.

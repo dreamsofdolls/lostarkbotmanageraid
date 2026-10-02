@@ -35,6 +35,7 @@ const {
 
 const DEFAULT_TTL_SEC = 30 * 60; // 30 minutes - enough for file pick/preview while keeping a bounded replay window
 const POST_SYNC_TTL_SEC = 60; // After a write lands, keep the URL useful for only ~1 minute.
+const pendingResumeTokens = new WeakMap();
 
 function getSecret() {
   const raw = process.env.LOCAL_SYNC_TOKEN_SECRET;
@@ -230,29 +231,57 @@ async function rotateLocalSyncToken(discordId, lang, deps = {}) {
  * The 60s safety buffer prevents handing out a token that's about to
  * expire mid-page-load (user clicks button, browser fetches page,
  * token is dead by the time the file picker opens).
+ * Concurrent resume surfaces share only the in-flight lookup for the same
+ * user, scope, and model, so an identical request cannot revoke a link that
+ * another caller is about to return.
+ * @param {string} discordId - Discord user receiving the companion link
+ * @param {string|null} lang - locale embedded in a newly minted token
+ * @param {object} deps - User model, optional user snapshot, identity, and scope
+ * @returns {Promise<string>} current or newly persisted companion token
  */
 async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
   const UserModel = deps?.UserModel;
   if (!UserModel) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: UserModel required");
   const scope = normalizeCompanionScope(deps?.scope, { legacyDefault: true });
   if (!scope) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: invalid scope");
-  const stored = Object.prototype.hasOwnProperty.call(deps, "userDoc")
-    ? deps.userDoc
-    : await UserModel.findOne({ discordId })
-      .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
-      .lean();
-  const now = Math.floor(Date.now() / 1000);
-  if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
-    const verified = verifyToken(stored.lastLocalSyncToken);
-    if (verified.ok && verified.payload.scope === scope) {
-      return stored.lastLocalSyncToken;
+
+  let modelRequests = pendingResumeTokens.get(UserModel);
+  if (!modelRequests) {
+    modelRequests = new Map();
+    pendingResumeTokens.set(UserModel, modelRequests);
+  }
+  const requestKey = `${discordId}\u0000${scope}`;
+  const pending = modelRequests.get(requestKey);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const stored = Object.prototype.hasOwnProperty.call(deps, "userDoc")
+      ? deps.userDoc
+      : await UserModel.findOne({ discordId })
+        .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
+        .lean();
+    const now = Math.floor(Date.now() / 1000);
+    if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
+      const verified = verifyToken(stored.lastLocalSyncToken);
+      if (verified.ok && verified.payload.scope === scope) {
+        return stored.lastLocalSyncToken;
+      }
+    }
+    return rotateLocalSyncToken(discordId, lang, {
+      UserModel,
+      identity: deps?.identity || null,
+      scope,
+    });
+  })();
+  modelRequests.set(requestKey, request);
+  try {
+    return await request;
+  } finally {
+    if (modelRequests.get(requestKey) === request) {
+      modelRequests.delete(requestKey);
+      if (modelRequests.size === 0) pendingResumeTokens.delete(UserModel);
     }
   }
-  return rotateLocalSyncToken(discordId, lang, {
-    UserModel,
-    identity: deps?.identity || null,
-    scope,
-  });
 }
 
 /**

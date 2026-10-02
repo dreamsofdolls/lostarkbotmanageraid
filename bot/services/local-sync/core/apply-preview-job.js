@@ -109,7 +109,7 @@ function supportsAutoManageSlot(deps) {
 }
 
 async function acquireApplySlot({ jobId, discordId, job, leaseDeps, deps }) {
-  if (job.scope !== COMPANION_SCOPE.solo || !supportsAutoManageSlot(deps)) {
+  if (!supportsAutoManageSlot(deps)) {
     return { ownsSlot: false, outcome: null };
   }
   const guard = await deps.acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });

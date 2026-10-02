@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { JSDOM } = require("jsdom");
+const JSON5 = require("json5");
 const { readEncounterLiteral, supportSharesFromEncounter, MAX_ENCOUNTER_LENGTH } = require("../bot/services/raid-log/encounter-metrics");
 
 const players = [
@@ -31,9 +32,67 @@ test("ambiguous identities, class mismatches and missing/invalid contributions n
   for (const mutate of [entity => { entity.class = "Bard"; }, entity => { entity.entityType = "NPC"; },
     entity => { entity.name = "Someoneelse"; }, entity => { delete entity.skills; },
     entity => { entity.skills = { a: {} }; }, entity => { entity.skills.a.rdpsContributed[1] = -1; },
-    entity => { entity.skills.a.rdpsContributed[1] = "100"; }]) {
+    entity => { entity.skills.a.rdpsContributed[1] = "100"; },
+    entity => { entity.skills.a.rdpsContributed = "garbage"; }]) {
     const encounter = data(); mutate(encounter.encounter.entityList[0]);
     assert.deepEqual([...shares(encounter)], [["2-3", 14.3]]);
+  }
+});
+
+test("JSON5 comments and nested identity fields do not change support matching", () => {
+  const literal = [
+    "{ id: 'public-log', encounter: {",
+    "  // A brace in a comment must not terminate extraction: }",
+    "  entityList: [{",
+    "    nested: { name: 'Paladin #2', class: 'Paladin', entityType: 'PLAYER' },",
+    "    name: 'old name', name: 'Paladin #1', class: 'Paladin', entityType: 'PLAYER',",
+    "    skills: { a: { name: 'Paladin #2', rdpsContributed: { '1': 100, '3': 150, '5': 50 }, note: 'quoted } brace' } }",
+    "  }, /* another unmatched-looking brace: { */ {",
+    "    name: 'Paladin #2', class: 'Paladin', entityType: 'PLAYER',",
+    "    skills: { a: { rdpsContributed: { '3': 143 } } }",
+    "  }] } }",
+  ].join("\n");
+  assert.deepEqual([...supportSharesFromEncounter(literal, options)], [["1-3", 30], ["2-3", 14.3]]);
+});
+
+test("large retained player payloads are scanned without passing them to JSON5.parse", t => {
+  const originalParse = JSON5.parse;
+  let largestParsed = 0;
+  t.mock.method(JSON5, "parse", (source, ...args) => {
+    largestParsed = Math.max(largestParsed, String(source).length);
+    return originalParse(source, ...args);
+  });
+  const payload = "x".repeat(512 * 1024);
+  const literal = JSON.stringify({
+    id: "public-log",
+    encounter: { entityList: [
+      { name: "Dps", class: "Aeromancer", entityType: "PLAYER", skills: { one: { payload } } },
+      support("Paladin #1", { a: { payload, rdpsContributed: { 1: 100, 3: 150, 5: 50 } } }),
+    ] },
+  });
+  assert.deepEqual([...supportSharesFromEncounter(literal, options)], [["1-3", 30]]);
+  assert.ok(largestParsed < 1024, "retained player payload was passed to JSON5.parse");
+});
+
+test("escaped and duplicate property names retain JSON5 last-value semantics", () => {
+  const literal = [
+    "{ id: 'wrong', \\u0069d: 'public-log', encounter: { entityList: [], 'entityList': [{",
+    "  name: 'wrong', n\\u0061me: 'Paladin #1', class: 'Paladin', entityType: 'PLAYER',",
+    "  skills: {}, 'skills': { a: { rdpsContributed: { '1': 100, '3': 150, '5': 50 } } }",
+    "}] } }",
+  ].join("\n");
+  assert.deepEqual([...supportSharesFromEncounter(literal, options)], [["1-3", 30]]);
+});
+
+test("mismatched and incomplete encounter containers fail closed", () => {
+  for (const literal of [
+    "{id:'public-log',encounter:{entityList:[{name:'Paladin #1'}]}}]",
+    "{id:'public-log',encounter:{entityList:[{name:'Paladin #1'",
+    "{id:'public-log',encounter:{entityList:[{name:'Paladin #1'}",
+    "{broken:{foo bar},id:'public-log',encounter:{entityList:[]}}",
+    "{id:'public-log',encounter:{entityList:[{junk:{foo bar},name:'Paladin #1',class:'Paladin',entityType:'PLAYER',skills:{}}]}}",
+  ]) {
+    assert.throws(() => supportSharesFromEncounter(literal, options), SyntaxError);
   }
 });
 
@@ -59,5 +118,16 @@ test("Svelte object extraction respects quoted braces and escapes, and parses JS
     assert.equal(extract(MAX_ENCOUNTER_LENGTH), null);
     assert.throws(() => supportSharesFromEncounter("{id:(globalThis.executed = true)}", options), SyntaxError);
     assert.equal(globalThis.executed, undefined);
+  } finally { dom.window.close(); }
+});
+
+test("Svelte object extraction ignores braces inside JSON5 comments", () => {
+  const dom = new JSDOM("<script id='boot'></script>", { runScripts: "outside-only" });
+  const literal = "{id:'public-log',/* } */encounter:{entityList:[]},// {\nscore:.5}";
+  dom.window.document.querySelector("#boot").textContent =
+    "kit.start(app,element,{data:[{data:{encounterInfo:" + literal + ",views:7}}]});";
+  try {
+    const extract = dom.window.eval("(" + readEncounterLiteral.toString() + ")");
+    assert.equal(extract(MAX_ENCOUNTER_LENGTH), literal);
   } finally { dom.window.close(); }
 });

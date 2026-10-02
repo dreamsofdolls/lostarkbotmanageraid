@@ -15,11 +15,15 @@
 const { classifyArtistPing } = require("./ping-classify");
 const { tPick } = require("../../i18n");
 const { getCurrentVNHour } = require("../../../utils/raid/schedule/artist-clock");
+const {
+  createExpiringKeyMap,
+} = require("../../../utils/cache/expiring-key-map");
 
 const DEFAULT_COOLDOWN_MS = 60_000;
 // Two answers per window: the real one, then one `spam` nudge. Anything beyond
 // that is silence, otherwise the nudge itself becomes the spam.
 const MAX_REPLIES_PER_WINDOW = 2;
+const ARTIST_PING_COOLDOWN_MAX_ENTRIES = 4096;
 
 /**
  * Build the ping responder.
@@ -30,6 +34,8 @@ const MAX_REPLIES_PER_WINDOW = 2;
  * @param {(now?: Date) => number} [deps.getVietnamHour] - current hour (0-23)
  *   in Vietnam; the classifier moves it onto the guild's clock
  * @param {(key: string, lang: string, vars: Object) => string} [deps.translate]
+ * @param {Function} [deps.setTimeoutFn] - expiry sweep scheduler
+ * @param {Function} [deps.clearTimeoutFn] - expiry sweep cancellation
  * @returns {{buildPingReply: Function, resetCooldowns: Function}}
  */
 function createArtistPingResponder({
@@ -37,9 +43,17 @@ function createArtistPingResponder({
   clock = () => Date.now(),
   getVietnamHour = getCurrentVNHour,
   translate = tPick,
+  setTimeoutFn = setTimeout,
+  clearTimeoutFn = clearTimeout,
 } = {}) {
   // userId -> { windowStart, replies }
-  const recent = new Map();
+  const recent = createExpiringKeyMap({
+    ttlMs: cooldownMs,
+    maxEntries: ARTIST_PING_COOLDOWN_MAX_ENTRIES,
+    now: clock,
+    setTimeoutFn,
+    clearTimeoutFn,
+  });
 
   function noteReply(userId, now) {
     const entry = recent.get(userId);
@@ -101,5 +115,6 @@ function createArtistPingResponder({
 
 module.exports = {
   createArtistPingResponder,
+  ARTIST_PING_COOLDOWN_MAX_ENTRIES,
   MAX_REPLIES_PER_WINDOW,
 };

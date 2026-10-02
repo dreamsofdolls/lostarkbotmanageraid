@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  ARTIST_PING_COOLDOWN_MAX_ENTRIES,
   createArtistPingResponder,
   MAX_REPLIES_PER_WINDOW,
 } = require("../bot/services/raid/artist-ping/ping-responder");
@@ -73,12 +74,32 @@ test("the window reopens once the cooldown elapses", () => {
   assert.match(ping(r), /artistPing\.greeting/, "a fresh window starts clean");
 });
 
+test("spam does not extend the original cooldown window", () => {
+  const r = harness({ cooldownMs: 60_000 });
+  ping(r);
+  r.advance(30_000);
+  ping(r);
+  r.advance(30_000);
+
+  assert.match(ping(r), /artistPing\.greeting/);
+});
+
 test("cooldowns are tracked per user, not globally", () => {
   const r = harness();
   ping(r, { userId: "u1" });
   ping(r, { userId: "u1" });
   assert.equal(ping(r, { userId: "u1" }), null);
   assert.match(ping(r, { userId: "u2" }), /artistPing\.greeting/);
+});
+
+test("cooldown state evicts the oldest user above its fixed cap", () => {
+  const r = harness();
+  ping(r, { userId: "oldest" });
+  for (let index = 0; index < ARTIST_PING_COOLDOWN_MAX_ENTRIES; index += 1) {
+    ping(r, { userId: `user-${index}` });
+  }
+
+  assert.match(ping(r, { userId: "oldest" }), /artistPing\.greeting/);
 });
 
 test("pinging inside the sleep window wakes a drowsy Artist", () => {

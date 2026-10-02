@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   createRaidChannelHintService,
+  USER_MONITOR_COOLDOWN_MAX_ENTRIES,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-hints");
 
 function createHarness() {
@@ -43,12 +44,12 @@ function createHarness() {
   function createMessage(overrides = {}) {
     return {
       id: overrides.id || `msg-${replies.length + 1}`,
-      guildId: "guild-1",
-      channelId: "channel-1",
+      guildId: overrides.guildId || "guild-1",
+      channelId: overrides.channelId || "channel-1",
       channel,
       content: overrides.content || "qiylyn act4 g1",
       author: {
-        id: "user-1",
+        id: overrides.userId || "user-1",
       },
       reply: async (payload) => {
         replies.push(payload);
@@ -142,4 +143,22 @@ test("raid-channel hint service clears both bot hint and original failed message
 
   assert.deepEqual(harness.deletedMessages.sort(), ["hint-1", "original-1"]);
   assert.deepEqual(harness.clearedTimers, ["timer-1"]);
+});
+
+test("raid-channel cooldown evicts the oldest user above its fixed cap", () => {
+  const harness = createHarness();
+  const oldest = harness.createMessage({ userId: "oldest" });
+  harness.service.commitUserMonitorActivity(oldest);
+
+  for (let index = 0; index < USER_MONITOR_COOLDOWN_MAX_ENTRIES; index += 1) {
+    harness.service.commitUserMonitorActivity(
+      harness.createMessage({ userId: `user-${index}` })
+    );
+  }
+
+  assert.deepEqual(harness.service.checkUserMonitorCooldown(oldest), {
+    accepted: true,
+    warn: false,
+    viaException: false,
+  });
 });

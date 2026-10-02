@@ -560,6 +560,70 @@ test("Discord apply claims a preview atomically and is idempotent", async () => 
   assert.equal(writes.length, 1, "a second click must not write again");
 });
 
+test("concurrent Full preview jobs share the user sync slot and the busy job can retry", async () => {
+  const firstJob = makeJob({ jobId: "11111111-2222-4333-8444-111111111111" });
+  const secondJob = makeJob({ jobId: "22222222-2222-4333-8444-222222222222" });
+  const firstModel = makePreviewModel(firstJob);
+  const secondModel = makePreviewModel(secondJob);
+  const userDoc = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    accounts: [{
+      accountName: "Roster",
+      characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const UserModel = makeConsoleUserModel(userDoc);
+  let slotHeld = false;
+  let markFirstWrite;
+  let releaseFirstWrite;
+  const firstWriteStarted = new Promise((resolve) => { markFirstWrite = resolve; });
+  const firstWriteGate = new Promise((resolve) => { releaseFirstWrite = resolve; });
+  let secondWrites = 0;
+  const slotDeps = {
+    acquireAutoManageSyncSlot: async () => {
+      if (slotHeld) return { acquired: false, reason: "in-flight" };
+      slotHeld = true;
+      return { acquired: true };
+    },
+    releaseAutoManageSyncSlot: () => { slotHeld = false; },
+  };
+  const commonDeps = { UserModel, shrinkSourceToken: false, ...slotDeps };
+  const applySecond = () => applyPreviewJob(secondJob.jobId, "u1", {
+    ...commonDeps,
+    PreviewModel: secondModel,
+    applyRaidSetForDiscordId: async () => {
+      secondWrites += 1;
+      return { matched: true, updated: true, displayName: "Aki" };
+    },
+  });
+
+  const firstApply = applyPreviewJob(firstJob.jobId, "u1", {
+    ...commonDeps,
+    PreviewModel: firstModel,
+    applyRaidSetForDiscordId: async () => {
+      markFirstWrite();
+      await firstWriteGate;
+      return { matched: true, updated: true, displayName: "Aki" };
+    },
+  });
+  await firstWriteStarted;
+  const busy = await applySecond();
+  releaseFirstWrite();
+  const first = await firstApply;
+
+  assert.equal(first.state, "applied");
+  assert.equal(busy.state, "busy");
+  assert.equal(busy.job.status, "pending");
+  assert.equal(secondModel.value.status, "pending");
+  assert.equal(secondWrites, 0);
+
+  const retried = await applySecond();
+  assert.equal(retried.state, "applied");
+  assert.equal(secondWrites, 1);
+});
+
 test("a Discord apply shortens the source link while a web apply keeps it", async () => {
   const sourceToken = "source-link-token";
   async function applyWith(extraDeps) {

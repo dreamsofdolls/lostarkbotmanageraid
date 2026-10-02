@@ -3,6 +3,9 @@
 // tPick, not t: the spam warning is a variant pool. Every other hint key here
 // is a plain string, and tPick passes those straight through to t().
 const { tPick: translate } = require("../../i18n");
+const {
+  createExpiringKeyMap,
+} = require("../../../utils/cache/expiring-key-map");
 
 const EMPTY_CONTENT_WARNING_COOLDOWN_MS = 5 * 60 * 1000;
 const HINT_TTL_MS = 5 * 60 * 1000;
@@ -10,6 +13,9 @@ const MONITOR_COOLDOWN_MS = 2000;
 const MONITOR_SPAM_WINDOW_MS = 10000;
 const MONITOR_SPAM_THRESHOLD = 3;
 const MONITOR_SPAM_WARN_CD_MS = 60000;
+const EMPTY_CONTENT_WARNING_MAX_ENTRIES = 512;
+const USER_MONITOR_COOLDOWN_MAX_ENTRIES = 4096;
+const USER_MONITOR_STATE_TTL_MS = MONITOR_SPAM_WARN_CD_MS;
 
 function createInitialCooldownEntry() {
   return {
@@ -22,6 +28,11 @@ function createInitialCooldownEntry() {
   };
 }
 
+/**
+ * Build transient hint, spam-warning and per-user cooldown behavior.
+ * @param {object} deps Discord UI, locale, normalization, clock and timer dependencies.
+ * @returns {object} Hint posting and cooldown operations for the channel monitor.
+ */
 function createRaidChannelHintService({
   UI,
   UserModel,
@@ -32,9 +43,21 @@ function createRaidChannelHintService({
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
 }) {
-  const emptyContentWarningAt = new Map();
+  const emptyContentWarningAt = createExpiringKeyMap({
+    ttlMs: EMPTY_CONTENT_WARNING_COOLDOWN_MS,
+    maxEntries: EMPTY_CONTENT_WARNING_MAX_ENTRIES,
+    now,
+    setTimeoutFn,
+    clearTimeoutFn,
+  });
   const pendingChannelHints = new Map();
-  const userMonitorCooldowns = new Map();
+  const userMonitorCooldowns = createExpiringKeyMap({
+    ttlMs: USER_MONITOR_STATE_TTL_MS,
+    maxEntries: USER_MONITOR_COOLDOWN_MAX_ENTRIES,
+    now,
+    setTimeoutFn,
+    clearTimeoutFn,
+  });
 
   function hintKey(guildId, channelId, userId) {
     return `${guildId}:${channelId}:${userId}`;
@@ -182,4 +205,5 @@ function createRaidChannelHintService({
 
 module.exports = {
   createRaidChannelHintService,
+  USER_MONITOR_COOLDOWN_MAX_ENTRIES,
 };

@@ -129,6 +129,89 @@ test("getOrMintLocalSyncToken reuses a supplied User snapshot without another re
   }), fullToken);
 });
 
+test("concurrent resume links share one current token and later calls read fresh state", async () => {
+  const stored = {};
+  let reads = 0;
+  let writes = 0;
+  const UserModel = {
+    findOne() {
+      return {
+        select() {
+          return {
+            lean: async () => {
+              reads += 1;
+              await new Promise((resolve) => setImmediate(resolve));
+              return { ...stored };
+            },
+          };
+        },
+      };
+    },
+    async findOneAndUpdate(_filter, update) {
+      writes += 1;
+      Object.assign(stored, update.$set);
+      return { ...stored };
+    },
+  };
+
+  const [first, second] = await Promise.all([
+    getOrMintLocalSyncToken("concurrent-user", "vi", { UserModel, scope: COMPANION_SCOPE.full }),
+    getOrMintLocalSyncToken("concurrent-user", "vi", { UserModel, scope: COMPANION_SCOPE.full }),
+  ]);
+
+  assert.equal(first, second);
+  assert.equal(first, stored.lastLocalSyncToken);
+  assert.equal(reads, 1);
+  assert.equal(writes, 1);
+  assert.equal(await getOrMintLocalSyncToken("concurrent-user", "vi", {
+    UserModel,
+    scope: COMPANION_SCOPE.full,
+  }), first);
+  assert.equal(reads, 2, "completed requests must not become a process token cache");
+});
+
+test("resume-token coalescing is isolated by User model and clears failed requests", async () => {
+  function makeUserModel({ failFirst = false } = {}) {
+    let writes = 0;
+    return {
+      get writes() { return writes; },
+      async findOneAndUpdate() {
+        writes += 1;
+        if (failFirst && writes === 1) throw new Error("temporary token write failure");
+        return {};
+      },
+    };
+  }
+
+  const firstModel = makeUserModel({ failFirst: true });
+  const secondModel = makeUserModel();
+  await assert.rejects(
+    getOrMintLocalSyncToken("isolated-user", "vi", {
+      UserModel: firstModel,
+      userDoc: {},
+      scope: COMPANION_SCOPE.full,
+    }),
+    /temporary token write failure/
+  );
+
+  const [retried, independent] = await Promise.all([
+    getOrMintLocalSyncToken("isolated-user", "vi", {
+      UserModel: firstModel,
+      userDoc: {},
+      scope: COMPANION_SCOPE.full,
+    }),
+    getOrMintLocalSyncToken("isolated-user", "vi", {
+      UserModel: secondModel,
+      userDoc: {},
+      scope: COMPANION_SCOPE.full,
+    }),
+  ]);
+
+  assert.notEqual(retried, independent);
+  assert.equal(firstModel.writes, 2);
+  assert.equal(secondModel.writes, 1);
+});
+
 test("mintToken - tokens minted in the same second still differ", () => {
   const first = mintToken("user-123");
   const second = mintToken("user-123");
