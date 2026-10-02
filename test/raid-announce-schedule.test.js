@@ -27,6 +27,25 @@ test("nextAnnouncementEligibleBoundaryMs keeps weekly reset on the next Wed 10:0
   assert.equal(next, Date.UTC(2026, 3, 29, 10, 0, 0, 0));
 });
 
+test("daily roster announce timing follows VN midnight and aligned five-minute checks", () => {
+  const beforeMidnight = new Date("2026-10-01T16:59:59Z");
+  assert.equal(
+    __test.nextAnnouncementEligibleBoundaryMs("daily-roster-sync", beforeMidnight),
+    Date.parse("2026-10-01T17:00:00Z")
+  );
+  assert.equal(
+    __test.nextAnnouncementSchedulerCheckMs("daily-roster-sync", beforeMidnight, {
+      autoManageStartedAtMs: Date.parse("2026-10-01T16:55:00Z"),
+    }),
+    Date.parse("2026-10-01T17:00:00Z")
+  );
+  const text = __test.buildAnnouncementWhenItFiresText(
+    "daily-roster-sync", {}, { enabled: true }, { raidChannelId: "channel" },
+    beforeMidnight, { autoManageDisabled: true }
+  );
+  assert.match(text, /AUTO_MANAGE_DAILY_DISABLED=true/);
+});
+
 test("nextAnnouncementEligibleBoundaryMs advances cleanup to the next :30 slot from an exact hour", () => {
   const now = new Date(Date.UTC(2026, 3, 24, 12, 0, 0, 0));
   const next = __test.nextAnnouncementEligibleBoundaryMs("hourly-cleanup", now);

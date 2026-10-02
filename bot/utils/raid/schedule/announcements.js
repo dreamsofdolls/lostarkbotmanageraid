@@ -35,6 +35,15 @@
 //     channel is set", cleanup notice = "this channel just got cleaned",
 //     whisper ack = reply to a user's message here).
 const ANNOUNCEMENT_REGISTRY = {
+  "daily-roster-sync": {
+    label: "Daily roster sync",
+    subdocKey: "dailyRosterSync",
+    channelOverridable: true,
+    trigger: "00:00 VN starts the daily roster refresh. A notice follows once every registered user reaches a terminal result; bounded retries can delay it.",
+    dedup: "Once per completed VN day per guild (`lastDailyRosterSyncKey`); restart catches up without repeating settled roster work.",
+    messageTtl: "Kept until the channel's normal cleanup",
+    previewContent: "Daily roster refresh finished: registered users and rosters, successful users, unavailable logs, and exhausted retries.",
+  },
   "weekly-reset": {
     label: "Weekly reset",
     subdocKey: "weeklyReset",

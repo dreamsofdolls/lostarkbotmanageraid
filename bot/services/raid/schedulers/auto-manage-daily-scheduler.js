@@ -14,9 +14,10 @@ const {
   releaseAutoManageDailyLeaseWithoutFinishing,
 } = require("../../auto-manage/runtime/support/daily-state");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
+const { normalizeName } = require("../../../utils/raid/common/shared");
 
-// The persisted 24-hour gate limits sync frequency; short ticks drain due users
-// in small batches without waiting another half hour after each batch.
+// Calendar settlement limits each user to one completed run per VN day.
+// Short ticks drain due users in small batches through the shared Bible limiter.
 const AUTO_MANAGE_DAILY_TICK_MS = 5 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
 const OUTCOME_COUNTER_KEY_BY_BUCKET = new Map([
@@ -27,15 +28,24 @@ const OUTCOME_COUNTER_KEY_BY_BUCKET = new Map([
   ["failed", "failedCount"],
 ]);
 
+/**
+ * @param {object} dailyContext - Target VN calendar day.
+ * @param {number} [nowMs] - Eligibility clock.
+ * @returns {object} Due registered users.
+ */
 function buildAutoManageDailyCandidateQuery(dailyContext, nowMs = Date.now()) {
   return {
-    autoManageEnabled: true,
-    localSyncEnabled: { $ne: true },
     "accounts.0": { $exists: true },
     ...buildAutoManageDailyAvailabilityFilter(dailyContext, nowMs),
   };
 }
 
+/**
+ * @param {string} discordId - Roster owner.
+ * @param {object} dailyContext - Target VN calendar day.
+ * @param {number} [nowMs] - Eligibility clock.
+ * @returns {object} Atomic claim filter.
+ */
 function buildAutoManageDailyClaimQuery(
   discordId,
   dailyContext,
@@ -49,6 +59,10 @@ function buildAutoManageDailyClaimQuery(
 
 function didClaimDailyBackfill(result) {
   return Number(result?.modifiedCount ?? result?.nModified ?? 0) > 0;
+}
+
+function dailyRosterBoundaryMs(dailyContext) {
+  return Date.parse(`${dailyContext.currentDayKey}T00:00:00+07:00`);
 }
 
 function createOutcomeCounters() {
@@ -68,6 +82,7 @@ async function settleUnavailableDailyCandidate({
   attemptCount,
   leaseToken,
   nowMs,
+  bibleAttempted,
 }) {
   if (!ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount, leaseToken)) {
     return {
@@ -76,15 +91,14 @@ async function settleUnavailableDailyCandidate({
     };
   }
 
+  if (bibleAttempted) userDoc.lastAutoManageAttemptAt = nowMs;
   let outcome = null;
-  if (!userDoc.autoManageEnabled || userDoc.localSyncEnabled) {
-    outcome = AUTO_MANAGE_DAILY_OUTCOME.disabled;
-  } else if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
     outcome = AUTO_MANAGE_DAILY_OUTCOME.noRoster;
   }
   if (!outcome) return { handled: false, transition: null };
 
-  userDoc.lastAutoManageAttemptAt = nowMs;
+  userDoc.lastDailyRosterAttemptAt = nowMs;
   releaseAutoManageDailyLeaseWithoutFinishing(userDoc, outcome);
   await userDoc.save();
   return {
@@ -100,6 +114,7 @@ async function loadDailyCandidateSettlement({
   attemptCount,
   leaseToken,
   nowMs,
+  bibleAttempted,
 }) {
   const fresh = await User.findOne({ discordId });
   const settlement = await settleUnavailableDailyCandidate({
@@ -108,10 +123,16 @@ async function loadDailyCandidateSettlement({
     attemptCount,
     leaseToken,
     nowMs,
+    bibleAttempted,
   });
   return { fresh, settlement };
 }
 
+/**
+ * Save bounded retry state while the failed worker still owns its lease.
+ * @param {object} options - Persistence, attempt identity and actual Bible usage.
+ * @returns {Promise<object>} Persisted retry transition or superseded result.
+ */
 async function persistTransientDailyFailure({
   User,
   saveWithRetry,
@@ -120,6 +141,7 @@ async function persistTransientDailyFailure({
   attemptCount,
   leaseToken,
   nowMs,
+  bibleAttempted = false,
 }) {
   let transition = { bucket: "skipped", outcome: "superseded" };
   await saveWithRetry(async () => {
@@ -130,13 +152,14 @@ async function persistTransientDailyFailure({
       attemptCount,
       leaseToken,
       nowMs,
+      bibleAttempted,
     });
     if (settlement.handled) {
       transition = settlement.transition;
       return;
     }
 
-    fresh.lastAutoManageAttemptAt = nowMs;
+    fresh.lastDailyRosterAttemptAt = nowMs;
     transition = scheduleAutoManageDailyRetry({
       userDoc: fresh,
       targetDayKey: dailyContext.targetDayKey,
@@ -156,12 +179,6 @@ async function loadEligibleDailySeed(User, discordId) {
       transition: { bucket: "skipped", outcome: "missing-roster" },
     };
   }
-  if (!seedDoc.autoManageEnabled) {
-    return {
-      seedDoc: null,
-      transition: { bucket: "skipped", outcome: "disabled" },
-    };
-  }
   return { seedDoc, transition: null };
 }
 
@@ -177,6 +194,8 @@ async function persistCollectedDailyReport({
   applyAutoManageCollected,
   weekResetStart,
   collected,
+  refreshCollected,
+  applyStaleAccountRefreshes,
 }) {
   let report = null;
   let transition = { bucket: "skipped", outcome: "superseded" };
@@ -188,6 +207,7 @@ async function persistCollectedDailyReport({
       attemptCount,
       leaseToken,
       nowMs,
+      bibleAttempted: collected !== null,
     });
     if (settlement.handled) {
       transition = settlement.transition;
@@ -195,19 +215,40 @@ async function persistCollectedDailyReport({
     }
 
     ensureFreshWeek(fresh);
-    report = applyAutoManageCollected(fresh, weekResetStart, collected);
+    const refreshBoundary = dailyRosterBoundaryMs(dailyContext);
+    const refreshedAccounts = fresh.accounts.filter(account => account.characters?.length > 0);
+    const accountsByName = new Map(fresh.accounts.map(account => [normalizeName(account.accountName), account]));
+    // A manual/view refresh can finish while Bible gathering is in flight.
+    // Its newer metadata wins over this day's earlier collection.
+    const dueRefreshes = refreshCollected.filter(entry => {
+      const account = accountsByName.get(normalizeName(entry?.accountName));
+      return account && !(Number(account.lastRefreshedAt) >= refreshBoundary);
+    });
+    const bibleAllowed = collected !== null && fresh.autoManageEnabled && !fresh.localSyncEnabled;
+    // Gather keys contain the saved account/character names. Apply their logs
+    // before the metadata merge can rename that account or character.
+    report = bibleAllowed
+      ? applyAutoManageCollected(fresh, weekResetStart, collected)
+      : { perChar: refreshedAccounts.map(() => ({ error: null })) };
+    applyStaleAccountRefreshes(fresh, dueRefreshes);
+    const failedRefreshes = refreshedAccounts.filter(account =>
+      !(Number(account.lastRefreshedAt) >= refreshBoundary)
+    );
+    const dailyReport = {
+      perChar: [
+        ...report.perChar,
+        ...failedRefreshes.map(account => ({ error: `Roster refresh unavailable: ${account.accountName}` })),
+      ],
+    };
     transition = applyAutoManageDailyReportState({
       userDoc: fresh,
-      report,
+      report: dailyReport,
       targetDayKey: dailyContext.targetDayKey,
       attemptCount,
       nowMs,
     });
-    fresh.lastAutoManageAttemptAt = nowMs;
-    // Only a successful outcome counts as a sync here: the availability
-    // filter reads lastAutoManageSyncAt, so stamping a partial success would
-    // hide the user from the retry this report just scheduled.
-    if (transition.outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
+    fresh.lastDailyRosterAttemptAt = nowMs;
+    if (bibleAllowed && transition.outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
       fresh.lastAutoManageSyncAt = nowMs;
     }
     await fresh.save();
@@ -225,6 +266,7 @@ async function settleCandidateFailure({
   attemptCount,
   leaseToken,
   nowMs,
+  bibleAttempted,
 }) {
   let transition = { bucket: "failed", outcome: "unpersisted-failure" };
   if (claimed) {
@@ -237,6 +279,7 @@ async function settleCandidateFailure({
         attemptCount,
         leaseToken,
         nowMs,
+        bibleAttempted,
       });
     } catch (persistErr) {
       console.warn(
@@ -267,6 +310,8 @@ async function syncCandidate({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
+    collectAccountRefresh,
+    applyStaleAccountRefreshes,
   } = deps;
 
   const guard = await acquireAutoManageSyncSlot(discordId);
@@ -277,6 +322,7 @@ async function syncCandidate({
   let claimed = false;
   let attemptCount = 0;
   let leaseToken = "";
+  let bibleAttempted = false;
   try {
     const seed = await loadEligibleDailySeed(User, discordId);
     if (seed.transition) return seed.transition;
@@ -297,10 +343,17 @@ async function syncCandidate({
     claimed = true;
 
     ensureFreshWeek(seedDoc);
-    const collected = await gatherAutoManageLogsForUserDoc(
-      seedDoc,
-      weekResetStart
-    );
+    const refreshCollected = [];
+    const refreshBoundary = dailyRosterBoundaryMs(dailyContext);
+    for (const account of seedDoc.accounts) {
+      if (account.characters?.length > 0 && !(Number(account.lastRefreshedAt) >= refreshBoundary)) {
+        refreshCollected.push(await collectAccountRefresh(seedDoc, account.accountName));
+      }
+    }
+    bibleAttempted = seedDoc.autoManageEnabled && !seedDoc.localSyncEnabled;
+    const collected = bibleAttempted
+      ? await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart)
+      : null;
 
     const persisted = await persistCollectedDailyReport({
       User,
@@ -314,6 +367,8 @@ async function syncCandidate({
       applyAutoManageCollected,
       weekResetStart,
       collected,
+      refreshCollected,
+      applyStaleAccountRefreshes,
     });
 
     return persisted.transition;
@@ -329,6 +384,7 @@ async function syncCandidate({
       attemptCount,
       leaseToken,
       nowMs,
+      bibleAttempted,
     });
   } finally {
     releaseAutoManageSyncSlot(discordId);
@@ -341,8 +397,8 @@ function applyOutcomeCounter(counters, bucket) {
 }
 
 /**
- * Run silent background syncs for opted-in users, at most once per 24 hours
- * after a settled run/successful sync, with bounded retries for transient errors.
+ * Refresh every registered roster each VN day and reconcile Bible clear logs
+ * for opted-in users, with bounded retries and a completion announcement.
  * @param {object} deps - User persistence, shared sync lock and Bible services.
  * @returns {object} Scheduler lifecycle and a deterministic tick entrypoint.
  */
@@ -355,6 +411,9 @@ function createAutoManageDailySchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  collectAccountRefresh,
+  applyStaleAccountRefreshes,
+  notifyDailyRosterSync = null,
   processEnv = process.env,
 }) {
   async function runAutoManageDailyTick(client, now = new Date()) {
@@ -366,12 +425,10 @@ function createAutoManageDailySchedulerService({
     const candidates = await User.find(
       buildAutoManageDailyCandidateQuery(dailyContext, nowMs)
     )
-      .sort({ lastAutoManageAttemptAt: 1 })
+      .sort({ lastDailyRosterAttemptAt: 1 })
       .limit(AUTO_MANAGE_DAILY_BATCH_SIZE)
       .select("discordId")
       .lean();
-
-    if (candidates.length === 0) return;
 
     const counters = createOutcomeCounters();
     const weekResetStart = weekResetStartMs();
@@ -389,18 +446,24 @@ function createAutoManageDailySchedulerService({
           releaseAutoManageSyncSlot,
           gatherAutoManageLogsForUserDoc,
           applyAutoManageCollected,
+          collectAccountRefresh,
+          applyStaleAccountRefreshes,
         },
       });
       applyOutcomeCounter(counters, outcome.bucket);
     }
 
-    console.log(
-      `[auto-manage daily] target=${dailyContext.targetDayKey}: ${candidates.length} candidate(s) | synced ${counters.syncedCount} | settled ${counters.settledCount} | retry ${counters.retryScheduledCount} | exhausted ${counters.retryExhaustedCount} | skipped ${counters.skippedCount} | failed ${counters.failedCount}`
-    );
+    if (candidates.length > 0) {
+      console.log(
+        `[auto-manage daily] target=${dailyContext.targetDayKey}: ${candidates.length} candidate(s) | synced ${counters.syncedCount} | settled ${counters.settledCount} | retry ${counters.retryScheduledCount} | exhausted ${counters.retryExhaustedCount} | skipped ${counters.skippedCount} | failed ${counters.failedCount}`
+      );
+    }
+    if (notifyDailyRosterSync) await notifyDailyRosterSync(client, dailyContext);
   }
 
   const autoManageDailyRunner = createNonOverlappingIntervalRunner({
     tickMs: AUTO_MANAGE_DAILY_TICK_MS,
+    alignToClock: true,
     runTick: runAutoManageDailyTick,
     overlapMessage: "[auto-manage daily] previous tick still running - skipping this fire to avoid overlap",
     errorMessage: "[auto-manage daily] scheduler tick failed:",

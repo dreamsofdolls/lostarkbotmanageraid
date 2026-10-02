@@ -89,3 +89,43 @@ test("non-overlapping scheduler runner logs tick errors and releases the guard",
     console.error = originalError;
   }
 });
+
+test("aligned runner catches up immediately then follows wall-clock boundaries until closed", async () => {
+  const startMs = Date.parse("2026-07-13T16:57:30.000Z");
+  let now = startMs;
+  const calls = [];
+  const timers = [];
+  const cleared = [];
+  const runner = createNonOverlappingIntervalRunner({
+    tickMs: 5 * 60_000,
+    alignToClock: true,
+    nowMs: () => now,
+    setTimeoutFn: (fn, ms) => {
+      const handle = { ms, unrefCount: 0, unref() { this.unrefCount += 1; } };
+      timers.push({ fn, handle });
+      return handle;
+    },
+    clearTimeoutFn: (handle) => cleared.push(handle),
+    runTick: async (label) => calls.push({ label, now }),
+  });
+
+  const handle = runner.start("daily");
+  assert.deepEqual(calls, [{ label: "daily", now: startMs }], "startup run provides catch-up");
+  assert.equal(runner.getStartedAtMs(), Date.parse("2026-07-13T16:55:00.000Z"));
+  assert.equal(timers[0].handle.ms, 2.5 * 60_000, "first timer lands on 00:00 VN");
+
+  handle.unref();
+  assert.equal(timers[0].handle.unrefCount, 1);
+  await Promise.resolve();
+  now = Date.parse("2026-07-13T17:00:00.000Z");
+  await timers[0].fn();
+  assert.equal(calls.length, 2);
+  assert.equal(timers[1].handle.ms, 5 * 60_000);
+  assert.equal(timers[1].handle.unrefCount, 1, "future timers inherit unref");
+
+  handle.close();
+  assert.deepEqual(cleared, [timers[1].handle]);
+  now += 5 * 60_000;
+  await timers[1].fn();
+  assert.equal(calls.length, 2, "a stale timeout cannot run after close");
+});

@@ -172,14 +172,15 @@ const userSchema = new mongoose.Schema(
     // character fetched and reconciled without throwing. Kept separate from
     // the attempt stamp so repeated Cloudflare 403 responses do not mark
     // cached data as fresh. The daily run is stricter and stamps it only on a
-    // fully successful report, because the daily availability filter reads
-    // this field and a partial-success stamp would block the scheduled retry.
+    // fully successful report, so a partial attempt remains visible as such.
     lastAutoManageSyncAt: { type: Number, default: null },
     // VN calendar day (YYYY-MM-DD) when this user most recently opened a
     // usable /raid-status session. This is activity telemetry only; daily
     // background eligibility is outcome-driven so a failed view piggyback
     // never suppresses the autonomous retry path.
     lastRaidStatusOpenedDayKey: { type: String, default: "" },
+    // Fair rotation for the daily roster refresh, independent of Bible opt-in.
+    lastDailyRosterAttemptAt: { type: Number, default: null },
     // Daily background state. Attempts use a short DB lease to deduplicate
     // workers. A target day is only finished after success, an all-private /
     // no-actionable terminal result, or bounded transient retry exhaustion.
@@ -190,7 +191,7 @@ const userSchema = new mongoose.Schema(
     autoManageDailyLeaseUntil: { type: Number, default: null },
     autoManageDailyLeaseToken: { type: String, default: "" },
     lastAutoManageDailyFinishedDayKey: { type: String, default: "" },
-    // Rolling 24-hour gate, including private/no-actionable/exhausted outcomes.
+    // Completion timestamp for the target VN calendar day, including failures.
     lastAutoManageDailyFinishedAt: { type: Number, default: null },
     lastAutoManageDailyOutcome: { type: String, default: "" },
     // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
@@ -265,10 +266,7 @@ userSchema.index(
   }
 );
 
-// Background auto-manage scan: select opted-in users whose target VN day is
-// unfinished and whose retry/lease window is available. /raid-status activity
-// is deliberately absent from this index because opening a view is not proof
-// that its sync succeeded.
+// Legacy opt-in scan index retained for older deployed workers.
 userSchema.index(
   {
     autoManageEnabled: 1,
@@ -281,6 +279,17 @@ userSchema.index(
     name: "auto_manage_daily_outcome_scan",
     partialFilterExpression: { autoManageEnabled: true },
   }
+);
+
+// All registered rosters participate in midnight refresh, including Local Sync.
+userSchema.index(
+  {
+    lastAutoManageDailyFinishedDayKey: 1,
+    autoManageDailyNextAttemptAt: 1,
+    autoManageDailyLeaseUntil: 1,
+    lastDailyRosterAttemptAt: 1,
+  },
+  { name: "daily_roster_outcome_scan" }
 );
 
 // /raid-set autocomplete needs to look up every account whose registeredBy

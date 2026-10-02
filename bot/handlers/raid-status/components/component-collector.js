@@ -27,6 +27,12 @@ const LIVE_SNAPSHOT_ACTIONS = new Set([
   STATUS_COMPONENT_ACTION.goldCharFilter,
 ]);
 
+/**
+ * Attach interaction handlers and release live subscriptions when the view expires.
+ * @param {object} options - Session state, render callbacks and Discord message.
+ * @param {() => void} [options.onEnd] - Release active session resources.
+ * @returns {{collector: object, isEnded: Function, scheduleTaskAutoRefresh: Function}} View lifecycle.
+ */
 function attachRaidStatusComponentCollector({
   EmbedBuilder,
   User,
@@ -43,6 +49,7 @@ function attachRaidStatusComponentCollector({
   buildComponents,
   componentRouteHandlers,
   refreshStateIfStale,
+  onEnd = null,
   // The session's shared redraw (view/redraw.js); built here when not given.
   redrawMessage = null,
 }) {
@@ -175,6 +182,13 @@ function attachRaidStatusComponentCollector({
   collector.on("end", async () => {
     collectorEnded = true;
     clearTaskAutoRefresh();
+    if (typeof onEnd === "function") {
+      try {
+        onEnd();
+      } catch (err) {
+        console.warn("[raid-status] collector cleanup failed:", err?.message || err);
+      }
+    }
     try {
       const expiredFooter = t("raid-status.expiredFooter", lang, {
         seconds: sessionMs / 1000,

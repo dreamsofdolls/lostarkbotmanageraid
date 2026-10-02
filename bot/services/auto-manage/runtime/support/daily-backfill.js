@@ -6,8 +6,12 @@ const {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Day keys label attempts for compatibility with persisted state. The separate
-// daily-state filter enforces the rolling 24-hour interval and retry deadlines.
+// A new target key becomes available exactly at VN midnight. The availability
+// filter uses it as the calendar gate while preserving lease/retry deadlines.
+/**
+ * @param {Date|number|string} [now] - Scheduler clock.
+ * @returns {{currentDayKey: string, targetDayKey: string}} Current and completed VN days.
+ */
 function getAutoManageDailyContext(now = new Date()) {
   const instant = now instanceof Date ? now : new Date(now);
   return {

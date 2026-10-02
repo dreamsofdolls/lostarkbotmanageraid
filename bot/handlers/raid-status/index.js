@@ -62,8 +62,8 @@ const {
   markRaidStatusOpenedDay,
 } = require("../../services/auto-manage/runtime/support/daily-backfill");
 const {
-  createLatestOnlyQueue,
-} = require("../../utils/async/latest-only-queue");
+  createRaidStatusLiveApplyRefresh,
+} = require("./sync/live-apply-refresh");
 
 const STATUS_PAGINATION_SESSION_MS = 10 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -210,6 +210,7 @@ function createRaidStatusCommand(deps) {
     // keeping the page index tied to the underlying merged account list.
     const reloadViewerAccounts = async (nextOwnDoc = null) => {
       userDoc = await statusState.reloadViewerAccounts(nextOwnDoc);
+      return userDoc;
     };
 
     // View toggle: "raid" = default progress page, "task" = per-character
@@ -472,6 +473,7 @@ function createRaidStatusCommand(deps) {
     const message = messageFromEdit?.createMessageComponentCollector
       ? messageFromEdit
       : await interaction.fetchReply();
+    let liveApplyRefresh = null;
     attachedCollector = attachRaidStatusComponentCollector({
       EmbedBuilder,
       User,
@@ -489,22 +491,29 @@ function createRaidStatusCommand(deps) {
       componentRouteHandlers,
       refreshStateIfStale: () => statusState.refreshViewerAccountsIfStale(),
       redrawMessage,
+      onEnd: () => liveApplyRefresh?.stop(),
     });
 
-    const backgroundRenderQueue = createLatestOnlyQueue(
-      async () => {
-        await redrawMessage();
+    liveApplyRefresh = createRaidStatusLiveApplyRefresh({
+      viewerDiscordId: discordId,
+      getAccounts: () => statusState.accounts,
+      getCurrentView: () => statusState.currentView,
+      isSessionEnded: () => Boolean(attachedCollector?.isEnded()),
+      reloadViewerAccounts,
+      rebuildStatusUserMeta: () => {
+        statusUserMeta = buildStatusUserMeta(
+          statusState.userDoc,
+          statusUserMeta?.piggybackOutcome || null
+        );
       },
-      {
-        onError: (err, labels) => {
-          console.warn(
-            `[raid-status] ${labels.join("+") || "update"} background render failed:`,
-            err?.message || err
-          );
-        },
-      }
-    );
-    const queueBackgroundRender = (label) => backgroundRenderQueue.request(label);
+      refreshLocalSyncSnapshot,
+      setLocalSyncSnapshot: (snapshot) => {
+        statusState.localSyncSnapshot = snapshot;
+      },
+      redrawMessage,
+    });
+    liveApplyRefresh.start();
+    const queueBackgroundRender = (label) => liveApplyRefresh.request(label);
 
     void markRaidStatusOpenedDay({
       User,

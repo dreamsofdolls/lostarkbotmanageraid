@@ -59,9 +59,12 @@ function setup({
   userOverrides = {},
   job = { jobId: JOB_ID, discordId: "u1", scope: "full", status: "pending" },
   applyPreviewJob = async () => ({ ok: true, state: "applied", result: { applied: [], rejected: [] } }),
+  notifyLocalSyncApplied = null,
+  log = { error() {}, warn() {} },
 } = {}) {
   const token = mintToken("u1", undefined, "en", null, scope);
   const applyCalls = [];
+  const notificationCalls = [];
   const handler = createApplyEndpoint({
     User: makeUserModel({
       discordId: "u1",
@@ -76,14 +79,17 @@ function setup({
       applyCalls.push(args);
       return applyPreviewJob(...args);
     },
-    log: { error() {} },
+    notifyLocalSyncApplied: notifyLocalSyncApplied || ((event) => {
+      notificationCalls.push(event);
+    }),
+    log,
   });
   async function post(body = { jobId: JOB_ID }, authToken = token) {
     const res = makeRes();
     await handler(makeReq(authToken, body), res);
     return res;
   }
-  return { post, applyCalls };
+  return { post, applyCalls, notificationCalls };
 }
 
 test("apply rejects a request without a valid link before touching the job", async () => {
@@ -139,7 +145,7 @@ test("apply cannot reach another owner's job or a job from the other scope", asy
 });
 
 test("an applied job reports only the caller's own writes", async () => {
-  const { post, applyCalls } = setup({
+  const { post, applyCalls, notificationCalls } = setup({
     applyPreviewJob: async () => ({
       ok: true,
       state: "applied",
@@ -163,6 +169,7 @@ test("an applied job reports only the caller's own writes", async () => {
 
   assert.equal(res.status, 200);
   assert.deepEqual(applyCalls, [[JOB_ID, "u1"]]);
+  assert.deepEqual(notificationCalls, [{ discordId: "u1", jobId: JOB_ID }]);
   assert.deepEqual(res.json(), {
     ok: true,
     state: "applied",
@@ -174,7 +181,7 @@ test("an applied job reports only the caller's own writes", async () => {
 });
 
 test("a job another request already applied still reads as done", async () => {
-  const { post } = setup({
+  const { post, notificationCalls } = setup({
     applyPreviewJob: async () => ({
       ok: false,
       state: "applied",
@@ -187,10 +194,11 @@ test("a job another request already applied still reads as done", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.json().ok, true);
   assert.deepEqual(res.json().written, { raids: 1, chars: 1 });
+  assert.deepEqual(notificationCalls, [{ discordId: "u1", jobId: JOB_ID }]);
 });
 
 test("a retryable write error keeps the job pending for the same jobId", async () => {
-  const { post } = setup({
+  const { post, notificationCalls } = setup({
     applyPreviewJob: async () => ({
       ok: false,
       state: "pending",
@@ -209,6 +217,45 @@ test("a retryable write error keeps the job pending for the same jobId", async (
   assert.equal(res.json().state, "pending");
   assert.equal(res.json().retryable, true);
   assert.equal(res.json().rejected, 0);
+  assert.deepEqual(notificationCalls, []);
+});
+
+test("an applied notification cannot hold the Reader HTTP response open", async () => {
+  let notified = 0;
+  const { post } = setup({
+    notifyLocalSyncApplied: () => {
+      notified += 1;
+      return new Promise(() => {});
+    },
+  });
+
+  const res = await post();
+
+  assert.equal(notified, 1);
+  assert.equal(res.status, 200);
+  assert.equal(res.json().state, "applied");
+});
+
+test("an asynchronous applied notification failure is logged after the response", async () => {
+  const warnings = [];
+  const { post } = setup({
+    notifyLocalSyncApplied: async () => {
+      throw new Error("Discord edit unavailable");
+    },
+    log: {
+      error() {},
+      warn(...args) {
+        warnings.push(args);
+      },
+    },
+  });
+
+  const res = await post();
+  await Promise.resolve();
+
+  assert.equal(res.status, 200);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0].join(" "), /applied notification failed.*Discord edit unavailable/);
 });
 
 test("an apply that throws answers 500 without leaking the error", async () => {

@@ -1464,9 +1464,9 @@ module.exports = {
     dm: {
       enable: {
         title: "マネージャーがあなたの代わりに自動同期をオンにしましたわ",
-        description: "こんにちは～♪ レイドマネージャー <@{managerId}> さんがあなたの代わりに `/raid-auto-manage` をオンにしてくれましたわ。これからアーティストが順番が来た時に約30分ごとでレイド進捗をバックグラウンド同期しますわ～♪",
+        description: "こんにちは～♪ レイドマネージャー <@{managerId}> さんがあなたの代わりに `/raid-auto-manage` をオンにしてくれましたわ。これから毎日 00:00 VN に始まるロスター周期で、公開 Bible のクリアログを照合しますの♪",
         statusLine: "**新しい状態:** オン",
-        firstSyncLine: "**初回同期はいつ:** これからのスケジューラー周期で早めに走りますわ (約30分ごとに動いて、各回で6人ずつ処理しますの)",
+        firstSyncLine: "**定期同期:** 毎日 00:00 VN に周期が始まり、5分ごとに最大6人を処理しますの。再起動後は取りこぼしに追いつき、その周期では1人につき最大4回まで試行しますわ。",
         quickOffLine: "**素早くオフに:** 下のボタンを押すか `/raid-auto-manage action:off` を実行してね♪",
         accountFieldName: "📁 {accountName} ({count} 体)",
         charLine: "{icon} {name} · {iLvl} · {statusText}",
@@ -1480,7 +1480,7 @@ module.exports = {
       },
       disable: {
         title: "マネージャーがあなたの代わりに自動同期をオフにしましたわ",
-        description: "こんにちは～♪ レイドマネージャー <@{managerId}> さんがあなたの代わりに `/raid-auto-manage` をオフにしましたわ。これからアーティストはレイド進捗を自動同期しなくなりますわ～",
+        description: "こんにちは～♪ レイドマネージャー <@{managerId}> さんがあなたの代わりに `/raid-auto-manage` をオフにしましたわ。公開 Bible のクリアログ取得は止まりますが、登録済みロスターの情報は毎日 00:00 VN から更新されますの。",
         statusLine: "**新しい状態:** オフ",
         manualSyncLine: "**手動で同期:** `/raid-set` を使うか、サーバーの監視チャンネルにクリアを投稿してね♪",
         quickOnLine: "**素早く再オンに:** 下のボタンを押すか `/raid-auto-manage action:on` を実行してね♪",
@@ -1499,7 +1499,7 @@ module.exports = {
       localLockedTitle: "ユーザーはローカル同期モード中ですわ",
       localLockedDescription: "<@{target}> さんは **ローカル同期モード** にオプトイン中ですわ - 同時にアクティブにできるのは bible 自動同期かローカル同期のどちらか1つだけなので、アーティストは代わりに bible 自動同期をオンにできませんの。本人が `/raid-auto-manage action:local-off` してから bible に切り替えてね♪",
       successTitle: "アーティストが代わりに自動同期をオンにしましたわ♪",
-      successLineIntro: "フラグ切り替え成功ですわ♪ このユーザーは優先バッチに入ってるので (`lastAutoManageAttemptAt = null`)、これからのスケジューラー周期で早めに拾われますわ (約30分ごと、6人ずつ処理)。",
+      successLineIntro: "フラグ切り替え成功ですわ♪ このユーザーの公開 Bible クリアログは、毎日 00:00 VN に始まり5分ごとに最大6人を処理するロスター周期の対象になりますの。",
       successLineTarget: "**オンにした対象:** <@{target}>",
       successLineState: "**新しい状態:** オン",
       successLineDmSent: "**DM 通知:** 送信済みですわ♪",
@@ -1535,7 +1535,7 @@ module.exports = {
       disabledTitle: {
         variants: ["自動同期をオフにしましたわ♪", "自動同期はお休みですわ～", "はい、自動同期オフですの～"],
       },
-      disabledDescription: "アーティストがあなたの `/raid-auto-manage` をオフにしましたわ。これからは自動同期しません - `/raid-set` か、サーバーの監視チャンネルにクリアを投稿して手動で進捗を更新してね♪ 再オンにしたい時は `/raid-auto-manage action:on` を使ってくださいね。",
+      disabledDescription: "アーティストがあなたの `/raid-auto-manage` をオフにしたので、公開 Bible のクリアログは取得しませんわ。ロスター情報は毎日 00:00 VN から引き続き更新しますの。進捗は `/raid-set` か監視チャンネルで更新し、Bible 自動同期を戻す時は `/raid-auto-manage action:on` を使ってね♪",
       alreadyOffTitle: "自動同期はもうオフですわ",
       alreadyOffDescription: "前から `/raid-auto-manage` をオフにしてましたわ (スラッシュコマンド経由か、このボタンを前回押したか)。何も変わりませんわ～",
     },
@@ -1551,7 +1551,7 @@ module.exports = {
       flippedTitle: {
         variants: ["自動同期を再オンにしましたわ♪", "自動同期がまた動いていますわ～", "はい、自動同期オンに戻しましたの～"],
       },
-      flippedDescription: "アーティストがあなたの `/raid-auto-manage` をオンにしましたわ。これから順番が来た時に約30分ごとでレイド進捗をバックグラウンド同期しますわ♪ オフにしたい時は `/raid-auto-manage action:off` を使ってね～",
+      flippedDescription: "アーティストがあなたの `/raid-auto-manage` をオンにしましたわ。公開 Bible のクリアログは、毎日 00:00 VN に始まるロスター周期で照合しますの♪ オフにしたい時は `/raid-auto-manage action:off` を使ってね～",
       alreadyOnTitle: "自動同期はもうオンですわ",
       alreadyOnDescription: "前から `/raid-auto-manage` をオンにしてましたわ (スラッシュコマンド経由か、このボタンを前回押したか)。何も変わりませんわ～",
       localLockedTitle: "あなたはローカル同期モード中ですわ",
@@ -1892,7 +1892,7 @@ module.exports = {
           "",
           "**1️⃣ ロスターを登録**: `/raid-add-roster name:<ロスターのキャラ名>` と入力すれば、アーティストが lostark.bible からあなたのキャラ一覧を取ってきて、ピッカーを開きますわ♪ 追跡したいキャラにチェックを入れて **確定** を押してね～",
           "**2️⃣ 進捗を確認**: `/raid-status` でどのキャラが今週どのレイドをクリアしたか見られますわ～",
-          "**3️⃣ 進捗を更新**: 2通りありますわ - (a) `/raid-set` で手動更新、または (b) `/raid-auto-manage action:on` でアーティストが lostark.bible から順番が来た時に約30分ごとでバックグラウンド同期しますわ♪",
+          "**3️⃣ 進捗を更新**: 2通りありますわ - (a) `/raid-set` で手動更新、または (b) `/raid-auto-manage action:on` で毎日 00:00 VN に始まるロスター周期から lostark.bible の公開クリアログを照合しますの♪",
           "",
           "**おまけ**: レイドチャンネル (管理者が `/raid-channel` で設定) に `<レイド> <難易度> <キャラ>` 形式のメッセージを投稿すると、アーティストが自動で読んで更新して、DM で確認まで送りますわ～♪ 例: `セルカ ハード Clauseduk`",
           "",
@@ -2169,7 +2169,7 @@ module.exports = {
         notes: [
           "2 つのモードですわ: **bible** (`action:on`、Public Log 必須) と **local-sync** (`action:local-on`、Local Reader が端末内の encounters.db を読み、ウェブ上でそのまま同期)。同時に 1 つだけ、DB の mutex で制御しますの。",
           "",
-          "**bible モードを使うタイミング**: テキスト投稿が面倒で、lostark.bible で Public Log を有効にできる方ですわ。一度オンにすれば 30 分ごとに自動取得しますの～",
+          "**bible モードを使うタイミング**: テキスト投稿が面倒で、lostark.bible で Public Log を有効にできる方ですわ。一度オンにすれば、毎日 00:00 VN に始まるロスター周期で公開 Bible のクリアログを照合しますの～",
           "**local-sync モードを使うタイミング**: ログをプライベートに保ちたい時ですわ。Local Reader が SQLite をブラウザで実行し、ファイルを記憶して変更分だけ送りますの。ファイル本体はアップロードしませんわよ♪",
           "**bible 前提条件**: 同期したい各キャラで <https://lostark.bible/me/logs> の **Show on Profile** をオンに。プライベートログのキャラは届きませんわ。",
           "**local-sync 前提条件**: Chrome / Edge / Opera GX (File System Access API が必要ですの)。`encounters.db` は `%localappdata%\\LOA Logs\\` にありますわ。",
@@ -2177,7 +2177,8 @@ module.exports = {
           "**`action:on` フロー**: 先にロスターをプローブして、プライベートログのキャラがあれば → 警告の埋め込みと `それでもオンに` / `キャンセル` ボタンが出ますわ。確定すると即座に 1 回同期しますの。",
           "**`action:local-on` フロー**: 署名済み URL (TTL 30 分) を非公開返信でお渡ししますわ。Local Reader を開く → ファイルをドロップ (初回だけ) → ページで同期を押せばアーティストがすぐ書き込みますの。リンクが切れたら `/raid-status` → `🗃️ ローカル同期` で新しいリンクを出せますわ。",
           "**`action:reset` フロー**: 2 段階の Danger 確認ですわ。レイド進捗 + 同期状態 (assignedRaids、bibleSerial、lastLocalSyncToken など) をご自分のぶんだけ全消し - ゲートをまっさらに戻すイメージですの。モード切替後やデータ修正のあと、きれいに再同期したい時にどうぞ。",
-          "**バックグラウンド処理 (bible のみ)**: オプトイン済みユーザーで約30分同期を試していない人は、バックグラウンドスケジューラーが30分ごとに自動取得ですわ (1周期で6ユーザー、公平な順番で)。",
+          "**毎日のロスター更新 (登録済み全ロスター)**: 毎日 00:00 VN に新しい周期が始まり、その後5分ごとに最大6人を処理しますの。再起動後は取りこぼしに追いつき、各周期で1人につき最大4回まで試行しますわ。",
+          "**進捗ソース**: ロスター情報は local-sync を含む登録済み全ロスターで更新しますの。Bible のクリアログを照合するのは Bible 自動同期をオンにしたユーザーだけですわ。local-sync の新しい遭遇進捗には、Local Reader を開いて `encounters.db` を送信する必要がありますの。",
           "**`action:status`**: 状態 (bible / local-sync オンオフ) + 最後の成功と試行を表示ですわ - 同期が連続失敗しているのがすぐ分かりますの。",
           "**モード切替**: bible/local のログが セルカ ナイトメア クリアと報告したけど DB ではそのキャラを セルカ ハード で追跡している場合、ログ優先ですわ - アーティストが古い進捗を消して新しいモードで書き直しますの。",
         ],
@@ -2196,10 +2197,11 @@ module.exports = {
         short: "[管理者専用] アーティストのチャンネル通知を設定ですわ",
         example: "/raid-announce type:maintenance-early action:set-channel channel:#announcements",
         notes: [
-          "アーティストがチャンネルに投稿する 10 種類の通知ですわ。各種別にオン/オフ切替がありますの♪ 5 種別は別チャンネルにリダイレクト可能ですわ (#announcements / 専用の #maintenance など)。",
+          "アーティストがチャンネルに投稿する 11 種類の通知ですわ。各種別にオン/オフ切替がありますの♪ 6 種別は別チャンネルにリダイレクト可能ですわ (#announcements / 専用の #maintenance など)。",
           "",
-          "**10 種別**:",
+          "**11 種別**:",
           "• `weekly-reset` - 水曜 19:00 JST 週次リセット",
+          "• `daily-roster-sync` - 00:00 VN の日次ロスター周期が完了した時の集計結果",
           "• `stuck-nudge` - プライベートログのユーザー全員にメンション",
           "• `set-greeting` - /raid-channel set 後のごあいさつ",
           "• `hourly-cleanup` - クリーンアップ後の通知",
@@ -2209,12 +2211,12 @@ module.exports = {
           "• `maintenance-early` - メンテナンス T-3h/2h/1h 前のお知らせ",
           "• `maintenance-countdown` - T-15m/10m/5m/1m カウントダウン",
           "• `world-event-reminder` - Chaos Gate / Field Boss の T-5m 通知、初期値は OFF",
-          "**チャンネル上書き可能** (5 種別): `weekly-reset`、`stuck-nudge`、`maintenance-early`、`maintenance-countdown`、`world-event-reminder`。残りは内容が監視チャンネルを参照しているので固定ですわ。",
+          "**チャンネル上書き可能** (6 種別): `weekly-reset`、`daily-roster-sync`、`stuck-nudge`、`maintenance-early`、`maintenance-countdown`、`world-event-reminder`。残りは内容が監視チャンネルを参照しているので固定ですわ。",
           "**使うタイミング**: ワールドイベントの時刻通知が欲しい時は `world-event-reminder` をオン。日曜日に両方ある時は一つの投稿にまとめますの。メンテナンスやイベント通知は専用 #announcements にリダイレクトできますわ♪",
           "**管理者限定**: `サーバー管理` 権限が必要ですわ。",
         ],
         optionDescriptions: {
-          type: "通知種別 (10 つのドロップダウン)",
+          type: "通知種別 (11 つのドロップダウン)",
           action: "`show` / `on` / `off` / `set-channel` / `clear-channel`",
           channel: "宛先チャンネル - action:set-channel の時に必要",
         },
@@ -2260,7 +2262,7 @@ module.exports = {
     currentTitle: "現在のブロードキャスト言語",
     currentDescription: "このギルドは公開アナウンスを **{flag} {label}** でお届けしていますわ♪\n変更されたい場合は `/raid-channel config` を `action:set-language` と `language:` オプション (vi/jp/en) 付きで再実行してくださいませ。例: `language:jp`。",
     successTitle: "ブロードキャスト言語を変更しましたわ♪",
-    successDescription: "これからこのギルドの全公開アナウンス (ウェルカム / 週次リセット / クリーンアップ / おやすみ / おはよう / メンテナンス / stuck-nudge / whisper-ack / レイド更新) は **{flag} {label}** でお届けしますの～♪ 各メンバーの `/raid-language` 設定には影響しませんわ。",
+    successDescription: "これからこのギルドの全公開アナウンス (ウェルカム / 週次リセット / daily-roster-sync / クリーンアップ / おやすみ / おはよう / メンテナンス / stuck-nudge / whisper-ack / レイド更新) は **{flag} {label}** でお届けしますの～♪ 各メンバーの `/raid-language` 設定には影響しませんわ。",
     showCurrentLine: "ブロードキャスト言語: **{flag} {label}**",
   },
   "text-parser": {
@@ -2573,6 +2575,9 @@ module.exports = {
   },
 
   announcements: {
+    "daily-roster-sync": {
+      body: "🔄 **{targetDayKey}** 終了後の同期が完了しましたわ。Artist に登録済みの **{userCount}** 人・**{rosterCount}** ロスターが対象です。\n✅ **{syncedCount}** 人が同期成功 · ℹ️ **{settledCount}** 人は利用可能なログなし · ⚠️ **{retryExhaustedCount}** 人は再試行後もエラーです。\nロスター情報は全モードで更新します。Local Sync の進行状況は Local Reader から送信済みの結果を使いますわ。",
+    },
     "weekly-reset": {
       body: "新しい週が来ましたわね～♪ 今週のレイド進捗をアーティストがリセットしましたわ、皆さんは最初からまた挑戦してくださいませ。素敵なレイド週間をお過ごしくださいね♪ この案内は30分後にお片付けしますの。",
     },

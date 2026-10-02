@@ -198,3 +198,38 @@ test("a redraw that finishes after the session ended leaves the expired card", a
   assert.equal(edits.length, 1);
   assert.equal(edits[0].disabled, true);
 });
+
+test("ending raid-status runs active-session cleanup once", async () => {
+  const listeners = new Map();
+  let cleanupCalls = 0;
+  attachRaidStatusComponentCollector({
+    EmbedBuilder: { from: (embed) => ({ ...embed, setFooter() {} }) },
+    User: {},
+    interaction: { user: { id: "owner" }, editReply: async () => ({}) },
+    message: {
+      createMessageComponentCollector: () => ({
+        on(event, handler) {
+          listeners.set(event, handler);
+          return this;
+        },
+      }),
+    },
+    lang: "en",
+    sessionMs: 60_000,
+    taskAutoRefreshGraceMs: 1_000,
+    getAccounts: () => [],
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    buildCurrentEmbeds: () => [{}],
+    buildEmbedAndCanvas: async () => ({ embeds: [{}] }),
+    buildComponents: () => [],
+    componentRouteHandlers: {},
+    onEnd: () => {
+      cleanupCalls += 1;
+    },
+  });
+
+  await listeners.get("end")();
+
+  assert.equal(cleanupCalls, 1);
+});

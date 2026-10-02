@@ -35,12 +35,18 @@ const {
 const {
   createAutoManageDailySchedulerService,
 } = require("./auto-manage-daily-scheduler");
+const { createDailyRosterAnnouncementService } = require("./daily-roster-announcement");
 const { createMaintenanceSchedulerService } = require("./maintenance-scheduler");
 const { createSideTaskResetService } = require("./side-task-reset");
 const {
   createWorldEventReminderSchedulerService,
 } = require("./world-event-reminder-scheduler");
 
+/**
+ * Compose raid maintenance, all-roster refresh and announcement schedulers.
+ * @param {object} deps - Persistence, roster/Bible services and channel helpers.
+ * @returns {object} Scheduler lifecycle and timing helpers.
+ */
 function createRaidSchedulerService({
   GuildConfig,
   User,
@@ -53,6 +59,8 @@ function createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  collectAccountRefresh,
+  applyStaleAccountRefreshes,
 }) {
   const sideTaskResetService = createSideTaskResetService({
     User,
@@ -83,6 +91,14 @@ function createRaidSchedulerService({
     t,
   });
 
+  const { notifyDailyRosterSync } = createDailyRosterAnnouncementService({
+    User,
+    GuildConfig,
+    getAnnouncementsConfig,
+    getGuildLanguage,
+    postChannelAnnouncement,
+    t,
+  });
   const autoManageDailyService = createAutoManageDailySchedulerService({
     User,
     saveWithRetry,
@@ -92,6 +108,9 @@ function createRaidSchedulerService({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
+    collectAccountRefresh,
+    applyStaleAccountRefreshes,
+    notifyDailyRosterSync,
   });
 
   return {

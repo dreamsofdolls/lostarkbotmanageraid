@@ -749,6 +749,8 @@ const {
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  collectAccountRefresh,
+  applyStaleAccountRefreshes,
 });
 
 // Announcement timing reads each scheduler's start time and tick length.

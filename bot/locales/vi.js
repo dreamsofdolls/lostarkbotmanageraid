@@ -1486,9 +1486,9 @@ module.exports = {
     dm: {
       enable: {
         title: "Manager đã bật auto-sync hộ cậu",
-        description: "Heya~ Raid Manager <@{managerId}> vừa bật `/raid-auto-manage` hộ cậu rồi nha. Từ giờ Artist sẽ tự sync raid progress nền khoảng mỗi 30 phút khi tới lượt.",
+        description: "Heya~ Raid Manager <@{managerId}> vừa bật `/raid-auto-manage` hộ cậu rồi nha. Từ giờ Artist sẽ đối chiếu clear log Bible public trong chu kỳ roster hằng ngày bắt đầu lúc 00:00 VN.",
         statusLine: "**Trạng thái mới:** ON",
-        firstSyncLine: "**Khi nào sync lần đầu:** Sớm trong các tick scheduler tới (chạy mỗi ~30 phút, mỗi tick batch 6 user)",
+        firstSyncLine: "**Lịch sync:** Chu kỳ ngày mở lúc 00:00 VN, xử lý tối đa 6 user mỗi 5 phút, catch-up sau restart và thử tối đa 4 lần cho mỗi user trong chu kỳ đó.",
         quickOffLine: "**Tắt nhanh:** Bấm button bên dưới hoặc gõ `/raid-auto-manage action:off`",
         accountFieldName: "📁 {accountName} ({count} char)",
         charLine: "{icon} {name} · {iLvl} · {statusText}",
@@ -1502,7 +1502,7 @@ module.exports = {
       },
       disable: {
         title: "Manager đã tắt auto-sync hộ cậu",
-        description: "Heya~ Raid Manager <@{managerId}> vừa tắt `/raid-auto-manage` hộ cậu rồi nha. Từ giờ Artist không tự sync raid progress cho cậu nữa.",
+        description: "Heya~ Raid Manager <@{managerId}> vừa tắt `/raid-auto-manage` hộ cậu rồi nha. Artist sẽ ngừng pull clear log Bible public; metadata roster đã đăng ký vẫn refresh hằng ngày từ 00:00 VN.",
         statusLine: "**Trạng thái mới:** OFF",
         manualSyncLine: "**Sync thủ công:** Gõ `/raid-set` hoặc post clear vào monitor channel của server",
         quickOnLine: "**Bật lại nhanh:** Bấm button bên dưới hoặc gõ `/raid-auto-manage action:on`",
@@ -1521,7 +1521,7 @@ module.exports = {
       localLockedTitle: "User đang dùng local-sync",
       localLockedDescription: "<@{target}> đang opt-in **local-sync mode** rồi nha - chỉ một trong hai mode (bible auto-sync hoặc local-sync) chạy 1 lúc, nên Artist không bật bible auto-sync hộ được. Họ phải tự `/raid-auto-manage action:local-off` rồi mới chuyển sang bible.",
       successTitle: "Artist đã bật auto-sync hộ rồi nha",
-      successLineIntro: "Flag flip thành công. User này nằm trong batch ưu tiên (`lastAutoManageAttemptAt = null`), scheduler sẽ pick sớm trong các tick tới (mỗi ~30 phút, batch 6 user).",
+      successLineIntro: "Flag flip thành công. Clear log Bible public của user này đã đủ điều kiện vào chu kỳ roster hằng ngày mở lúc 00:00 VN và xử lý tối đa 6 user mỗi 5 phút.",
       successLineTarget: "**Đã bật cho:** <@{target}>",
       successLineState: "**Trạng thái mới:** ON",
       successLineDmSent: "**DM thông báo:** Đã gửi",
@@ -1557,7 +1557,7 @@ module.exports = {
       disabledTitle: {
         variants: ["Tắt auto-sync rồi nha~", "Auto-sync nghỉ tay nhé~", "Ok, auto-sync off~"],
       },
-      disabledDescription: "Artist đã tắt `/raid-auto-manage` cho cậu. Từ giờ Artist không tự sync nữa - cậu update progress thủ công bằng `/raid-set` hoặc post clear vào monitor channel của server. Muốn bật lại thì gõ `/raid-auto-manage action:on`.",
+      disabledDescription: "Artist đã tắt `/raid-auto-manage` cho cậu nên sẽ không pull clear log Bible public nữa. Metadata roster vẫn refresh hằng ngày từ 00:00 VN; cậu update raid progress bằng `/raid-set` hoặc monitor channel của server. Muốn bật lại Bible auto-sync thì gõ `/raid-auto-manage action:on`.",
       alreadyOffTitle: "Auto-sync đã tắt sẵn rồi",
       alreadyOffDescription: "Cậu đã tắt `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.",
     },
@@ -1573,7 +1573,7 @@ module.exports = {
       flippedTitle: {
         variants: ["Bật lại auto-sync rồi nha~", "Auto-sync chạy tiếp nhé~", "Ok, auto-sync on lại~"],
       },
-      flippedDescription: "Artist đã bật `/raid-auto-manage` cho cậu. Từ giờ Artist sẽ tự sync raid progress nền khoảng mỗi 30 phút khi tới lượt. Muốn tắt thì gõ `/raid-auto-manage action:off`.",
+      flippedDescription: "Artist đã bật `/raid-auto-manage` cho cậu. Clear log Bible public của cậu sẽ được đối chiếu trong chu kỳ roster hằng ngày bắt đầu lúc 00:00 VN. Muốn tắt thì gõ `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync đã bật sẵn rồi",
       alreadyOnDescription: "Cậu đã bật `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.",
       localLockedTitle: "Cậu đang dùng local-sync rồi",
@@ -1914,7 +1914,7 @@ module.exports = {
           "",
           "**1️⃣ Đăng ký roster**: gõ `/raid-add-roster name:<bất-kỳ-char-trong-roster>`. Artist fetch toàn bộ char từ lostark.bible, hiện picker để cậu tick chọn char muốn track rồi bấm **Lưu**.",
           "**2️⃣ Xem progress**: gõ `/raid-status` bất cứ lúc nào để xem char nào đã clear raid gì tuần này.",
-          "**3️⃣ Update tiến độ**: 2 cách - (a) gõ `/raid-set` chỉnh tay, hoặc (b) gõ `/raid-auto-manage action:on` để Artist tự sync nền từ lostark.bible khoảng mỗi 30 phút khi tới lượt.",
+          "**3️⃣ Update tiến độ**: 2 cách - (a) gõ `/raid-set` chỉnh tay, hoặc (b) gõ `/raid-auto-manage action:on` để Artist đối chiếu clear log public từ lostark.bible trong chu kỳ roster hằng ngày bắt đầu lúc 00:00 VN.",
           "",
           "**Bonus**: post text dạng `<raid> <difficulty> <character>` vào channel raid (admin set qua `/raid-channel`) - Artist tự đọc + update + DM xác nhận. Ví dụ: `Serca Hard Clauseduk`.",
           "",
@@ -2191,7 +2191,7 @@ module.exports = {
         notes: [
           "Hai mode song song: **bible** (`action:on`, public log) và **local-sync** (`action:local-on`, Local Reader đọc encounters.db trên máy rồi đồng bộ ngay trên web). Mỗi lần chỉ bật 1 mode - mutex enforce ở DB.",
           "",
-          "**Khi nào dùng bible mode**: lười post text + OK với việc bật Public Log trên lostark.bible. Bật 1 lần, bot tự pull mỗi 30 phút.",
+          "**Khi nào dùng bible mode**: lười post text + OK với việc bật Public Log trên lostark.bible. Bật 1 lần, clear log Bible public sẽ vào chu kỳ roster hằng ngày bắt đầu lúc 00:00 VN.",
           "**Khi nào dùng local-sync**: muốn giữ log private. Local Reader chạy SQLite trong browser, nhớ file handle và chỉ gửi phần thay đổi; file gốc không upload.",
           "**Yêu cầu bible**: bật **Show on Profile** ở https://lostark.bible/me/logs cho mỗi char muốn sync. Char Private log → Artist không reach được.",
           "**Yêu cầu local-sync**: Chrome/Edge/Opera GX (cần File System Access API). File `encounters.db` ở `%localappdata%\\LOA Logs\\`.",
@@ -2199,7 +2199,8 @@ module.exports = {
           "**`action:on` flow**: probe roster trước, nếu có char private log → warn embed kèm nút `Vẫn bật` / `Huỷ`. Confirm thì kickstart 1 lần sync ngay.",
           "**`action:local-on` flow**: mint URL signed-token (TTL 30 phút) và trả trong reply riêng tư. Mở Local Reader → thả file (lần đầu) → bấm Đồng bộ trên trang là Artist ghi ngay. Link hết hạn thì lấy link mới ở `/raid-status` → `🗃️ Local Sync`.",
           "**`action:reset` flow**: 2-step Danger confirm. Wipe sạch progress raid + state sync (assignedRaids, bibleSerial, bibleCid, lastLocalSyncToken, ...) cho riêng cậu - giống reset gate về mới tinh. Dùng khi muốn re-sync sạch sau khi đổi mode hoặc fix data.",
-          "**Auto-tick background (bible only)**: opted-in user nào chưa được thử sync trong ~30 phút → background scheduler tự pull mỗi 30 phút (batch 6 user/tick fair rotation).",
+          "**Refresh roster hằng ngày (mọi roster đã đăng ký)**: chu kỳ mới mở lúc 00:00 VN rồi xử lý tối đa 6 user mỗi 5 phút. Scheduler catch-up sau restart và thử tối đa 4 lần cho mỗi user trong từng chu kỳ ngày.",
+          "**Nguồn tiến độ**: metadata được refresh cho mọi roster đã đăng ký, kể cả local-sync. Clear log Bible chỉ được đối chiếu cho user đã bật Bible auto-sync. Tiến độ encounter mới của local-sync vẫn cần Local Reader đang mở và gửi `encounters.db`.",
           "**`action:status`**: show state (bible on/off, local-sync on/off) + last success vs last attempt - dễ thấy khi sync đang fail liên tục.",
           "**Mode-switch**: nếu bible/local log báo clear Serca NM nhưng DB đang track Serca Hard cho char đó, log-wins - Artist wipe progress cũ rồi ghi theo mode mới.",
         ],
@@ -2218,10 +2219,11 @@ module.exports = {
         short: "[Admin] Tắt/bật + redirect channel cho từng loại thông báo",
         example: "/raid-announce type:maintenance-early action:set-channel channel:#announcements",
         notes: [
-          "10 loại thông báo Artist post vào channel, mỗi loại tắt/bật được. 5 loại còn redirect được sang channel khác (#announcements / #maintenance riêng).",
+          "11 loại thông báo Artist post vào channel, mỗi loại tắt/bật được. 6 loại còn redirect được sang channel khác (#announcements / #maintenance riêng).",
           "",
-          "**10 loại**:",
+          "**11 loại**:",
           "• `weekly-reset` - Wed 17 VN reset tuần",
+          "• `daily-roster-sync` - tổng kết sau khi chu kỳ refresh roster lúc 00:00 VN hoàn tất",
           "• `stuck-nudge` - tag user toàn char private log",
           "• `set-greeting` - chào sau /raid-channel set",
           "• `hourly-cleanup` - notice sau cleanup",
@@ -2231,12 +2233,12 @@ module.exports = {
           "• `maintenance-early` - T-3h/2h/1h trước bảo trì",
           "• `maintenance-countdown` - T-15m/10m/5m/1m countdown",
           "• `world-event-reminder` - nhắc T-5m trước Chaos Gate / Field Boss, mặc định OFF",
-          "**Channel-overridable** (5 loại): `weekly-reset`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. Còn lại bound với monitor channel vì content refer cụ thể.",
+          "**Channel-overridable** (6 loại): `weekly-reset`, `daily-roster-sync`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. Còn lại bound với monitor channel vì content refer cụ thể.",
           "**Khi nào dùng**: bật `world-event-reminder` nếu server muốn nhắc lịch world event; Chủ nhật cả hai event được gộp một tin. Hoặc redirect maintenance / event reminder sang #announcements riêng.",
           "**Admin-only**: cần `Manage Server`.",
         ],
         optionDescriptions: {
-          type: "Loại thông báo (dropdown 10 loại)",
+          type: "Loại thông báo (dropdown 11 loại)",
           action: "`show` / `on` / `off` / `set-channel` / `clear-channel`",
           channel: "Channel đích - cần khi action:set-channel",
         },
@@ -2286,7 +2288,7 @@ module.exports = {
     currentTitle: "Ngôn ngữ broadcast hiện tại",
     currentDescription: "Guild đang dùng **{flag} {label}** cho mọi thông báo public.\nMuốn đổi? Chạy lại `/raid-channel config` với `action:set-language` và kèm option `language:` (vi/jp/en). Ví dụ: `language:jp`.",
     successTitle: "Ngôn ngữ broadcast đổi rồi",
-    successDescription: "Từ giờ mọi thông báo public của guild này (welcome, weekly-reset, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) sẽ dùng **{flag} {label}** nha~ Per-user `/raid-language` không bị ảnh hưởng.",
+    successDescription: "Từ giờ mọi thông báo public của guild này (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) sẽ dùng **{flag} {label}** nha~ Per-user `/raid-language` không bị ảnh hưởng.",
     showCurrentLine: "Ngôn ngữ broadcast: **{flag} {label}**",
   },
   // Public-broadcast strings (no single per-user viewer). Resolved with
@@ -2605,6 +2607,9 @@ module.exports = {
   },
 
   announcements: {
+    "daily-roster-sync": {
+      body: "🔄 Lượt đồng bộ khi kết thúc ngày **{targetDayKey}** đã hoàn tất: **{userCount}** người dùng · **{rosterCount}** roster đã đăng ký với Artist.\n✅ **{syncedCount}** người dùng đồng bộ thành công · ℹ️ **{settledCount}** không có log khả dụng · ⚠️ **{retryExhaustedCount}** vẫn gặp lỗi sau các lần thử lại.\nRoster được làm mới cho mọi chế độ; tiến độ Local-sync dùng kết quả đã gửi từ Local Reader.",
+    },
     "weekly-reset": {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
     },

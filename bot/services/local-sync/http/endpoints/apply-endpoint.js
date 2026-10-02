@@ -15,6 +15,9 @@ const {
   readAuthenticatedJsonRequest,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
+const {
+  publishLocalSyncApplied,
+} = require("../../core/apply-events");
 
 const APPLY_MAX_BODY_BYTES = 1024;
 
@@ -48,6 +51,7 @@ function buildApplyResponse(outcome) {
  *   applyPreviewJob with the raid writers already bound
  * @param {object|null} [deps.PreviewModel] - preview job model override
  * @param {object} [deps.log]
+ * @param {(event: object) => unknown} [deps.notifyLocalSyncApplied]
  * @returns {(req: object, res: object) => Promise<void>}
  */
 function createApplyEndpoint({
@@ -55,6 +59,7 @@ function createApplyEndpoint({
   applyPreviewJob,
   PreviewModel = null,
   log = console,
+  notifyLocalSyncApplied = publishLocalSyncApplied,
 }) {
   if (!User) throw new Error("[apply-endpoint] User model required");
   if (typeof applyPreviewJob !== "function") {
@@ -113,6 +118,26 @@ function createApplyEndpoint({
       log.error("[apply-endpoint] apply failed:", err?.message || err);
       send(res, 500, { ok: false, error: "apply failed" });
       return;
+    }
+    if (outcome?.state === "applied") {
+      try {
+        const notification = notifyLocalSyncApplied({ discordId, jobId });
+        if (notification && typeof notification.then === "function") {
+          Promise.resolve(notification).catch((err) => {
+            (log.warn || log.error).call(
+              log,
+              "[apply-endpoint] applied notification failed:",
+              err?.message || err
+            );
+          });
+        }
+      } catch (err) {
+        (log.warn || log.error).call(
+          log,
+          "[apply-endpoint] applied notification failed:",
+          err?.message || err
+        );
+      }
     }
     send(res, 200, buildApplyResponse(outcome));
   };

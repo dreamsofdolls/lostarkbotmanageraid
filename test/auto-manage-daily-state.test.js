@@ -46,6 +46,7 @@ test("daily claim increments attempts per target day and owns a bounded lease", 
     getNextAutoManageDailyAttemptCount(
       {
         lastAutoManageDailyAttemptDayKey: "2026-07-12",
+        lastAutoManageDailyOutcome: AUTO_MANAGE_DAILY_OUTCOME.retryScheduled,
         autoManageDailyAttemptCount: 99,
       },
       TARGET_DAY

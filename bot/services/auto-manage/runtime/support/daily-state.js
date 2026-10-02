@@ -12,7 +12,6 @@ const {
 } = require("../../reports/utils");
 
 const AUTO_MANAGE_DAILY_LEASE_MS = 20 * 60 * 1000;
-const AUTO_MANAGE_DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_MANAGE_DAILY_RETRY_DELAYS_MS = Object.freeze([
   30 * 60 * 1000,
   60 * 60 * 1000,
@@ -40,8 +39,8 @@ const SETTLED_ERROR_KINDS = new Set([
 ]);
 
 /**
- * Build the shared scan/atomic-claim filter; opening status never postpones a
- * failed sync, and a calendar rollover never bypasses a pending retry deadline.
+ * Build the shared scan/atomic-claim filter. The finished day key opens a new
+ * run at the VN calendar boundary, while leases and retry deadlines survive it.
  * @param {{targetDayKey: string}} dailyContext
  * @param {number} [nowMs]
  * @returns {object} Mongo eligibility filter.
@@ -53,14 +52,6 @@ function buildAutoManageDailyAvailabilityFilter(
   return {
     lastAutoManageDailyFinishedDayKey: { $ne: targetDayKey },
     $and: [
-      // Calendar keys still identify attempts; elapsed time controls eligibility.
-      ...["lastAutoManageDailyFinishedAt", "lastAutoManageSyncAt"].map(field => ({
-        $or: [
-          { [field]: { $exists: false } },
-          { [field]: null },
-          { [field]: { $lte: nowMs - AUTO_MANAGE_DAILY_INTERVAL_MS } },
-        ],
-      })),
       {
         $or: [
           { autoManageDailyLeaseUntil: { $exists: false } },
@@ -79,11 +70,13 @@ function buildAutoManageDailyAvailabilityFilter(
   };
 }
 
-/** @returns {number} Attempt number, preserving unfinished retries across midnight. */
+/**
+ * @param {object} userDoc - Persisted daily attempt state.
+ * @param {string} targetDayKey - VN day whose logs are being checked.
+ * @returns {number} Attempt number, bounded independently for each target day.
+ */
 function getNextAutoManageDailyAttemptCount(userDoc, targetDayKey) {
-  const pending = [AUTO_MANAGE_DAILY_OUTCOME.retryScheduled, AUTO_MANAGE_DAILY_OUTCOME.inFlight]
-    .includes(userDoc?.lastAutoManageDailyOutcome);
-  if (!pending && userDoc?.lastAutoManageDailyAttemptDayKey !== targetDayKey) return 1;
+  if (userDoc?.lastAutoManageDailyAttemptDayKey !== targetDayKey) return 1;
   return Math.max(0, Number(userDoc?.autoManageDailyAttemptCount) || 0) + 1;
 }
 
@@ -247,7 +240,6 @@ function releaseAutoManageDailyLeaseWithoutFinishing(
 }
 
 module.exports = {
-  AUTO_MANAGE_DAILY_INTERVAL_MS,
   AUTO_MANAGE_DAILY_LEASE_MS,
   AUTO_MANAGE_DAILY_RETRY_DELAYS_MS,
   AUTO_MANAGE_DAILY_MAX_ATTEMPTS,

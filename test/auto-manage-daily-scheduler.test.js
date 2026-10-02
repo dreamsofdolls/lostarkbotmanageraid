@@ -9,7 +9,7 @@ const {
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,
   createOutcomeCounters,
-  createAutoManageDailySchedulerService,
+  createAutoManageDailySchedulerService: createSchedulerService,
   persistTransientDailyFailure,
 } = require("../bot/services/raid/schedulers/auto-manage-daily-scheduler");
 const {
@@ -23,6 +23,21 @@ const {
   buildAutoManageDailyClaimUpdate,
   resetAutoManageDailyState,
 } = require("../bot/services/auto-manage/runtime/support/daily-state");
+const { createRosterRefreshService } = require("../bot/services/roster/refresh");
+
+function createAutoManageDailySchedulerService(deps) {
+  return createSchedulerService({
+    collectAccountRefresh: async (userDoc, accountName) => {
+      const account = userDoc?.accounts?.find(entry => entry.accountName === accountName);
+      return account?.characters?.length ? {
+        accountName, fetchedChars: [], resolvedSeed: null, attempted: true,
+      } : null;
+    },
+    applyStaleAccountRefreshes: () => {},
+    notifyDailyRosterSync: async () => {},
+    ...deps,
+  });
+}
 
 test("auto-manage daily counters route each outcome bucket by lookup", () => {
   const counters = createOutcomeCounters();
@@ -68,11 +83,46 @@ function createFindChain(candidates, onQuery) {
         return this;
       },
       async lean() {
-        return candidates;
+        return Number.isInteger(this.limitArg) ? candidates.slice(0, this.limitArg) : candidates;
       },
     };
     return chain;
   };
+}
+
+function createMetadataHarness({ seedDoc, freshDoc, collectAccountRefresh, applyStaleAccountRefreshes }) {
+  const savedDocs = [];
+  freshDoc.save = async function save() {
+    savedDocs.push({
+      ...this,
+      accounts: this.accounts.map(account => ({
+        ...account,
+        characters: account.characters?.map(character => ({ ...character })),
+      })),
+    });
+  };
+  let reads = 0;
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain([{ discordId: seedDoc.discordId }]),
+      findOne: async () => reads++ === 0 ? seedDoc : freshDoc,
+      updateOne: async (_query, update) => {
+        Object.assign(freshDoc, update.$set);
+        return { modifiedCount: 1 };
+      },
+    },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {},
+    gatherAutoManageLogsForUserDoc: async () => assert.fail("metadata-only mode must not gather clear logs"),
+    applyAutoManageCollected: () => assert.fail("metadata-only mode must not apply raid progress"),
+    collectAccountRefresh,
+    applyStaleAccountRefreshes,
+    processEnv: {},
+  });
+  return { service, savedDocs };
 }
 
 for (const gatherFails of [false, true]) {
@@ -109,7 +159,58 @@ for (const gatherFails of [false, true]) {
   });
 }
 
-test("auto-manage daily scheduler selects unfinished users without a status-open gate", () => {
+test("a metadata worker cannot persist after its lease is superseded", async () => {
+  const now = new Date("2026-09-12T12:00:00Z");
+  const day = getAutoManageDailyContext(now).targetDayKey;
+  let nextToken;
+  let saves = 0;
+  let releases = 0;
+  let applyCalls = 0;
+  const doc = {
+    discordId: "metadata-owner",
+    autoManageEnabled: false,
+    accounts: [{
+      accountName: "Main",
+      lastRefreshedAt: 0,
+      characters: [{ name: "Qiylyn", class: "Aeromancer", itemLevel: 1760, assignedRaids: { keep: true } }],
+    }],
+    save: async () => { saves += 1; },
+  };
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain([{ discordId: doc.discordId }]),
+      findOne: async () => doc,
+      updateOne: async (_query, update) => { Object.assign(doc, update.$set); return { modifiedCount: 1 }; },
+    },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => { releases += 1; },
+    gatherAutoManageLogsForUserDoc: async () => assert.fail("auto-manage is disabled"),
+    applyAutoManageCollected: () => assert.fail("a superseded worker must not apply raid progress"),
+    collectAccountRefresh: async () => {
+      resetAutoManageDailyState(doc);
+      const next = buildAutoManageDailyClaimUpdate({ targetDayKey: day, attemptCount: 1, nowMs: now.getTime() });
+      nextToken = next.$set.autoManageDailyLeaseToken;
+      Object.assign(doc, next.$set);
+      return { accountName: "Main", fetchedChars: [], resolvedSeed: null, attempted: true };
+    },
+    applyStaleAccountRefreshes: () => { applyCalls += 1; },
+    processEnv: {},
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  assert.equal(saves, 0);
+  assert.equal(applyCalls, 0);
+  assert.equal(releases, 1);
+  assert.equal(doc.autoManageDailyLeaseToken, nextToken);
+  assert.equal(doc.lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.inFlight);
+  assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { keep: true });
+});
+
+test("auto-manage daily scheduler selects every unfinished registered roster", () => {
   const dailyContext = {
     currentDayKey: "2026-07-14",
     targetDayKey: "2026-07-13",
@@ -117,8 +218,8 @@ test("auto-manage daily scheduler selects unfinished users without a status-open
   const nowMs = Date.parse("2026-07-13T17:05:00.000Z");
   const query = buildAutoManageDailyCandidateQuery(dailyContext, nowMs);
 
-  assert.equal(query.autoManageEnabled, true);
-  assert.deepEqual(query.localSyncEnabled, { $ne: true });
+  assert.equal(Object.hasOwn(query, "autoManageEnabled"), false);
+  assert.equal(Object.hasOwn(query, "localSyncEnabled"), false);
   assert.deepEqual(query["accounts.0"], { $exists: true });
   assert.deepEqual(query.lastAutoManageDailyFinishedDayKey, { $ne: "2026-07-13" });
   assert.equal(JSON.stringify(query).includes("lastRaidStatusOpenedDayKey"), false);
@@ -143,6 +244,57 @@ test("auto-manage daily context rolls over at midnight Asia/Ho_Chi_Minh", () => 
       targetDayKey: "2026-07-13",
     }
   );
+});
+
+test("a 23:59 tick refreshes yesterday's roster but a same-day retry skips fresh metadata", async () => {
+  const now = new Date("2026-07-13T16:59:00.000Z");
+  const dailyContext = getAutoManageDailyContext(now);
+  const boundary = Date.parse(`${dailyContext.currentDayKey}T00:00:00+07:00`);
+  for (const scenario of [
+    { name: "old", lastRefreshedAt: boundary - 1, expectedCalls: 1 },
+    { name: "same-day retry", lastRefreshedAt: boundary, expectedCalls: 0, retry: true },
+  ]) {
+    const account = {
+      accountName: "Main",
+      lastRefreshedAt: scenario.lastRefreshedAt,
+      characters: [{ name: "Qiylyn", class: "Aeromancer", itemLevel: 1760 }],
+    };
+    const retryState = scenario.retry ? {
+      lastAutoManageDailyAttemptDayKey: dailyContext.targetDayKey,
+      lastAutoManageDailyOutcome: AUTO_MANAGE_DAILY_OUTCOME.retryScheduled,
+      autoManageDailyAttemptCount: 1,
+      autoManageDailyNextAttemptAt: now.getTime() - 1,
+    } : {};
+    const seedDoc = {
+      discordId: `boundary-${scenario.name}`,
+      autoManageEnabled: false,
+      accounts: [JSON.parse(JSON.stringify(account))],
+      ...retryState,
+    };
+    const freshDoc = {
+      discordId: seedDoc.discordId,
+      autoManageEnabled: false,
+      accounts: [JSON.parse(JSON.stringify(account))],
+    };
+    let calls = 0;
+    const { service, savedDocs } = createMetadataHarness({
+      seedDoc,
+      freshDoc,
+      collectAccountRefresh: async (_doc, accountName) => {
+        calls += 1;
+        return { accountName, fetchedChars: [{ charName: "Qiylyn", className: "Aeromancer", itemLevel: 1760 }],
+          resolvedSeed: null, attempted: true };
+      },
+      applyStaleAccountRefreshes: (doc, collected) => {
+        if (collected.length) doc.accounts[0].lastRefreshedAt = Date.now();
+      },
+    });
+
+    await service.runAutoManageDailyTick({}, now);
+
+    assert.equal(calls, scenario.expectedCalls, scenario.name);
+    assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, dailyContext.targetDayKey, scenario.name);
+  }
 });
 
 test("raid-status activity stamp writes the VN day key idempotently", async () => {
@@ -204,6 +356,28 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
   assert.equal(findCalls, 0);
 });
 
+test("auto-manage daily scheduler notifies after an empty tick", async () => {
+  const calls = [];
+  const client = { id: "client" };
+  const now = new Date("2026-07-13T17:05:00.000Z");
+  const service = createAutoManageDailySchedulerService({
+    User: { find: createFindChain([]) },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => assert.fail("an empty tick has no candidate"),
+    releaseAutoManageSyncSlot: () => {},
+    gatherAutoManageLogsForUserDoc: async () => assert.fail("an empty tick cannot gather"),
+    applyAutoManageCollected: () => assert.fail("an empty tick cannot apply"),
+    notifyDailyRosterSync: async (...args) => calls.push(args),
+    processEnv: {},
+  });
+
+  await service.runAutoManageDailyTick(client, now);
+
+  assert.deepEqual(calls, [[client, getAutoManageDailyContext(now)]]);
+});
+
 test("auto-manage daily scheduler syncs one absent user and releases the slot", async () => {
   const logs = [];
   const originalLog = console.log;
@@ -262,7 +436,8 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
       new Date("2026-07-13T17:05:00.000Z")
     );
 
-    assert.equal(querySeen.autoManageEnabled, true);
+    assert.equal(Object.hasOwn(querySeen, "autoManageEnabled"), false);
+    assert.equal(Object.hasOwn(querySeen, "localSyncEnabled"), false);
     assert.equal(
       JSON.stringify(querySeen).includes("lastRaidStatusOpenedDayKey"),
       false
@@ -278,6 +453,7 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
       Date.parse("2026-07-13T17:05:00.000Z") + AUTO_MANAGE_DAILY_LEASE_MS
     );
     assert.equal(savedDocs.length, 1);
+    assert.equal(savedDocs[0].lastDailyRosterAttemptAt, Date.parse("2026-07-13T17:05:00.000Z"));
     assert.equal(typeof savedDocs[0].lastAutoManageAttemptAt, "number");
     assert.equal(typeof savedDocs[0].lastAutoManageSyncAt, "number");
     assert.equal(
@@ -296,7 +472,258 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
   }
 });
 
-test("auto-manage daily scheduler settles configuration changes made after gather", async () => {
+test("Bible progress applies under saved names before metadata canonicalizes the roster", async () => {
+  const now = new Date("2026-07-13T17:05:00.000Z");
+  const oldAccountName = "Legacy roster";
+  const oldCharacterName = "qiylyn";
+  const seedDoc = {
+    discordId: "rename-owner",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: oldAccountName,
+      lastRefreshedAt: 0,
+      characters: [{ name: oldCharacterName, class: "Aeromancer", itemLevel: 1760, assignedRaids: {} }],
+    }],
+  };
+  const freshDoc = JSON.parse(JSON.stringify(seedDoc));
+  const savedDocs = [];
+  freshDoc.save = async function save() {
+    savedDocs.push(JSON.parse(JSON.stringify(this)));
+  };
+  let reads = 0;
+  const gathered = { accountName: oldAccountName, characterName: oldCharacterName, cleared: ["G1"] };
+  const refresh = {
+    accountName: oldAccountName,
+    fetchedChars: [{ charName: "Qiylyn", className: "Aeromancer", itemLevel: 1770 }],
+    resolvedSeed: "Qiylyn",
+    attempted: true,
+  };
+  const order = [];
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain([{ discordId: seedDoc.discordId }]),
+      findOne: async () => reads++ === 0 ? seedDoc : freshDoc,
+      updateOne: async (_query, update) => { Object.assign(freshDoc, update.$set); return { modifiedCount: 1 }; },
+    },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {},
+    collectAccountRefresh: async () => refresh,
+    gatherAutoManageLogsForUserDoc: async () => gathered,
+    applyAutoManageCollected: (doc, _weekResetStart, collected) => {
+      order.push("progress");
+      assert.equal(doc.accounts[0].accountName, collected.accountName);
+      assert.equal(doc.accounts[0].characters[0].name, collected.characterName);
+      doc.accounts[0].characters[0].assignedRaids.kazeros = { G1: true };
+      return { perChar: [{ charName: collected.characterName, error: null, applied: collected.cleared }] };
+    },
+    applyStaleAccountRefreshes: (doc, collected) => {
+      order.push("metadata");
+      assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { kazeros: { G1: true } });
+      assert.deepEqual(collected, [refresh]);
+      doc.accounts[0].accountName = refresh.resolvedSeed;
+      doc.accounts[0].characters[0].name = refresh.fetchedChars[0].charName;
+      doc.accounts[0].characters[0].itemLevel = refresh.fetchedChars[0].itemLevel;
+      doc.accounts[0].lastRefreshedAt = Date.now();
+    },
+    processEnv: {},
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  assert.deepEqual(order, ["progress", "metadata"]);
+  assert.equal(savedDocs.length, 1);
+  assert.deepEqual({
+    accountName: savedDocs[0].accounts[0].accountName,
+    characterName: savedDocs[0].accounts[0].characters[0].name,
+    itemLevel: savedDocs[0].accounts[0].characters[0].itemLevel,
+    assignedRaids: savedDocs[0].accounts[0].characters[0].assignedRaids,
+  }, {
+    accountName: "Qiylyn",
+    characterName: "Qiylyn",
+    itemLevel: 1770,
+    assignedRaids: { kazeros: { G1: true } },
+  });
+});
+
+test("a fresh manual roster refresh wins over metadata collected before Bible gathering", async () => {
+  const now = new Date("2026-07-13T17:05:00.000Z");
+  const manualRefreshAt = Date.parse("2026-07-13T17:02:00.000Z");
+  const seedDoc = {
+    discordId: "concurrent-manual-refresh",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: "Main",
+      lastRefreshedAt: 0,
+      characters: [{ name: "Qiylyn", class: "Seed class", itemLevel: 1700, assignedRaids: {} }],
+    }],
+  };
+  const freshDoc = {
+    discordId: seedDoc.discordId,
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: "Main",
+      lastRefreshedAt: manualRefreshAt,
+      characters: [{ name: "Qiylyn", class: "Manual class", itemLevel: 1800, assignedRaids: {} }],
+    }],
+  };
+  const staleRefresh = {
+    accountName: "Main",
+    fetchedChars: [{ charName: "Qiylyn", className: "Collected class", itemLevel: 1750 }],
+    resolvedSeed: null,
+    attempted: true,
+  };
+  const normalizeName = value => String(value || "").trim().toLowerCase();
+  const rosterRefresh = createRosterRefreshService({
+    normalizeName,
+    foldName: normalizeName,
+    getCharacterName: character => character.name,
+    formatNextCooldownRemaining: () => "",
+    buildFetchedRosterIndexes: fetched => fetched,
+    findFetchedRosterMatchForCharacter: (character, fetched) => {
+      const match = fetched.find(entry => normalizeName(entry.charName) === normalizeName(character.name));
+      return match ? { match } : null;
+    },
+    fetchRosterCharacters: async () => assert.fail("the collected refresh is injected"),
+  });
+  const savedDocs = [];
+  freshDoc.save = async function save() {
+    savedDocs.push(JSON.parse(JSON.stringify(this)));
+  };
+  const events = [];
+  let reads = 0;
+  let refreshesApplied = null;
+  const gathered = { accountName: "Main", characterName: "Qiylyn", cleared: ["G1"] };
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain([{ discordId: seedDoc.discordId }]),
+      findOne: async () => reads++ === 0 ? seedDoc : freshDoc,
+      updateOne: async (_query, update) => { Object.assign(freshDoc, update.$set); return { modifiedCount: 1 }; },
+    },
+    saveWithRetry: operation => operation(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {},
+    collectAccountRefresh: async () => { events.push("collect"); return staleRefresh; },
+    gatherAutoManageLogsForUserDoc: async () => { events.push("gather"); return gathered; },
+    applyAutoManageCollected: (doc, _weekResetStart, collected) => {
+      events.push("progress");
+      assert.equal(collected, gathered);
+      doc.accounts[0].characters[0].assignedRaids.kazeros = { G1: true };
+      return { perChar: [{ charName: "Qiylyn", error: null, applied: ["G1"] }] };
+    },
+    applyStaleAccountRefreshes: (doc, collected) => {
+      events.push("metadata");
+      refreshesApplied = collected;
+      return rosterRefresh.applyStaleAccountRefreshes(doc, collected);
+    },
+    processEnv: {},
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  assert.deepEqual(refreshesApplied, []);
+  assert.deepEqual(events, ["collect", "gather", "progress", "metadata"]);
+  assert.equal(savedDocs.length, 1);
+  assert.deepEqual(savedDocs[0].accounts[0], {
+    accountName: "Main",
+    lastRefreshedAt: manualRefreshAt,
+    characters: [{
+      name: "Qiylyn",
+      class: "Manual class",
+      itemLevel: 1800,
+      assignedRaids: { kazeros: { G1: true } },
+    }],
+  });
+  assert.equal(savedDocs[0].lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.success);
+});
+
+test("metadata-only modes refresh multiple accounts sequentially without changing raid progress", async () => {
+  const now = new Date("2026-07-13T17:05:00.000Z");
+  for (const mode of [
+    { name: "auto-manage off", autoManageEnabled: false, localSyncEnabled: false },
+    { name: "local sync on", autoManageEnabled: true, localSyncEnabled: true },
+  ]) {
+    const progress = { kazeros: { gates: [true, false] } };
+    const accounts = ["Main", "Alt"].map((accountName, index) => ({
+      accountName,
+      lastRefreshedAt: 0,
+      characters: [{
+        name: `Char${index}`,
+        class: "Old class",
+        itemLevel: 1700 + index,
+        assignedRaids: JSON.parse(JSON.stringify(progress)),
+      }],
+    }));
+    const cloneAccounts = () => JSON.parse(JSON.stringify(accounts));
+    const settings = { autoManageEnabled: mode.autoManageEnabled, localSyncEnabled: mode.localSyncEnabled };
+    const seedDoc = { discordId: `owner-${mode.name.replace(/\s/g, "-")}`, ...settings, accounts: cloneAccounts() };
+    const freshDoc = {
+      discordId: seedDoc.discordId,
+      ...settings,
+      accounts: cloneAccounts(),
+      lastAutoManageAttemptAt: 111,
+      lastAutoManageSyncAt: 222,
+    };
+    const events = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const { service, savedDocs } = createMetadataHarness({
+      seedDoc,
+      freshDoc,
+      collectAccountRefresh: async (_doc, accountName) => {
+        events.push(`start:${accountName}`);
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(resolve => setImmediate(resolve));
+        inFlight -= 1;
+        events.push(`end:${accountName}`);
+        return {
+          accountName,
+          fetchedChars: [{
+            charName: accountName === "Main" ? "Char0" : "Char1",
+            className: "Refreshed class",
+            itemLevel: accountName === "Main" ? 1800 : 1801,
+          }],
+          resolvedSeed: null,
+          attempted: true,
+        };
+      },
+      applyStaleAccountRefreshes: (doc, collected) => {
+        events.push("apply");
+        for (const refresh of collected) {
+          const account = doc.accounts.find(entry => entry.accountName === refresh.accountName);
+          account.characters[0].class = refresh.fetchedChars[0].className;
+          account.characters[0].itemLevel = refresh.fetchedChars[0].itemLevel;
+          account.lastRefreshedAt = Date.now();
+        }
+      },
+    });
+
+    await service.runAutoManageDailyTick({}, now);
+
+    assert.equal(maxInFlight, 1, mode.name);
+    assert.deepEqual(events, ["start:Main", "end:Main", "start:Alt", "end:Alt", "apply"], mode.name);
+    assert.equal(savedDocs.length, 1, mode.name);
+    assert.equal(savedDocs[0].lastDailyRosterAttemptAt, now.getTime(), mode.name);
+    assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, "2026-07-13", mode.name);
+    assert.equal(savedDocs[0].lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.success, mode.name);
+    assert.equal(savedDocs[0].lastAutoManageAttemptAt, 111, mode.name);
+    assert.equal(savedDocs[0].lastAutoManageSyncAt, 222, mode.name);
+    assert.deepEqual(savedDocs[0].accounts.map(account => account.characters[0].class),
+      ["Refreshed class", "Refreshed class"], mode.name);
+    assert.deepEqual(savedDocs[0].accounts.map(account => account.characters[0].assignedRaids),
+      [progress, progress], mode.name);
+  }
+});
+
+test("auto-manage daily scheduler finishes metadata-only configuration changes after collection", async () => {
   const originalLog = console.log;
   console.log = () => {};
   try {
@@ -306,21 +733,25 @@ test("auto-manage daily scheduler settles configuration changes made after gathe
       name,
       docOverrides,
       expectedOutcome,
+      expectedFinished,
     } of [
       {
         name: "auto-manage disabled",
         docOverrides: { autoManageEnabled: false },
-        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.noActionable,
+        expectedFinished: true,
       },
       {
         name: "local sync enabled",
         docOverrides: { localSyncEnabled: true },
-        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.noActionable,
+        expectedFinished: true,
       },
       {
         name: "roster removed",
         docOverrides: { accounts: [] },
         expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.noRoster,
+        expectedFinished: false,
       },
     ]) {
       const savedDocs = [];
@@ -364,11 +795,14 @@ test("auto-manage daily scheduler settles configuration changes made after gathe
       await service.runAutoManageDailyTick({}, now);
 
       assert.equal(savedDocs.length, 1, name);
+      assert.equal(savedDocs[0].lastDailyRosterAttemptAt, nowMs, name);
       assert.equal(savedDocs[0].lastAutoManageAttemptAt, nowMs, name);
+      assert.equal(savedDocs[0].lastAutoManageSyncAt, undefined, name);
       assert.equal(savedDocs[0].lastAutoManageDailyOutcome, expectedOutcome, name);
       assert.equal(savedDocs[0].autoManageDailyLeaseDayKey, "", name);
       assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null, name);
-      assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined, name);
+      assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey,
+        expectedFinished ? "2026-07-13" : undefined, name);
     }
   } finally {
     console.log = originalLog;
@@ -468,6 +902,36 @@ test("auto-manage daily scheduler retries a partial transient report without sta
   assert.equal(savedDocs[0].lastAutoManageSyncAt, undefined);
   assert.equal(savedDocs[0].autoManageDailyLeaseDayKey, "");
   assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null);
+});
+
+test("failed account metadata schedules a bounded retry even when auto-manage is off", async () => {
+  const now = new Date("2026-07-13T17:05:00.000Z");
+  const account = {
+    accountName: "Main",
+    lastRefreshedAt: 0,
+    characters: [{ name: "Qiylyn", class: "Aeromancer", itemLevel: 1760, assignedRaids: { kazeros: { G1: true } } }],
+  };
+  const seedDoc = { discordId: "metadata-failure", autoManageEnabled: false, accounts: [JSON.parse(JSON.stringify(account))] };
+  const freshDoc = { discordId: seedDoc.discordId, autoManageEnabled: false, accounts: [JSON.parse(JSON.stringify(account))] };
+  let collectCalls = 0;
+  const { service, savedDocs } = createMetadataHarness({
+    seedDoc,
+    freshDoc,
+    collectAccountRefresh: async () => { collectCalls += 1; return null; },
+    applyStaleAccountRefreshes: () => {},
+  });
+
+  await service.runAutoManageDailyTick({}, now);
+
+  assert.equal(collectCalls, 1);
+  assert.equal(savedDocs.length, 1);
+  assert.equal(savedDocs[0].lastAutoManageDailyOutcome, AUTO_MANAGE_DAILY_OUTCOME.retryScheduled);
+  assert.equal(savedDocs[0].autoManageDailyNextAttemptAt,
+    now.getTime() + AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]);
+  assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined);
+  assert.equal(savedDocs[0].lastDailyRosterAttemptAt, now.getTime());
+  assert.equal(savedDocs[0].lastAutoManageAttemptAt, undefined);
+  assert.deepEqual(savedDocs[0].accounts[0].characters[0].assignedRaids, { kazeros: { G1: true } });
 });
 
 test("auto-manage daily scheduler settles all-private reports silently", async () => {
@@ -589,6 +1053,9 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       Date.parse("2026-07-13T17:05:00.000Z") +
         AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]
     );
+    assert.equal(savedDocs[0].lastDailyRosterAttemptAt, Date.parse("2026-07-13T17:05:00.000Z"));
+    assert.equal(savedDocs[0].lastAutoManageAttemptAt, Date.parse("2026-07-13T17:05:00.000Z"));
+    assert.equal(savedDocs[0].lastAutoManageSyncAt, undefined);
     assert.match(warnings.join("\n"), /upstream unavailable/);
     assert.deepEqual(events, ["persist", "release"]);
   } finally {
@@ -596,25 +1063,29 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
   }
 });
 
-test("transient failure persistence respects configuration changes made during a claim", async () => {
+test("transient failure persistence keeps metadata retries enabled across configuration changes", async () => {
   for (const {
     name,
     docOverrides,
+    expectedBucket,
     expectedOutcome,
   } of [
     {
       name: "auto-manage disabled",
       docOverrides: { autoManageEnabled: false },
-      expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+      expectedBucket: "retry-scheduled",
+      expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.retryScheduled,
     },
     {
       name: "local sync enabled",
       docOverrides: { localSyncEnabled: true },
-      expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+      expectedBucket: "retry-scheduled",
+      expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.retryScheduled,
     },
     {
       name: "roster removed",
       docOverrides: { accounts: [] },
+      expectedBucket: "skipped",
       expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.noRoster,
     },
   ]) {
@@ -644,22 +1115,30 @@ test("transient failure persistence respects configuration changes made during a
       nowMs: Date.parse("2026-07-13T17:05:00.000Z"),
     });
 
-    assert.equal(transition.bucket, "skipped", name);
+    assert.equal(transition.bucket, expectedBucket, name);
     assert.equal(transition.outcome, expectedOutcome, name);
     assert.equal(savedDocs.length, 1, name);
     assert.equal(savedDocs[0].lastAutoManageDailyOutcome, expectedOutcome, name);
-    assert.equal(savedDocs[0].autoManageDailyNextAttemptAt, null, name);
+    assert.equal(savedDocs[0].autoManageDailyNextAttemptAt,
+      expectedBucket === "retry-scheduled"
+        ? Date.parse("2026-07-13T17:05:00.000Z") + AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]
+        : null, name);
+    assert.equal(savedDocs[0].lastDailyRosterAttemptAt, Date.parse("2026-07-13T17:05:00.000Z"), name);
     assert.equal(savedDocs[0].autoManageDailyLeaseDayKey, "", name);
     assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null, name);
     assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined, name);
   }
 });
 
-test("auto-manage daily scheduler exposes the batch size used by the query chain", () => {
+test("auto-manage daily scheduler processes candidates sequentially in batches of six", async () => {
   let chain = null;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const seen = [];
+  const candidates = Array.from({ length: 8 }, (_, index) => ({ discordId: `owner-${index}` }));
   const User = {
     find: (query) => {
-      chain = createFindChain([], () => {})(query);
+      chain = createFindChain(candidates, () => {})(query);
       return chain;
     },
   };
@@ -668,17 +1147,26 @@ test("auto-manage daily scheduler exposes the batch size used by the query chain
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: false }),
+    acquireAutoManageSyncSlot: async (discordId) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setImmediate(resolve));
+      seen.push(discordId);
+      inFlight -= 1;
+      return { acquired: false };
+    },
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
     processEnv: {},
   });
 
-  return service.runAutoManageDailyTick({}).then(() => {
-    assert.equal(chain.limitArg, AUTO_MANAGE_DAILY_BATCH_SIZE);
-    assert.equal(AUTO_MANAGE_DAILY_BATCH_SIZE, 6);
-    assert.deepEqual(chain.sortArg, { lastAutoManageAttemptAt: 1 });
-    assert.equal(chain.selectArg, "discordId");
-  });
+  await service.runAutoManageDailyTick({});
+
+  assert.equal(chain.limitArg, AUTO_MANAGE_DAILY_BATCH_SIZE);
+  assert.equal(AUTO_MANAGE_DAILY_BATCH_SIZE, 6);
+  assert.deepEqual(chain.sortArg, { lastDailyRosterAttemptAt: 1 });
+  assert.equal(chain.selectArg, "discordId");
+  assert.equal(maxInFlight, 1);
+  assert.deepEqual(seen, candidates.slice(0, 6).map(candidate => candidate.discordId));
 });

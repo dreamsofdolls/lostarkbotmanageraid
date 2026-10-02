@@ -162,6 +162,17 @@ function createSchedulingHelpers({
   const cleanupScheduleDisabled = ({ guildCfg }) => guildCfg?.autoCleanupEnabled !== true;
 
   const announcementScheduleRules = Object.freeze({
+    "daily-roster-sync": {
+      eligibleBoundary: (now) => nextDailyUtcBoundaryMs(now, 17),
+      schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(
+        schedulerState.autoManageStartedAtMs,
+        resolveAutoManageDailyTickMs(),
+        now
+      ),
+      disabledWhen: ({ autoManageDisabled }) => autoManageDisabled,
+      disabledText: "Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)",
+      note: "Roster refresh starts at 00:00 VN. The notice waits for every registered user to finish; five-minute batches, retries and restart catch-up can delay it.",
+    },
     "weekly-reset": {
       eligibleBoundary: nextWeeklyResetBoundaryMs,
       schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(

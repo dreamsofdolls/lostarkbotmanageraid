@@ -88,6 +88,8 @@ const guildConfigSchema = new mongoose.Schema(
     // Value is `world-event:<spawn ISO>` and is shared by both presets so
     // their overlapping Sunday slot produces one combined announcement.
     lastWorldEventReminderKey: { type: String, default: null },
+    // Completed daily roster refresh notice, shared across bot replicas.
+    lastDailyRosterSyncKey: { type: String, default: null },
     // Per-announcement-type configuration. Each nested subdocument has:
     //   - enabled: whether the announcement fires at all.
     //   - channelId: override destination (null = fallback to raidChannelId).
@@ -100,6 +102,7 @@ const guildConfigSchema = new mongoose.Schema(
       type: new mongoose.Schema(
         {
           weeklyReset: createAnnouncementSetting({ channelOverridable: true }),
+          dailyRosterSync: createAnnouncementSetting({ channelOverridable: true }),
           stuckPrivateLogNudge: createAnnouncementSetting({ channelOverridable: true }),
           setGreeting: createAnnouncementSetting(),
           hourlyCleanupNotice: createAnnouncementSetting(),

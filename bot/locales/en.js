@@ -1463,9 +1463,9 @@ module.exports = {
     dm: {
       enable: {
         title: "Manager enabled auto-sync on your behalf",
-        description: "Heya - Raid Manager <@{managerId}> just enabled `/raid-auto-manage` for you. From now on Artist will background-sync your raid progress about every 30 minutes when your turn comes up.",
+        description: "Heya - Raid Manager <@{managerId}> just enabled `/raid-auto-manage` for you. Artist will now reconcile your public Bible clear logs in the daily roster cycle that starts at 00:00 VN.",
         statusLine: "**New state:** ON",
-        firstSyncLine: "**First sync:** Soon, in one of the upcoming scheduler ticks (runs every ~30 minutes, 6 users per tick)",
+        firstSyncLine: "**Scheduled sync:** The daily cycle opens at 00:00 VN, drains up to 6 users every 5 minutes, catches up after restarts, and allows at most 4 attempts per user in that cycle.",
         quickOffLine: "**Quick off:** Click the button below or run `/raid-auto-manage action:off`",
         accountFieldName: "📁 {accountName} ({count} char)",
         charLine: "{icon} {name} · {iLvl} · {statusText}",
@@ -1479,7 +1479,7 @@ module.exports = {
       },
       disable: {
         title: "Manager disabled auto-sync on your behalf",
-        description: "Heya - Raid Manager <@{managerId}> just disabled `/raid-auto-manage` for you. From now on Artist won't auto-sync your raid progress.",
+        description: "Heya - Raid Manager <@{managerId}> just disabled `/raid-auto-manage` for you. Artist will stop pulling public Bible clear logs; the daily 00:00 VN roster-metadata refresh still covers your registered roster.",
         statusLine: "**New state:** OFF",
         manualSyncLine: "**Manual sync:** Use `/raid-set` or post clears in your server's monitor channel",
         quickOnLine: "**Quick re-enable:** Click the button below or run `/raid-auto-manage action:on`",
@@ -1498,7 +1498,7 @@ module.exports = {
       localLockedTitle: "User is on local-sync mode",
       localLockedDescription: "<@{target}> is opted into **local-sync mode** - only one of bible auto-sync or local-sync can be active at a time, so Artist can't enable bible auto-sync on their behalf. They have to run `/raid-auto-manage action:local-off` first to switch.",
       successTitle: "Artist enabled auto-sync on their behalf",
-      successLineIntro: "Flag flip succeeded. This user is in the priority batch (`lastAutoManageAttemptAt = null`); the scheduler will pick them up soon (every ~30 minutes, 6 users per tick).",
+      successLineIntro: "Flag flip succeeded. This user's public Bible clear logs are now eligible for the daily roster cycle that opens at 00:00 VN and drains up to 6 users every 5 minutes.",
       successLineTarget: "**Enabled for:** <@{target}>",
       successLineState: "**New state:** ON",
       successLineDmSent: "**DM notice:** Sent",
@@ -1534,7 +1534,7 @@ module.exports = {
       disabledTitle: {
         variants: ["Auto-sync turned off", "Auto-sync is resting now~", "Right, auto-sync off~"],
       },
-      disabledDescription: "Artist disabled `/raid-auto-manage` for you. From now on Artist won't auto-sync - update progress manually with `/raid-set` or post clears in your server's monitor channel. To re-enable, run `/raid-auto-manage action:on`.",
+      disabledDescription: "Artist disabled `/raid-auto-manage` for you, so public Bible clear logs will no longer be pulled. The daily 00:00 VN roster-metadata refresh still runs; update raid progress with `/raid-set` or your server's monitor channel. To re-enable Bible auto-sync, run `/raid-auto-manage action:on`.",
       alreadyOffTitle: "Auto-sync was already off",
       alreadyOffDescription: "You disabled `/raid-auto-manage` previously (via slash command or by clicking this button before). Nothing to change.",
     },
@@ -1550,7 +1550,7 @@ module.exports = {
       flippedTitle: {
         variants: ["Auto-sync re-enabled", "Auto-sync is running again~", "Right, auto-sync back on~"],
       },
-      flippedDescription: "Artist enabled `/raid-auto-manage` for you. From now on Artist will background-sync raid progress about every 30 minutes when your turn comes up. To turn it off, run `/raid-auto-manage action:off`.",
+      flippedDescription: "Artist enabled `/raid-auto-manage` for you. Your public Bible clear logs will now join the daily roster cycle that starts at 00:00 VN. To turn it off, run `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync was already on",
       alreadyOnDescription: "You enabled `/raid-auto-manage` previously (via slash command or by clicking this button before). Nothing to change.",
       localLockedTitle: "You're on local-sync mode",
@@ -1891,7 +1891,7 @@ module.exports = {
           "",
           "**1️⃣ Register a roster**: type `/raid-add-roster name:<any-char-from-the-roster>`. Artist fetches your full character list from lostark.bible and opens a picker so you tick the chars you want to track, then click **Save**.",
           "**2️⃣ View progress**: type `/raid-status` any time to see which char cleared which raid this week.",
-          "**3️⃣ Update progress**: 2 ways - (a) `/raid-set` for manual edits, or (b) `/raid-auto-manage action:on` to let Artist background-sync from lostark.bible about every 30 minutes when your turn comes up.",
+          "**3️⃣ Update progress**: 2 ways - (a) `/raid-set` for manual edits, or (b) `/raid-auto-manage action:on` to let Artist reconcile public clear logs from lostark.bible in the daily roster cycle that starts at 00:00 VN.",
           "",
           "**Bonus**: post text like `<raid> <difficulty> <character>` in the raid channel (admin sets via `/raid-channel`) - Artist auto-parses + updates + DMs you a confirmation. Example: `Serca Hard Clauseduk`.",
           "",
@@ -2168,7 +2168,7 @@ module.exports = {
         notes: [
           "Two parallel modes: **bible** (`action:on`, requires Public Log) and **local-sync** (`action:local-on`, Local Reader reads encounters.db on-device and syncs right on the web). Only one is active at a time; a DB-side mutex enforces it.",
           "",
-          "**When to use bible mode**: too lazy to post text and OK with enabling Public Log on lostark.bible. Enable once, the bot pulls every 30 min.",
+          "**When to use bible mode**: too lazy to post text and OK with enabling Public Log on lostark.bible. Enable once, and public Bible clear logs join the daily roster cycle that starts at 00:00 VN.",
           "**When to use local-sync mode**: keep logs private. Local Reader runs SQLite in your browser, remembers the file handle, and sends only the changes; the source file never leaves your machine.",
           "**Bible requirement**: enable **Show on Profile** at <https://lostark.bible/me/logs> for every char you want synced. Private-log chars are unreachable.",
           "**Local-sync requirement**: Chrome / Edge / Opera GX (needs File System Access API). The `encounters.db` file lives at `%localappdata%\\LOA Logs\\`.",
@@ -2176,7 +2176,8 @@ module.exports = {
           "**`action:on` flow**: probes the roster first, and if any char is private-log → warning embed with confirm/cancel buttons. Confirm kicks off an immediate sync.",
           "**`action:local-on` flow**: mints a signed-token URL (30-minute TTL) in a private reply. Open Local Reader → drop the file (first time only) → press Sync on the page and Artist writes it right away. When the link expires, `/raid-status` → `🗃️ Local Sync` gives you a new one.",
           "**`action:reset` flow**: 2-step Danger confirm. Wipes your raid progress + sync state (assignedRaids, bibleSerial, bibleCid, lastLocalSyncToken, ...) - like resetting your gates back to zero. Use when you want a clean re-sync after switching modes or fixing data.",
-          "**Background tick (bible only)**: opted-in users without a sync attempt in ~30 minutes get auto-pulled by a 30-min scheduler (batch of 6 users/tick, fair rotation).",
+          "**Daily roster refresh (all registered rosters)**: a new cycle opens at 00:00 VN, then processes up to 6 users every 5 minutes. It catches up after restarts and allows at most 4 attempts per user in each daily cycle.",
+          "**Progress sources**: roster metadata refresh covers every registered roster, including local-sync. Bible clear logs are reconciled only for users who enabled Bible auto-sync. New local-sync encounter progress still requires Local Reader to be open and submitting `encounters.db`.",
           "**`action:status`**: shows state (bible on/off, local-sync on/off) + last success vs last attempt - easy to spot when sync is failing repeatedly.",
           "**Mode-switch**: if a bible/local log reports a Serca NM clear but the DB tracks Serca Hard for that char, the log wins - Artist wipes the old progress and rewrites at the new mode.",
         ],
@@ -2195,10 +2196,11 @@ module.exports = {
         short: "[Admin] Configure Artist's channel announcements",
         example: "/raid-announce type:maintenance-early action:set-channel channel:#announcements",
         notes: [
-          "10 announcement types Artist posts to channels, each with an on/off toggle. 5 types support channel override (#announcements / dedicated #maintenance, etc).",
+          "11 announcement types Artist posts to channels, each with an on/off toggle. 6 types support channel override (#announcements / dedicated #maintenance, etc).",
           "",
-          "**10 types**:",
+          "**11 types**:",
           "• `weekly-reset` - Wed 10:00 UTC weekly reset",
+          "• `daily-roster-sync` - aggregate completion summary for the 00:00 VN daily roster cycle",
           "• `stuck-nudge` - nudges users with all-private-log rosters",
           "• `set-greeting` - greeting after /raid-channel set",
           "• `hourly-cleanup` - cleanup notice",
@@ -2208,12 +2210,12 @@ module.exports = {
           "• `maintenance-early` - T-3h/2h/1h pre-maintenance reminder",
           "• `maintenance-countdown` - T-15m/10m/5m/1m countdown",
           "• `world-event-reminder` - T-5m reminder for Chaos Gate / Field Boss, OFF by default",
-          "**Channel-overridable** (5 types): `weekly-reset`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. The rest are bound to the monitor channel because their content references it specifically.",
+          "**Channel-overridable** (6 types): `weekly-reset`, `daily-roster-sync`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. The rest are bound to the monitor channel because their content references it specifically.",
           "**When to use**: enable `world-event-reminder` when the server wants world-event schedule alerts; Sunday combines both events into one post. Maintenance and event reminders can be redirected to a dedicated #announcements channel.",
           "**Admin-only**: requires `Manage Server`.",
         ],
         optionDescriptions: {
-          type: "Announcement type (10 dropdown options)",
+          type: "Announcement type (11 dropdown options)",
           action: "`show` / `on` / `off` / `set-channel` / `clear-channel`",
           channel: "Destination channel - required when action:set-channel",
         },
@@ -2259,7 +2261,7 @@ module.exports = {
     currentTitle: "Current broadcast language",
     currentDescription: "This guild is broadcasting public announcements in **{flag} {label}**.\nTo change it, run `/raid-channel config` again with `action:set-language` and the `language:` option (vi/jp/en). Example: `language:jp`.",
     successTitle: "Broadcast language updated",
-    successDescription: "All public announcements for this guild (welcome, weekly-reset, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) will now render in **{flag} {label}**. Per-user `/raid-language` settings are unaffected.",
+    successDescription: "All public announcements for this guild (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) will now render in **{flag} {label}**. Per-user `/raid-language` settings are unaffected.",
     showCurrentLine: "Broadcast language: **{flag} {label}**",
   },
   "text-parser": {
@@ -2572,6 +2574,9 @@ module.exports = {
   },
 
   announcements: {
+    "daily-roster-sync": {
+      body: "🔄 The refresh after **{targetDayKey}** has finished: **{userCount}** users · **{rosterCount}** rosters registered with Artist.\n✅ **{syncedCount}** users synced successfully · ℹ️ **{settledCount}** have no available logs · ⚠️ **{retryExhaustedCount}** still failed after bounded retries.\nRoster details refresh in every mode; Local Sync progress uses results submitted by the Local Reader.",
+    },
     "weekly-reset": {
       body: "New week, fresh raid progress. Artist just reset everyone's weekly raid progress - time to start over. Have a good raid week. This notice self-deletes in 30 minutes.",
     },
