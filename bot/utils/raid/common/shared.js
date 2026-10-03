@@ -229,7 +229,11 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
     || NOTICE_STYLE_BY_TYPE.info;
   const embed = new EmbedBuilder().setColor(color);
   if (title) embed.setTitle(`${icon} ${title}`);
-  if (description) embed.setDescription(description);
+  // Descriptions can carry raw user input (e.g. a roster name interpolated
+  // into an error notice); clamp to the 4096-char embed description limit
+  // so setDescription cannot throw and turn the notice into a generic
+  // command failure.
+  if (description) embed.setDescription(truncateText(description, 4096));
   return embed;
 }
 

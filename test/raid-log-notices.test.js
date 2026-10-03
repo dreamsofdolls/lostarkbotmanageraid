@@ -49,3 +49,29 @@ test("a panel whose character went private is locked with that name; other revok
   assert.match(mismatch.title, /Dữ liệu Bible không khớp/);
   assert.ok(mismatch.title.startsWith(style("lock").title.slice(0, -1)));
 });
+
+test("oversized notice descriptions are clamped to the embed limit instead of throwing", () => {
+  // Handlers interpolate user-controlled strings (roster names can reach
+  // Discord's 6000-char option cap) into error notices; a raw setDescription
+  // throws at the 4096-char description limit and 8 commands degrade to a
+  // generic failure reply.
+  const embed = buildNoticeEmbed(EmbedBuilder, {
+    type: "error",
+    title: "x",
+    description: "x".repeat(5000),
+  }).toJSON();
+  assert.equal(embed.description.length, 4096);
+  assert.ok(embed.description.endsWith("..."));
+});
+
+test("notice descriptions at or under the limit pass through unchanged", () => {
+  assert.equal(
+    buildNoticeEmbed(EmbedBuilder, { description: "short text" }).toJSON().description,
+    "short text"
+  );
+  const exact = "y".repeat(4096);
+  assert.equal(
+    buildNoticeEmbed(EmbedBuilder, { description: exact }).toJSON().description,
+    exact
+  );
+});
