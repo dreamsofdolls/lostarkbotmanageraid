@@ -1,7 +1,7 @@
 "use strict";
 
 const { RaidLogError } = require("./errors");
-const BIBLE_ORIGIN = "https://lostark.bible";
+const { BIBLE_ORIGIN } = require("../bible-endpoint");
 
 function parsePublicLogUrl(input) {
   const raw = typeof input === "string" ? input.trim() : "";

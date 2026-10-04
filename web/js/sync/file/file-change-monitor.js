@@ -447,6 +447,7 @@ export function createFileChangeMonitor({
   return {
     start,
     stop,
+    // Debug/test seam: manual probe trigger; runtime relies on start()'s listeners/polling.
     checkNow: probe,
     setBaseline(revision) {
       lastRevisionKey = fileRevisionKey(revision);
@@ -456,7 +457,5 @@ export function createFileChangeMonitor({
       clearTimer(settleTimer);
       settleTimer = null;
     },
-    getLastRevisionKey: () => lastRevisionKey,
-    isRunning: () => running,
   };
 }

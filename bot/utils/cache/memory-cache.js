@@ -1,6 +1,11 @@
 "use strict";
 
 /**
+ * Byte-budgeted LRU cache with absolute per-entry expiry. Deliberately a
+ * sibling of, not a merge with, createExpiringKeyMap: that one trades the
+ * byte accounting and get-refresh for set-time sliding TTL and in-place
+ * entry mutation. Pick by which eviction/expiry contract the caller needs.
+ *
  * @param {{ maxBytes: number, maxEntries: number, ttlMs: number, sizeOf: Function, now?: Function }} options
  * @returns {{ get: Function, set: Function, delete: Function, invalidate: Function, clear: Function }} expiring LRU cache
  */

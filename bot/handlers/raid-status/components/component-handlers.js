@@ -112,7 +112,6 @@ function createStatusComponentRouteHandlers(ctx) {
     formatGold,
     truncateText,
     getAutoManageCooldownMs,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
     canEditAccountFn = canEditAccount,
     refreshLocalSyncSnapshot = async () => null,
@@ -342,17 +341,6 @@ function createStatusComponentRouteHandlers(ctx) {
         }).catch(() => {});
         return noRedraw();
       }
-      if (typeof runManualRosterRefresh !== "function") {
-        await replyNotice(component, EmbedBuilder, {
-          type: "error",
-          title: t("raid-status.sync.rosterRefreshFailedTitle", lang),
-          description: t("raid-status.sync.rosterRefreshFailedDescription", lang, {
-            error: "manual refresh service unavailable",
-          }),
-        }).catch(() => {});
-        return noRedraw();
-      }
-
       const deferred = await component.deferUpdate().then(() => true).catch((err) => {
         console.warn("[raid-status] roster-refresh defer failed:", err?.message || err);
         return false;
@@ -416,10 +404,7 @@ function createStatusComponentRouteHandlers(ctx) {
       });
       const manualOutcome = manualResult.outcome;
       if (manualResult.status === "cooldown") {
-        const cooldownMs =
-          typeof getAutoManageCooldownMs === "function"
-            ? getAutoManageCooldownMs(discordId)
-            : AUTO_MANAGE_SYNC_COOLDOWN_MS;
+        const cooldownMs = getAutoManageCooldownMs(discordId);
         const remain =
           formatNextCooldownRemaining(
             Number(session.statusUserMeta.lastAutoManageAttemptAt) || 0,
@@ -681,22 +666,20 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
-      if (typeof component.followUp === "function") {
-        const noticeKey = result.outcome === "immediate"
-          ? "modeApplied"
-          : result.outcome === "cancelled"
-            ? "modeCancelled"
-            : "modeDeferred";
-        await followUpNotice(component, EmbedBuilder, {
-          type: "success",
-          title: t(`raid-status.goldView.${noticeKey}Title`, lang),
-          description: t(`raid-status.goldView.${noticeKey}Description`, lang, {
-            characterName: parsed.targetCharName,
-            raidLabel: result.raidLabel,
-            mode: result.modeLabel,
-          }),
-        }).catch(() => {});
-      }
+      const noticeKey = result.outcome === "immediate"
+        ? "modeApplied"
+        : result.outcome === "cancelled"
+          ? "modeCancelled"
+          : "modeDeferred";
+      await followUpNotice(component, EmbedBuilder, {
+        type: "success",
+        title: t(`raid-status.goldView.${noticeKey}Title`, lang),
+        description: t(`raid-status.goldView.${noticeKey}Description`, lang, {
+          characterName: parsed.targetCharName,
+          raidLabel: result.raidLabel,
+          mode: result.modeLabel,
+        }),
+      }).catch(() => {});
       return redraw();
     },
 
@@ -739,7 +722,7 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       await reloadViewerAccounts();
-      if (toggleResult.override === "include" && typeof component.followUp === "function") {
+      if (toggleResult.override === "include") {
         await followUpNotice(component, EmbedBuilder, {
           type: "success",
           title: tPick("raid-status.goldView.toggleSuccessTitle", lang),

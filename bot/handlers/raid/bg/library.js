@@ -59,18 +59,16 @@ async function loadOwnRosterNames(User, discordId) {
 }
 
 async function loadVisibleRosterNames({ User, discordId, getAccessibleAccounts }) {
-  if (typeof getAccessibleAccounts === "function") {
-    try {
-      const accessible = await getAccessibleAccounts(discordId, {
-        models: { User },
-        includeOwn: true,
-      });
-      if (Array.isArray(accessible) && accessible.length > 0) {
-        return accessible.map((entry) => entry.accountName).filter(Boolean);
-      }
-    } catch (err) {
-      console.warn(`[raid-bg] accessible roster list read failed for ${discordId}:`, err?.message || err);
+  try {
+    const accessible = await getAccessibleAccounts(discordId, {
+      models: { User },
+      includeOwn: true,
+    });
+    if (Array.isArray(accessible) && accessible.length > 0) {
+      return accessible.map((entry) => entry.accountName).filter(Boolean);
     }
+  } catch (err) {
+    console.warn(`[raid-bg] accessible roster list read failed for ${discordId}:`, err?.message || err);
   }
 
   return loadOwnRosterNames(User, discordId);

@@ -39,7 +39,7 @@ function summarizeSoloRaidProgress(accounts, getRaidsFor) {
   let completed = 0;
   for (const account of accounts || []) {
     for (const character of account.characters || []) {
-      const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
+      const raids = getRaidsFor(character) || [];
       for (const raid of raids) {
         if (!isSoloModeKey(getRaidFilterModeKey(raid))) continue;
         total += 1;
@@ -174,7 +174,7 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   let displayMatches = 0;
   const characters = Array.isArray(account?.characters) ? account.characters : [];
   for (const character of characters) {
-    const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
+    const raids = getRaidsFor(character) || [];
     for (const raid of raids) {
       if (
         raidFilter &&

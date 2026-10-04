@@ -102,12 +102,9 @@ async function loadAllModeUsers({
   const users = [];
   const refreshJobs = [];
   for (const seedDoc of seedUsers) {
-    const shouldRefresh =
-      typeof shouldLoadFreshUserSnapshotForRaidViews === "function"
-        ? shouldLoadFreshUserSnapshotForRaidViews(seedDoc, {
-            allowAutoManage: false,
-          })
-        : true;
+    const shouldRefresh = shouldLoadFreshUserSnapshotForRaidViews(seedDoc, {
+      allowAutoManage: false,
+    });
     if (!shouldRefresh) {
       // Fresh lean rows are render-only and never enter a refresh job, so
       // weekly normalization can safely happen in place without cloning the

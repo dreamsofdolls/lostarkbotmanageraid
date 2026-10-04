@@ -1,6 +1,6 @@
 "use strict";
 
-const { createMemoryCache } = require("./memory-cache");
+const { createMemoryCache } = require("../../utils/cache/memory-cache");
 
 /**
  * @param {{ maxBytes?: number, maxEntries?: number, ttlMs?: number, now?: Function }} [options]

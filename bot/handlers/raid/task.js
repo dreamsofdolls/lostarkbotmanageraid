@@ -146,8 +146,8 @@ function createRaidTaskCommand(deps) {
     add: async (interaction) => {
       // Sub-routing by `action`: single -> one specific char (requires
       // `character` field), all -> every char in the roster (no character
-      // field needed). Default to "single" if old test mocks omit it.
-      const action = interaction.options.getString("action", false) || "single";
+      // field needed).
+      const action = interaction.options.getString("action", false);
       const handler = ADD_ACTION_HANDLERS[action] || handleAddSingle;
       return handler(interaction);
     },

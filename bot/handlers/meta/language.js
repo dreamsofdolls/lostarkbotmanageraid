@@ -41,7 +41,7 @@ function buildLanguageDropdown({ StringSelectMenuBuilder, ActionRowBuilder, lang
   // Each option's label lives at `raid-language.options.<code>` in the
   // viewer's CURRENT-language pack so the picker reads in their native
   // tongue (e.g. JP user sees "Tiếng Việt (デフォルト)" / "English
-  // (国際向け)" — option labels narrate what picking that code DOES,
+  // (国際向け)" - option labels narrate what picking that code DOES,
   // from the current viewer's perspective). The flag emoji rides the
   // structured `emoji` field; locale strings stay flag-free so a
   // future entry only needs the descriptor text.

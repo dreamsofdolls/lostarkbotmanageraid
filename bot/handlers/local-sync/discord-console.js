@@ -130,7 +130,7 @@ function createLocalSyncDiscordConsole({
   acquireAutoManageSyncSlot = null,
   releaseAutoManageSyncSlot = null,
   PreviewModel = null,
-  openRaidStatusSession = null,
+  openRaidStatusSession,
 }) {
   if (!User) throw new Error("[local-sync/discord] User model required");
 
@@ -188,10 +188,7 @@ function createLocalSyncDiscordConsole({
 
   async function maybeOpenRaidStatus(interaction, { job, userDoc }) {
     const activeScope = activeScopeForUser(userDoc);
-    if (
-      typeof openRaidStatusSession !== "function" ||
-      !shouldOpenRaidStatusSurface(job, activeScope)
-    ) {
+    if (!shouldOpenRaidStatusSurface(job, activeScope)) {
       return false;
     }
 
@@ -261,7 +258,6 @@ function createLocalSyncDiscordConsole({
 
   async function handleLocalSyncButton(interaction) {
     const [, action, jobId] = String(interaction.customId || "").split(":");
-    if (action === "roster") return handleLocalSyncRosterSelect(interaction);
     if (!jobId || !["apply", "cancel", "refresh"].includes(action)) return;
     // Acknowledge before any DB read so a slow Mongo round-trip cannot cross
     // Discord's interaction deadline. Ownership is still checked before any

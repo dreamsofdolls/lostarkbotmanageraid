@@ -32,7 +32,7 @@ async function rollbackPhaseClaim({ GuildConfig, cfg, claimedState, previousStat
     GuildConfig,
     guildId: cfg.guildId,
     claimedState,
-    previousState: previousState || cfg,
+    previousState,
   }, (err) => console.error(
     `[raid-channel] ${phaseName} claim rollback failed guild=${cfg.guildId}:`,
     err?.message || err

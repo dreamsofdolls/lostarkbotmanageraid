@@ -52,9 +52,7 @@ function createSideTaskAutocompleteHandlers({
   }
 
   async function autocompleteTask(interaction, focused) {
-    const subcommand = typeof interaction.options.getSubcommand === "function"
-      ? interaction.options.getSubcommand(false)
-      : "";
+    const subcommand = interaction.options.getSubcommand(false);
     if (subcommand === "shared-remove") {
       await autocompleteSharedTask(interaction, focused);
       return;

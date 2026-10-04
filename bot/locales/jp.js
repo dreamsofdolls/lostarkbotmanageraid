@@ -2267,7 +2267,6 @@ module.exports = {
   },
   "text-parser": {
     multiGate: "{icon} メッセージに複数のゲート ({gates}) が含まれていますわ。一度に更新できるのは 1 ゲートだけですの - 1 つのゲートで投稿し直すか、ゲートを省略してレイド全体を完了にしてくださいませ♪",
-    multiRaid: "{icon} メッセージに異なるレイドが複数 ({raids}) 含まれていますわ。1 つのレイドを選んで投稿し直してね♪",
     invalidRaid: "{icon} レイド {raids} は見つかりませんわ。名前を確認して投稿し直してね♪",
     raidAfterMode: "{icon} レイド {raids} が難易度/reset の後ろにありますの。`Act4 Final HM A B` のように全レイドを先に置いて投稿し直してね♪",
     multiDifficulty: "{icon} メッセージに異なる難易度が複数 ({difficulties}) 含まれていますわ。1 つの難易度を選んで投稿し直してね♪",

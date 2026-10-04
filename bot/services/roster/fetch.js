@@ -6,6 +6,11 @@ const { parseItemLevel } = require("../../utils/raid/common/shared");
 const {
   createBibleHttpError,
 } = require("../auto-manage/bible/rate-limit");
+const {
+  BIBLE_ORIGIN,
+  BIBLE_REGION,
+  BIBLE_REQUEST_TIMEOUT_MS,
+} = require("../bible-endpoint");
 
 const jsdomVirtualConsole = new VirtualConsole();
 jsdomVirtualConsole.on("jsdomError", (err) => {
@@ -47,12 +52,12 @@ function createRosterFetchService({ bibleLimiter }) {
   }
 
   async function fetchRosterCharactersRaw(seedCharacterName) {
-    const targetUrl = `https://lostark.bible/character/NA/${encodeURIComponent(seedCharacterName)}/roster`;
+    const targetUrl = `${BIBLE_ORIGIN}/character/${BIBLE_REGION}/${encodeURIComponent(seedCharacterName)}/roster`;
     const response = await fetch(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(BIBLE_REQUEST_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -65,7 +70,7 @@ function createRosterFetchService({ bibleLimiter }) {
     const html = await response.text();
     const { document } = new JSDOM(html, { virtualConsole: jsdomVirtualConsole }).window;
     const rosterClassMap = extractRosterClassMapFromHtml(html);
-    const links = document.querySelectorAll('a[href^="/character/NA/"]');
+    const links = document.querySelectorAll(`a[href^="/character/${BIBLE_REGION}/"]`);
 
     const characters = [];
     for (const link of links) {

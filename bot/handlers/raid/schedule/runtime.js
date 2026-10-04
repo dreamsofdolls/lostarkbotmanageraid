@@ -117,12 +117,12 @@ function createScheduleRuntimeHelpers({
 
   function markSignups(event, signups) {
     event.signups = signups;
-    if (typeof event.markModified === "function") event.markModified("signups");
+    event.markModified("signups");
   }
 
   function markTurns(event, turns) {
     event.turns = turns;
-    if (typeof event.markModified === "function") event.markModified("turns");
+    event.markModified("turns");
   }
 
   function editBoardMessage(interaction, event, lang) {

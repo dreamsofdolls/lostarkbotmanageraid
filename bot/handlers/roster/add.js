@@ -105,8 +105,7 @@ function createAddRosterCommand({
       requestedTarget && requestedTarget.id !== callerId
     );
     const targetCanProceed = !targetsAnotherUser || (
-      typeof isManagerId === "function"
-      && isManagerId(callerId)
+      isManagerId(callerId)
       && !requestedTarget.bot
     );
 
@@ -243,7 +242,7 @@ function createAddRosterCommand({
       actingForOther,
       seedCharName,
       // Snapshot of the FULL bible roster's normalized char names from
-      // this fetch — feeds the race-safe overlap guard inside
+      // this fetch - feeds the race-safe overlap guard inside
       // persistSelectedRoster. NOT just the displayed (capped) chars
       // because two sessions on the same bible roster could each truncate
       // to different windows yet still represent the same roster.
@@ -384,7 +383,7 @@ function createAddRosterCommand({
 
       // Ping the target user when Manager added on their behalf. Discord
       // ONLY fires notifications for mentions in the message `content`
-      // field — mentions inside an embed description don't ping anyone,
+      // field - mentions inside an embed description don't ping anyone,
       // even with allowedMentions set. Without an explicit content
       // mention here the target wouldn't get any notification despite
       // the embed text saying "đã được Manager add giúp <@target>".
@@ -414,7 +413,7 @@ function createAddRosterCommand({
     handleAddRosterCommand,
     handleAddRosterButton,
     // Internals exposed for unit tests in test/raid-add-roster.test.js. Not
-    // part of the public contract — runtime callers go through the
+    // part of the public contract - runtime callers go through the
     // handlers above. The session map is exposed read-only-by-convention
     // for tests that need to inject a session before exercising Confirm.
     __test: {

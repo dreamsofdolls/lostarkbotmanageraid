@@ -18,6 +18,7 @@ const {
   getStatusRaidsForCharacter,
 } = require("../bot/utils/raid/common/character");
 const User = require("../bot/models/user");
+const { subdocAssignedRaid } = require("./helpers/assigned-raid-subdoc");
 
 function makeUserModel(doc) {
   return {
@@ -244,11 +245,11 @@ test("raid-status gold actions cycle bound raid through include, exclude, auto",
           {
             name: "Aki",
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "hard",
                 G1: { difficulty: "Hard", completedDate: null },
                 G2: { difficulty: "Hard", completedDate: null },
-              },
+              }),
             },
           },
         ],
@@ -382,11 +383,11 @@ test("raid-status gold actions require replacement before including locked raid 
             name: "Aki",
             itemLevel: 1730,
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "hard",
                 G1: { difficulty: "Level 2", completedDate: null },
                 G2: { difficulty: "Level 2", completedDate: null },
-              },
+              }),
             },
           },
         ],

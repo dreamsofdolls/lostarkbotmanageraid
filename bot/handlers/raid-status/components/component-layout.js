@@ -22,7 +22,7 @@ function createRaidStatusComponentLayout({
   buildRaidFilterRow,
   buildStatusRosterFilterRow,
   buildMyRaidsRow,
-  buildLocalSyncViewRows = () => [],
+  buildLocalSyncViewRows,
   getAccounts,
   getCurrentPage,
   getCurrentLocalPage = getCurrentPage,
@@ -31,12 +31,12 @@ function createRaidStatusComponentLayout({
   getStatusUserMeta,
   getRaidDropdownEntries,
   getTotalRaidPending,
-  getTotalSoloPending = () => 0,
+  getTotalSoloPending,
   getFilterRaidId,
-  getRosterFilterEntries = () => [],
-  getSelectedRosterIndex = () => null,
+  getRosterFilterEntries,
+  getSelectedRosterIndex,
   getMyRaidsShaped,
-  getBackgroundRefreshing = () => false,
+  getBackgroundRefreshing,
 }) {
   const getRowComponentCount = (row) => {
     if (Array.isArray(row?.components)) return row.components.length;
@@ -98,9 +98,7 @@ function createRaidStatusComponentLayout({
     const sharedFrom = currentAccount?._sharedFrom;
     const goldToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
     rows.push(buildGoldToggleRow(goldToggleDisabled));
-    const modeRow = typeof buildGoldModeRow === "function"
-      ? buildGoldModeRow(goldToggleDisabled)
-      : null;
+    const modeRow = buildGoldModeRow(goldToggleDisabled);
     if (modeRow && rows.length < 5) rows.push(modeRow);
   };
 
@@ -119,9 +117,7 @@ function createRaidStatusComponentLayout({
     // Solo Local Reader rides along as the second way in. It only builds
     // for bible auto-sync users (see buildSoloCompanionButton), so for
     // full local-sync users nothing is added here.
-    if (typeof buildSoloCompanionButton === "function") {
-      addButtonToBestRow(rows, buildSoloCompanionButton(disabled));
-    }
+    addButtonToBestRow(rows, buildSoloCompanionButton(disabled));
     rows.push(buildViewToggleRow(disabled));
   };
 
@@ -139,7 +135,6 @@ function createRaidStatusComponentLayout({
     const statusUserMeta = getStatusUserMeta();
     const localSync = showSync && statusUserMeta.localSyncEnabled;
     const appendSoloCompanionButton = (row) => {
-      if (typeof buildSoloCompanionButton !== "function") return;
       const button = buildSoloCompanionButton(syncDisabled);
       if (button && getRowComponentCount(row) < 5) row.addComponents(button);
     };

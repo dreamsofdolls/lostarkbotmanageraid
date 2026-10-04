@@ -72,7 +72,8 @@ const {
   isCountedRaidProgress,
   ensureAssignedRaids,
 } = require("../bot/utils/raid/common/character");
-const { getAutoManageCooldownMs } = require("../bot/services/access/manager");
+const { getAutoManageCooldownMs, getRosterRefreshCooldownMs } = require("../bot/services/access/manager");
+const { ROSTER_REFRESH_COOLDOWN_MS } = require("../bot/services/roster/refresh");
 const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 
 function makeFactory() {
@@ -103,6 +104,8 @@ function makeFactory() {
     collectStaleAccountRefreshes: async () => [],
     applyStaleAccountRefreshes: () => false,
     formatRosterRefreshCooldownRemaining: () => null,
+    ROSTER_REFRESH_COOLDOWN_MS,
+    getRosterRefreshCooldownMs,
     acquireAutoManageSyncSlot: async () => ({ acquired: false }),
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => null,

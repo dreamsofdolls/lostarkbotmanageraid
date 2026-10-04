@@ -38,9 +38,7 @@ function readSharedAddRequest(interaction, lang) {
   const taskName = String(taskNameInput || preset.defaultName).trim();
   const expiresRaw = interaction.options.getString("expires_at", false);
   const expiresAt = parseSharedTaskExpiresAt(expiresRaw, lang);
-  const applyAllRosters =
-    typeof interaction.options.getBoolean === "function" &&
-    interaction.options.getBoolean("all_rosters", false) === true;
+  const applyAllRosters = interaction.options.getBoolean("all_rosters", false) === true;
 
   return {
     applyAllRosters,

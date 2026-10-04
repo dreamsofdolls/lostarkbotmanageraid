@@ -50,7 +50,7 @@ function getRosterRefreshCooldownMs(discordId) {
     : DEFAULT_ROSTER_REFRESH_COOLDOWN_MS;
 }
 
-// First entry in the allowlist — used as the "primary admin to ping"
+// First entry in the allowlist - used as the "primary admin to ping"
 // in error embeds so users see a clickable @mention instead of a
 // generic "ping admin" message. Returns null when no managers are
 // configured (env unset / empty), which lets call sites fall back to

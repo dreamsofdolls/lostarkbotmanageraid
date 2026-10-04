@@ -2296,7 +2296,6 @@ module.exports = {
   // they share one .join("\n") on the consumer side.
   "text-parser": {
     multiGate: "{icon} Có nhiều gate ({gates}) trong message. Mỗi lần chỉ update 1 gate - post lại với 1 gate hoặc bỏ gate để đánh DONE cả raid nha.",
-    multiRaid: "{icon} Message chứa nhiều raid khác nhau ({raids}). Chọn đúng 1 raid rồi post lại nha.",
     invalidRaid: "{icon} Không nhận ra raid: {raids}. Check lại tên raid rồi post lại nha.",
     raidAfterMode: "{icon} Raid {raids} đang nằm sau difficulty/reset. Đặt toàn bộ raid lên trước, ví dụ `Act4 Final HM A B`, rồi post lại nha.",
     multiDifficulty: "{icon} Message chứa nhiều difficulty khác nhau ({difficulties}). Chọn đúng 1 difficulty rồi post lại nha.",

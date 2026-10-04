@@ -201,7 +201,7 @@ function createRaidSetCommand(deps) {
       }
 
       if (didUpdate) {
-        if (typeof userDoc.markModified === "function") userDoc.markModified("accounts");
+        userDoc.markModified("accounts");
         await userDoc.save();
       }
     });

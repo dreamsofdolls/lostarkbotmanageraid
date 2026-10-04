@@ -7,6 +7,7 @@ const {
   applyKick,
 } = require("../../../../services/raid/schedule/slots/signup-state");
 const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
+const { buildPromotedPingContent } = require("./promoted-ping");
 const { removeMembersFromTurns } = require("../../../../services/raid/schedule/turns");
 const { sendToBoardChannel } = require("../../../../services/raid/schedule/board-io");
 const {
@@ -71,15 +72,13 @@ function createScheduleMemberActions({
       supSlots: event.supSlots,
       dpsSlots: event.dpsSlots,
     });
-    if (promoted.length > 0 && !event.skipNotify) {
-      await sendToBoardChannel(interaction.client, event.channelId, {
-        content: promoted
-          .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
-            user: `<@${s.discordId}>`,
-            character: s.characterName,
-          }))
-          .join("\n"),
-      }, { logLabel: "kick promote ping failed" });
+    if (!event.skipNotify) {
+      const ping = buildPromotedPingContent(promoted, langForBoard);
+      if (ping) {
+        await sendToBoardChannel(interaction.client, event.channelId, {
+          content: ping,
+        }, { logLabel: "kick promote ping failed" });
+      }
     }
   }
 

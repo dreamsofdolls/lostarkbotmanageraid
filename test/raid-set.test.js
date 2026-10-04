@@ -44,6 +44,7 @@ function makeUserModel() {
       this.autoManageEnabled = !!data.autoManageEnabled;
       this.accounts = JSON.parse(JSON.stringify(data.accounts || []));
     }
+    markModified() {}
     async save() {
       docs.set(this.discordId, {
         discordId: this.discordId,

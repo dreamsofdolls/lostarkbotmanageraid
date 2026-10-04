@@ -995,6 +995,7 @@ test("newly-added task seeds lastResetAt to current cycle start (regression)", a
     options: {
       getSubcommand: () => "add",
       getString: (name, _required) => {
+        if (name === "action") return "single";
         if (name === "character") return "Frostmourne";
         if (name === "name") return "Una Dailies";
         if (name === "reset") return "daily";
@@ -1063,6 +1064,7 @@ test("weekly task seeds lastResetAt to weekResetStartMs (regression)", async () 
     options: {
       getSubcommand: () => "add",
       getString: (name) => {
+        if (name === "action") return "single";
         if (name === "character") return "Frostmourne";
         if (name === "name") return "Guardian Raid";
         if (name === "reset") return "weekly";
@@ -1352,6 +1354,7 @@ test("shared-add: adds Chaos Gate as scheduled roster task", async () => {
         if (name === "preset") return "chaos_gate";
         return null;
       },
+      getBoolean: () => false,
     },
     reply: async () => {},
   };

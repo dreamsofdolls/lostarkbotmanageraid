@@ -99,6 +99,7 @@ test("a throwing raid-status handler is reported to the clicker instead of rejec
         throw new Error("mongo unavailable");
       },
     },
+    refreshStateIfStale: async () => {},
   });
 
   await listeners.get("collect")({
@@ -168,6 +169,7 @@ function attachPagedCollector({ backgroundMs = [0, 60, 5] } = {}) {
         page += 1;
       },
     },
+    refreshStateIfStale: async () => {},
   });
   const click = () => listeners.get("collect")({
     customId: "status:next",

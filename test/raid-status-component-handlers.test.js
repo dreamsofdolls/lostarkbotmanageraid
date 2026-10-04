@@ -29,6 +29,7 @@ const {
 const {
   getTargetResetKey,
 } = require("../bot/services/raid/schedulers/weekly-reset");
+const { subdocAssignedRaid } = require("./helpers/assigned-raid-subdoc");
 
 class FakeEmbedBuilder {
   setColor(value) {
@@ -113,13 +114,12 @@ function createHandlerHarness(overrides = {}) {
     buildEmbedAndCanvas: overrides.buildEmbedAndCanvas || (async () => ({})),
     buildComponents: overrides.buildComponents || (() => []),
     runManualStatusSync: async () => ({ outcome: null }),
-    runManualRosterRefresh: overrides.runManualRosterRefresh,
+    runManualRosterRefresh: overrides.runManualRosterRefresh || (async () => ({})),
     canEditAccountFn: overrides.canEditAccountFn || (async (viewerId, ownerId) => viewerId === ownerId),
     formatNextCooldownRemaining: () => "",
     formatGold,
     truncateText,
     getAutoManageCooldownMs: () => 0,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS: 0,
     buildMyRaidDetailEmbed: () => ({}),
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
   });
@@ -361,11 +361,11 @@ test("raid-status component handlers persist gold toggle and request redraw", as
             name: "Goldie",
             itemLevel: 1700,
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "normal",
                 G1: { difficulty: "Level 1", completedDate: 1 },
                 G2: { difficulty: "Level 1", completedDate: 1 },
-              },
+              }),
             },
           },
         ],
@@ -560,11 +560,11 @@ test("raid-status gold replacement re-checks a share revoked while the prompt wa
             name: "Goldie",
             itemLevel: 1730,
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "hard",
                 G1: { difficulty: "Level 2", completedDate: null },
                 G2: { difficulty: "Level 2", completedDate: null },
-              },
+              }),
             },
           },
         ],
@@ -657,11 +657,11 @@ test("raid-status component handlers prompt for a gold replacement when locked r
             name: "Goldie",
             itemLevel: 1730,
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "hard",
                 G1: { difficulty: "Level 2", completedDate: null },
                 G2: { difficulty: "Level 2", completedDate: null },
-              },
+              }),
             },
           },
         ],
@@ -733,11 +733,11 @@ test("raid-status component handlers pass saved replacement docs into reload bef
             name: "Goldie",
             itemLevel: 1730,
             assignedRaids: {
-              horizon: {
+              horizon: subdocAssignedRaid({
                 modeKey: "hard",
                 G1: { difficulty: "Level 2", completedDate: null },
                 G2: { difficulty: "Level 2", completedDate: null },
-              },
+              }),
             },
           },
         ],

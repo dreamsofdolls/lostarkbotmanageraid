@@ -130,10 +130,8 @@ function createScheduleModalActions({
   }
 
   return {
-    awaitScheduleModalSubmit,
     handleEditTime,
     handleSetRoom,
-    modalTextRow,
   };
 }
 

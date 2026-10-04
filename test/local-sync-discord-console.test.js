@@ -10,7 +10,7 @@ const {
   StringSelectMenuBuilder,
 } = require("discord.js");
 
-const { UI } = require("../bot/utils/raid/common/shared");
+const { UI, formatGold } = require("../bot/utils/raid/common/shared");
 const {
   buildLocalSyncConsolePayload,
 } = require("../bot/handlers/local-sync/discord-console-ui");
@@ -302,6 +302,7 @@ test("an applied console still lists what it synced once that progress is writte
     ButtonStyle,
     MessageFlags: { Ephemeral: 64 },
     UI,
+    formatGold,
     User: makeConsoleUserModel(writtenUserDoc),
   });
   const previousBaseUrl = process.env.PUBLIC_BASE_URL;
@@ -1155,6 +1156,7 @@ test("a transient write error stays pending, and the applied card after the retr
     ButtonStyle,
     MessageFlags: { Ephemeral: 64 },
     UI,
+    formatGold,
     User: deps.UserModel,
   });
   const previousBaseUrl = process.env.PUBLIC_BASE_URL;
@@ -1259,6 +1261,7 @@ test("Refresh on an old console loads the newest actionable preview", async () =
     ButtonStyle,
     MessageFlags: { Ephemeral: 64 },
     UI,
+    formatGold,
     User: makeConsoleUserModel(userDoc),
     PreviewModel,
     openRaidStatusSession: async () => {

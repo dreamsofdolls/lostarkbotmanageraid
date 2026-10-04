@@ -180,8 +180,17 @@ async function getStoredLanguage(id, { cache, pending, Model, idField }) {
   return request.promise;
 }
 
+// Cache entries are a few dozen bytes each; a bot on many guilds still
+// grows unbounded without a cap. Languages are re-published on every
+// change, so evicting the oldest-inserted key bounds memory without
+// staleness risk.
+const LANGUAGE_CACHE_MAX_ENTRIES = 20000;
+
 function publishLanguage(id, lang, cache, pending) {
   cache.set(id, lang);
+  if (cache.size > LANGUAGE_CACHE_MAX_ENTRIES) {
+    cache.delete(cache.keys().next().value);
+  }
   for (const request of pending.get(id)?.values() || []) request.replacement = lang;
 }
 
@@ -226,6 +235,10 @@ async function setUserLanguage(discordId, lang, { UserModel } = {}) {
   return code;
 }
 
+/**
+ * Test seam: resets the per-user language cache between test cases. No
+ * production caller - production invalidates per user via publishLanguage.
+ */
 function clearUserLanguageCache() {
   userLanguageCache.clear();
   userLanguageLoads.clear();

@@ -10,7 +10,7 @@
 
 const UserBackground = require("../../models/userBackground");
 const { createInFlightLoader } = require("../../utils/async/in-flight-loader");
-const { createMemoryCache } = require("../raid-log/memory-cache");
+const { createMemoryCache } = require("../../utils/cache/memory-cache");
 
 // Roster pages for one owner share overlapping reads, but every later render
 // still checks Mongo's version. Completed documents are never cached here.

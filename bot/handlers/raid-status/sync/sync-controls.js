@@ -22,15 +22,11 @@ function createRaidStatusSyncControls({
   lang,
   formatNextCooldownRemaining,
   getAutoManageCooldownMs,
-  AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getStatusUserMeta,
 }) {
   let cachedLocalSyncResumeUrl = null;
 
-  const resolveCooldownMs = () =>
-    typeof getAutoManageCooldownMs === "function"
-      ? getAutoManageCooldownMs(discordId)
-      : AUTO_MANAGE_SYNC_COOLDOWN_MS;
+  const resolveCooldownMs = () => getAutoManageCooldownMs(discordId);
 
   const computeSyncLabel = () => {
     const remain = formatNextCooldownRemaining(

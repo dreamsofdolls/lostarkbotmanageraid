@@ -16,7 +16,7 @@ function createAddRosterTargetResolver({
       };
     }
 
-    if (typeof isManagerId !== "function" || !isManagerId(callerId)) {
+    if (!isManagerId(callerId)) {
       await replyNotice(interaction, {
         type: "lock",
         title: t("raid-add-roster.auth.managerOnlyTitle", lang),

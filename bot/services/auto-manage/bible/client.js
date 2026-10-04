@@ -3,10 +3,13 @@
 const { createBibleCharacterNotFoundError } = require("./error-kinds");
 const { createBibleHttpError } = require("./rate-limit");
 const { getClassName } = require("../../../models/Class");
+const {
+  BIBLE_ORIGIN,
+  BIBLE_REGION,
+  BIBLE_REQUEST_TIMEOUT_MS,
+} = require("../../bible-endpoint");
 
-const BIBLE_REGION = "NA";
 const BIBLE_USER_AGENT = "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)";
-const BIBLE_REQUEST_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_LOG_PAGES = 10;
 const MAX_CHARACTER_HTML_BYTES = 8 * 1024 * 1024;
 const MAX_IDENTITY_SCAN_LENGTH = 64 * 1024;
@@ -77,7 +80,7 @@ async function readCharacterHtml(res, charName, includeProfile) {
  * fetched once per character - caller caches them on the character doc.
  */
 async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch, signal } = {}, includeProfile = false) {
-  const url = `https://lostark.bible/character/${BIBLE_REGION}/${encodeURIComponent(charName)}/roster`;
+  const url = `${BIBLE_ORIGIN}/character/${BIBLE_REGION}/${encodeURIComponent(charName)}/roster`;
   const res = await fetchImpl(url, {
     headers: {
       "User-Agent": BIBLE_USER_AGENT,
@@ -134,7 +137,7 @@ async function fetchBibleCharacterLogs(
   { serial, cid, rid, className, page = 1 },
   { fetchImpl = defaultFetch, signal } = {}
 ) {
-  const url = "https://lostark.bible/api/character/logs";
+  const url = `${BIBLE_ORIGIN}/api/character/logs`;
   const res = await fetchImpl(url, {
     method: "POST",
     headers: {

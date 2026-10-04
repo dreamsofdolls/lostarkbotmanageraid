@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-04
+
+### Changed (internal)
+- Dependencies every caller passes are now required instead of guarded with `typeof` checks and fallbacks that never ran; lostark.bible's origin, region and timeout live in one `bible-endpoint.js`; the unused multi-raid parse hint and its locale lines are gone. No behavior change.
+
 ## 2026-10-02
 
 ### Added

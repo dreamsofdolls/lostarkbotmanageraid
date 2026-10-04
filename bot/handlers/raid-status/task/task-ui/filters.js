@@ -3,6 +3,7 @@
 const {
   resolveCharacterNameFilter,
 } = require("../../state/character-filter");
+const { normalizeName } = require("../../../../utils/raid/common/shared");
 
 const ALL_CHARS_SENTINEL = "__ALL_CHARS__";
 
@@ -43,7 +44,7 @@ function createTaskFilterState({
         : [];
       for (const task of sideTasks) {
         if (!task?.name) continue;
-        const key = `${task.name.trim().toLowerCase()}::${task.reset}`;
+        const key = `${normalizeName(task.name)}::${task.reset}`;
         let entry = byKey.get(key);
         if (!entry) {
           entry = {

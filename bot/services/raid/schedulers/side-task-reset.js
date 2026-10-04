@@ -1,5 +1,7 @@
 "use strict";
 
+const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
+
 const SIDE_TASK_RESET_TICK_MS = 30 * 60 * 1000;
 
 /**
@@ -12,9 +14,6 @@ function createSideTaskResetService({
   dailyResetStartMs,
   weekResetStartMs,
 }) {
-  let sideTaskSchedulerStartedAtMs = null;
-  let sideTaskTickInFlight = false;
-
   async function resetExpiredSideTasks(now = new Date()) {
     const dailyStart = dailyResetStartMs(now);
     const weeklyStart = weekResetStartMs(now);
@@ -111,38 +110,31 @@ function createSideTaskResetService({
     };
   }
 
-  function startSideTaskResetScheduler() {
-    sideTaskSchedulerStartedAtMs = Date.now();
-    const run = async () => {
-      if (sideTaskTickInFlight) return;
-      sideTaskTickInFlight = true;
-      try {
-        const report = await resetExpiredSideTasks();
-        if (
-          report.dailyModified > 0 ||
-          report.weeklyModified > 0 ||
-          report.sharedDailyModified > 0 ||
-          report.sharedWeeklyModified > 0
-        ) {
-          console.log(
-            `[side-task reset] daily=${report.dailyModified} weekly=${report.weeklyModified} sharedDaily=${report.sharedDailyModified} sharedWeekly=${report.sharedWeeklyModified}`
-          );
-        }
-      } catch (err) {
-        console.error("[side-task reset] tick failed:", err?.message || err);
-      } finally {
-        sideTaskTickInFlight = false;
-      }
-    };
-    run();
-    return setInterval(run, SIDE_TASK_RESET_TICK_MS);
+  async function runSideTaskResetTick() {
+    const report = await resetExpiredSideTasks();
+    if (
+      report.dailyModified > 0 ||
+      report.weeklyModified > 0 ||
+      report.sharedDailyModified > 0 ||
+      report.sharedWeeklyModified > 0
+    ) {
+      console.log(
+        `[side-task reset] daily=${report.dailyModified} weekly=${report.weeklyModified} sharedDaily=${report.sharedDailyModified} sharedWeekly=${report.sharedWeeklyModified}`
+      );
+    }
   }
+
+  const runner = createNonOverlappingIntervalRunner({
+    tickMs: SIDE_TASK_RESET_TICK_MS,
+    runTick: runSideTaskResetTick,
+    errorMessage: "[side-task reset] tick failed:",
+  });
 
   return {
     SIDE_TASK_RESET_TICK_MS,
     resetExpiredSideTasks,
-    startSideTaskResetScheduler,
-    getSideTaskSchedulerStartedAtMs: () => sideTaskSchedulerStartedAtMs,
+    startSideTaskResetScheduler: runner.start,
+    getSideTaskSchedulerStartedAtMs: runner.getStartedAtMs,
   };
 }
 

@@ -329,10 +329,12 @@ test("raid-status layout paginates the visible roster list and mirrors its selec
     getStatusUserMeta: () => ({}),
     getRaidDropdownEntries: () => [{ key: "armoche:hard" }],
     getTotalRaidPending: () => 1,
+    getTotalSoloPending: () => 0,
     getFilterRaidId: () => "armoche:hard",
     getRosterFilterEntries: () => entries,
     getSelectedRosterIndex: () => 2,
     getMyRaidsShaped: () => [],
+    getBackgroundRefreshing: () => false,
   });
 
   const rows = buildComponents(false);

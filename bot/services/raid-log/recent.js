@@ -16,7 +16,7 @@ const { isSupportClass } = require("../../models/Class");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
 const { normalizeCatalogLogs } = require("./catalog");
 const { RaidLogError, raidLogErrorCode } = require("./errors");
-const { createMemoryCache } = require("./memory-cache");
+const { createMemoryCache } = require("../../utils/cache/memory-cache");
 const { normalizeCharacterName } = require("./source");
 
 const DAY_MS = 24 * 60 * 60 * 1000;

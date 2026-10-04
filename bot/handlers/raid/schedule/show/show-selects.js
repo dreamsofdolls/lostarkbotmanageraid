@@ -169,13 +169,6 @@ function createScheduleShowSelectActions({
   return {
     handleShowPickSelect,
     handleShowTpSelect,
-    _private: {
-      deleteMessageById,
-      isActiveBoard,
-      isSameGuild,
-      isSameChannel,
-      isCreator,
-    },
   };
 }
 

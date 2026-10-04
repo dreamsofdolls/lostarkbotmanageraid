@@ -75,7 +75,7 @@ async function toggleBulkSideTask(options) {
       if (!Array.isArray(ch?.sideTasks)) continue;
       const task = ch.sideTasks.find(
         (t) =>
-          String(t?.name || "").trim().toLowerCase() === targetNameLower &&
+          normalizeName(t?.name) === targetNameLower &&
           t?.reset === targetReset
       );
       if (task) owners.push({ task });
@@ -101,9 +101,7 @@ async function toggleSingleSideTask(options) {
     if (!Array.isArray(account.characters)) return false;
 
     const target = account.characters.find(
-      (c) =>
-        String(c?.name || "").trim().toLowerCase() ===
-        targetCharName.trim().toLowerCase()
+      (c) => normalizeName(c?.name) === normalizeName(targetCharName)
     );
     if (!target) return false;
     if (!Array.isArray(target.sideTasks)) target.sideTasks = [];

@@ -137,7 +137,7 @@ function createRaidStatusView(deps) {
   }
 
   function resolveUserCooldown(getCooldownMs, discordId, fallbackMs) {
-    if (typeof getCooldownMs !== "function" || !discordId) return fallbackMs;
+    if (!discordId) return fallbackMs;
     return getCooldownMs(discordId);
   }
 
@@ -300,7 +300,6 @@ function createRaidStatusView(deps) {
   }
 
   function buildRosterGoldLine(account, getRaidsFor, lang) {
-    if (typeof summarizeAccountGold !== "function") return "";
     const accountGold = summarizeAccountGold(account, getRaidsFor);
     if (accountGold.total <= 0) return "";
     return t("raid-status.embed.rosterGold", lang, {

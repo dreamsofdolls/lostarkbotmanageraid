@@ -37,6 +37,8 @@ function makeCrowdedEvent() {
     signups,
     turns: [{ name: "Turn 1", memberIds: ["u1", "u3"] }],
     saved: 0,
+    modified: [],
+    markModified(path) { this.modified.push(path); },
     async save() { this.saved += 1; },
   };
 }

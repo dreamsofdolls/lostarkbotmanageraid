@@ -182,7 +182,6 @@ function createHarness(overrides = {}) {
     formatGold,
     truncateText,
     getAutoManageCooldownMs: () => 0,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS: 0,
     buildMyRaidDetailEmbed: () => ({}),
     refreshLocalSyncSnapshot: async (args = {}) => {
       calls.refresh.push(args);

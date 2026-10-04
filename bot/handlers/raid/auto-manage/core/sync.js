@@ -16,9 +16,7 @@ function buildSyncCooldownDescription({
   discordId,
 }) {
   const totalCooldownText =
-    typeof getAutoManageCooldownMs === "function"
-      ? formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId))
-      : null;
+    formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId));
   return [
     t("raid-auto-manage.sync.cooldownLineIntro", lang),
     "",

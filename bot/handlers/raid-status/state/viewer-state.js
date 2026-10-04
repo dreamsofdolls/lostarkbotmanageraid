@@ -6,8 +6,7 @@ const { getUserLanguage } = require("../../../services/i18n");
 const LOCAL_SYNC_PROBE_BUDGET_MS = 750;
 
 function loadStatusSeedDoc({ User, discordId }) {
-  const query = User.findOne({ discordId });
-  return typeof query?.lean === "function" ? query.lean() : query;
+  return User.findOne({ discordId }).lean();
 }
 
 function loadIncomingSharedAccounts({

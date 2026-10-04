@@ -28,6 +28,8 @@ function makeRacedEvent() {
     raidKey: "armoche", modeKey: "hard", minItemLevel: 1720, partySize: 8, supSlots: 2, dpsSlots: 6,
     title: "Tonight", startAt: new Date(Date.UTC(2026, 5, 5, 13, 0)), status: "open", turns: [],
     signups: [{ discordId: "u1", characterName: "Du", characterClass: "Sorceress", characterItemLevel: 1720, role: "dps", status: "confirmed", joinedAt: 1 }],
+    modified: [],
+    markModified(path) { this.modified.push(path); },
     async save() {
       throw Object.assign(new Error('No matching document found for id "ev1"'), { name: "VersionError" });
     },

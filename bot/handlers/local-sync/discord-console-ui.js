@@ -217,9 +217,7 @@ function buildSummaryLines(summary, lang, formatGold) {
   }
 
   if (Number(summary?.goldDelta?.total) > 0) {
-    const gold = typeof formatGold === "function"
-      ? formatGold(summary.goldDelta.total)
-      : String(summary.goldDelta.total);
+    const gold = formatGold(summary.goldDelta.total);
     lines.push(`💰 **${t("local-sync-discord.goldName", lang)}:** ${t(
       "local-sync-discord.goldValue",
       lang,

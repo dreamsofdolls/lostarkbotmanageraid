@@ -3,6 +3,8 @@
 /**
  * Keep short-lived keyed state under one expiry timer and a fixed entry cap.
  * Writes replace the key's expiry; mutating a returned value does not.
+ * Sibling of createMemoryCache (same folder), which instead budgets bytes,
+ * refreshes on get, and expires per entry - see its header for the split.
  * @param {object} options Expiry policy and injected clock/timers.
  * @param {number} options.ttlMs Time an entry remains readable after set().
  * @param {number} options.maxEntries Maximum retained keys.

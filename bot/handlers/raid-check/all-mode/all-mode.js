@@ -361,7 +361,7 @@ function createAllModeHandler({
         );
       });
 
-    if (typeof startBackgroundRefresh === "function" && refreshQueued > 0) {
+    if (refreshQueued > 0) {
       const refreshStarted = Date.now();
       let published = 0;
       void startBackgroundRefresh({

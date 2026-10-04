@@ -2266,7 +2266,6 @@ module.exports = {
   },
   "text-parser": {
     multiGate: "{icon} Message contains multiple gates ({gates}). Only one gate per update - repost with a single gate, or omit gate to mark the whole raid DONE.",
-    multiRaid: "{icon} Message contains multiple raids ({raids}). Pick exactly one raid and repost.",
     invalidRaid: "{icon} Unknown raid: {raids}. Check the raid name and repost.",
     raidAfterMode: "{icon} Raid {raids} appears after the difficulty/reset token. Put every raid first, for example `Act4 Final HM A B`, then repost.",
     multiDifficulty: "{icon} Message contains multiple difficulties ({difficulties}). Pick exactly one difficulty and repost.",

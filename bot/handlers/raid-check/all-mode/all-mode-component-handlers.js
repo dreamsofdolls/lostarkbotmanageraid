@@ -154,16 +154,6 @@ function createAllModeComponentHandlers({
         }).catch(() => {});
         return;
       }
-      if (typeof runManualRosterRefresh !== "function") {
-        await replyNotice(component, EmbedBuilder, {
-          type: "error",
-          title: t("raid-check.refreshFlow.failedTitle", lang),
-          description: t("raid-check.refreshFlow.failedDescription", lang, {
-            error: "manual refresh service unavailable",
-          }),
-        }).catch(() => {});
-        return;
-      }
 
       const deferred = await component.deferUpdate().then(() => true).catch((err) => {
         console.warn("[raid-check all] roster-refresh defer failed:", err?.message || err);

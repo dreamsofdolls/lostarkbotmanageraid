@@ -78,12 +78,9 @@ export function setCatalog(rawCatalog = {}) {
   return rawCatalog;
 }
 
-export async function loadCatalog(fetcher = globalThis.fetch) {
+export async function loadCatalog() {
   if (catalogLoaded) return;
-  if (typeof fetcher !== "function") {
-    throw new Error("local-sync catalog fetch is unavailable");
-  }
-  const resp = await fetcher("/api/local-sync/catalog");
+  const resp = await globalThis.fetch("/api/local-sync/catalog");
   if (!resp?.ok) {
     throw new Error(`local-sync catalog failed: HTTP ${resp?.status || 0}`);
   }
@@ -257,7 +254,7 @@ function mergeEncounterBucket(map, encounter) {
 /**
  * Bucketize raw encounter rows into one entry per (char, raid, mode)
  * tuple, keeping the highest gate cleared. Mirror of
- * bot/services/local-sync/apply.js bucketize so the preview shows the
+ * bot/services/local-sync/core/apply/apply-targets.js bucketize so the preview shows the
  * EXACT shape the server will receive (no surprise during sync).
  *
  * Input row shape (from sqlite3.exec callback):
@@ -298,7 +295,6 @@ export function currentWeeklyResetStartMs(now = new Date()) {
     cursor.setUTCDate(cursor.getUTCDate() - 1);
     cursor.setUTCHours(23, 59, 59, 999);
   }
-  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
 }
 
 function getEligibleRaidModes(itemLevel) {

@@ -6,6 +6,7 @@ const {
   applyRsvp,
 } = require("../../../../services/raid/schedule/slots/signup-state");
 const { detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
+const { buildPromotedPingContent } = require("./promoted-ping");
 const {
   PICKER_LIMIT,
   getSelectableCharacterRows,
@@ -146,15 +147,11 @@ function createScheduleParticipantActions({
       supSlots: event.supSlots,
       dpsSlots: event.dpsSlots,
     });
-    if (promoted.length > 0 && !event.skipNotify) {
-      await interaction.followUp({
-        content: promoted
-          .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
-            user: `<@${s.discordId}>`,
-            character: s.characterName,
-          }))
-          .join("\n"),
-      }).catch(() => {});
+    if (!event.skipNotify) {
+      const ping = buildPromotedPingContent(promoted, langForBoard);
+      if (ping) {
+        await interaction.followUp({ content: ping }).catch(() => {});
+      }
     }
   }
 

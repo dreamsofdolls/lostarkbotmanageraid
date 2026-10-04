@@ -27,7 +27,7 @@ const { truncateSelectText: clip } = require("../../../../utils/discord/select-o
 function stripeColor(UI, status) {
   if (status === "cleared") return UI.colors.success;
   if (status === "cancelled") return UI.colors.danger;
-  if (status === "locked") return UI.colors.warn || UI.colors.neutral;
+  if (status === "locked") return UI.colors.neutral;
   return UI.colors.progress;
 }
 

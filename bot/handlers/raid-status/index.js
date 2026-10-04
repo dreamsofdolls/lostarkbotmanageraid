@@ -98,7 +98,6 @@ function createRaidStatusCommand(deps) {
     runManualRosterRefresh,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
     applyRaidSetForDiscordId = null,
     applyRaidSetBatchForDiscordId = null,
@@ -360,7 +359,6 @@ function createRaidStatusCommand(deps) {
       lang,
       formatNextCooldownRemaining,
       getAutoManageCooldownMs,
-      AUTO_MANAGE_SYNC_COOLDOWN_MS,
       getStatusUserMeta: () => statusUserMeta,
     });
 
@@ -464,7 +462,6 @@ function createRaidStatusCommand(deps) {
       formatGold,
       truncateText,
       getAutoManageCooldownMs,
-      AUTO_MANAGE_SYNC_COOLDOWN_MS,
       buildMyRaidDetailEmbed,
       refreshLocalSyncSnapshot,
       runLocalSyncAction,

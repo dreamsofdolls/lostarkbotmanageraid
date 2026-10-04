@@ -1,6 +1,7 @@
 "use strict";
 
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
+const { normalizeName } = require("../../../../utils/raid/common/shared");
 
 function createTaskToggleRows({
   ActionRowBuilder,
@@ -80,7 +81,7 @@ function createTaskToggleRows({
         value: name.slice(0, 100),
         default:
           !!activeName &&
-          name.trim().toLowerCase() === activeName.trim().toLowerCase(),
+          normalizeName(name) === normalizeName(activeName),
       };
       const classEmojiObj = parseCustomEmoji(
         getClassEmoji(character.class || character.className)
@@ -114,7 +115,7 @@ function createTaskToggleRows({
           `${icon} ${aggregate.name} \u00B7 ${aggregate.reset} (${aggregate.doneCount}/${aggregate.owners.length})`,
           100
         ),
-        value: `__all__::${aggregate.reset}::${aggregate.name.trim().toLowerCase()}`.slice(0, 100),
+        value: `__all__::${aggregate.reset}::${normalizeName(aggregate.name)}`.slice(0, 100),
       };
     });
 
@@ -131,8 +132,7 @@ function createTaskToggleRows({
     const account = getAccounts()[getCurrentPage()];
     const character = (account?.characters || []).find(
       (candidate) =>
-        getCharacterName(candidate).trim().toLowerCase() ===
-        activeName.trim().toLowerCase()
+        normalizeName(getCharacterName(candidate)) === normalizeName(activeName)
     );
     const sideTasks =
       character && Array.isArray(character.sideTasks)

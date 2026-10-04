@@ -35,7 +35,7 @@ export function buildEncounterPreviewSql({
   // encounter instead of choosing the lexicographically largest party text.
   const playersSelect = playersSql ? `COALESCE(${playersSql}, '')` : `''`;
   const soloWhere = scope === "solo"
-    ? `AND LOWER(TRIM(COALESCE(${diffSql}, ''))) IN ('solo', 'solo mode')`
+    ? `AND LOWER(TRIM(COALESCE(${diffSql}, ''))) IN (${[...SOLO_DIFFICULTIES].map((q) => `'${q}'`).join(", ")})`
     : "";
 
   return `

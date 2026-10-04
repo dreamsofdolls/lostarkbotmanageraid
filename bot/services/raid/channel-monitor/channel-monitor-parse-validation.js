@@ -8,11 +8,6 @@ const PARSE_ERROR_HINTS = {
       icon: UI.icons.warn,
       gates: parsed.gates.join(", "),
     }),
-  "multi-raid": ({ parsed, UI, lang, t }) =>
-    t("text-parser.multiRaid", lang, {
-      icon: UI.icons.warn,
-      raids: parsed.raids.join(", "),
-    }),
   "invalid-raid": ({ parsed, UI, lang, t }) =>
     t("text-parser.invalidRaid", lang, {
       icon: UI.icons.warn,

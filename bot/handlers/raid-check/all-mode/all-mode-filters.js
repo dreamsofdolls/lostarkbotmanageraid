@@ -46,9 +46,7 @@ function getAllModeRosterRaidState({
     : [];
   for (const character of characters) {
     if (!isRaidCheckVisibleCharacter(character)) continue;
-    const raids = typeof getStatusRaidsForCharacter === "function"
-      ? getStatusRaidsForCharacter(character) || []
-      : [];
+    const raids = getStatusRaidsForCharacter(character) || [];
     for (const raid of raids) {
       if (!isRaidCheckVisibleRaid(raid)) continue;
       if (

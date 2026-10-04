@@ -3,7 +3,7 @@
 const { promisify } = require("node:util");
 const { brotliCompress, brotliDecompress, constants } = require("node:zlib");
 const { BIBLE_ORIGIN } = require("./source");
-const { createMemoryCache } = require("./memory-cache");
+const { createMemoryCache } = require("../../utils/cache/memory-cache");
 
 const compress = promisify(brotliCompress);
 const decompress = promisify(brotliDecompress);

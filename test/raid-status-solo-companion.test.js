@@ -41,7 +41,6 @@ function buildControls(getStatusUserMeta) {
     lang: "en",
     formatNextCooldownRemaining: () => "",
     getAutoManageCooldownMs: () => 0,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS: 0,
     getStatusUserMeta,
   });
 }
@@ -95,6 +94,7 @@ test("raid-status hides Solo Companion on shared pages and keeps every Discord r
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
     getMyRaidsShaped: () => [],
+    getBackgroundRefreshing: () => false,
   });
 
   const ownRows = buildLayout().buildComponents(false);
@@ -216,6 +216,7 @@ test("local-sync mode splits in-Discord actions from the web companion buttons",
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
     getMyRaidsShaped: () => [],
+    getBackgroundRefreshing: () => false,
   });
 
   const rows = buildComponents(false);
@@ -270,6 +271,7 @@ test("bible auto-sync mode keeps its single button row", () => {
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
     getMyRaidsShaped: () => [],
+    getBackgroundRefreshing: () => false,
   });
 
   const rows = buildComponents(false);

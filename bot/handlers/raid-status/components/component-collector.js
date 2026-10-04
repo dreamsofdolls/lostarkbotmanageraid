@@ -117,10 +117,7 @@ function attachRaidStatusComponentCollector({
     // Navigation and read-only filters should render from a recent Mongo
     // snapshot. Refresh only on interaction, with session-level TTL and
     // in-flight coalescing, so idle collectors never poll the database.
-    if (
-      LIVE_SNAPSHOT_ACTIONS.has(route.action)
-      && typeof refreshStateIfStale === "function"
-    ) {
+    if (LIVE_SNAPSHOT_ACTIONS.has(route.action)) {
       await refreshStateIfStale().catch((err) => {
         console.warn(
           "[raid-status component] live snapshot refresh failed:",

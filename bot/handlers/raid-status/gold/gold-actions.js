@@ -28,14 +28,11 @@ const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
 // dropped on serialize - so the save no-ops and the override never sticks
 // (verified: toObject() omits the field). Rebuilding the entry as a plain
 // object and re-assigning it forces Mongoose to re-cast a fresh subdoc that
-// carries the field through to the DB. Plain-object callers (unit-test mocks)
-// have no toObject(); the spread fallback handles them.
+// carries the field through to the DB.
 function writeAssignedRaidOverride(target, raidKey, overrideValue) {
   if (!target.assignedRaids) target.assignedRaids = {};
   const current = target.assignedRaids[raidKey];
-  const plain = current && typeof current.toObject === "function"
-    ? current.toObject()
-    : { ...(current || {}) };
+  const plain = current ? current.toObject() : {};
   delete plain.goldDisabled;
   delete plain.goldForced;
   if (overrideValue) plain.goldOverride = overrideValue;
@@ -92,9 +89,7 @@ function findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName) {
 }
 
 function markAccountsModified(userDocFresh) {
-  if (typeof userDocFresh?.markModified === "function") {
-    userDocFresh.markModified("accounts");
-  }
+  userDocFresh?.markModified("accounts");
 }
 
 async function updateGoldWriteTarget(options, applyUpdate) {

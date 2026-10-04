@@ -11,12 +11,13 @@ const {
   formatClassIcon,
   formatSavedCharacterLine,
 } = require("../picker/render");
+const { BIBLE_ORIGIN, BIBLE_REGION } = require("../../../services/bible-endpoint");
 
 const CHECK_ICON = "\u2705";
 const UNCHECK_ICON = "\u2b1c";
 
 function buildSeedRosterLink(seedCharName) {
-  return `https://lostark.bible/character/NA/${encodeURIComponent(seedCharName)}/roster`;
+  return `${BIBLE_ORIGIN}/character/${BIBLE_REGION}/${encodeURIComponent(seedCharName)}/roster`;
 }
 
 function createAddRosterViewBuilders({

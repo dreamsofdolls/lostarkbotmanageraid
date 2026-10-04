@@ -153,7 +153,6 @@ function createScheduleShowResurfaceActions({
   return {
     handleShowResurface,
     handleShowTurnPlan,
-    republishBoard,
   };
 }
 
