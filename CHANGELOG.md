@@ -8,6 +8,15 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Fixed
 - A public `/raid-status` card no longer carries the signed Local Reader link, since anyone in the channel can click a link button. There, **New link** sends the fresh link in a private follow-up; a private card still points its **Open Local Reader** button at it.
+- An open `/raid-status` card updates itself when a Bible sync that outlasted the first 2.5 s finishes, and when Local Sync data was saved while the card was opening. The "Bible is slow" line now says the card will update instead of asking to reopen it.
+- `/raid-status` keeps the newest state: a slow background refresh or a late Local Sync screen can no longer overwrite a roster, a revoked share or a view that a click already loaded, and the expired footer is always the card's last edit.
+- Requests to lostark.bible stop piling up behind a slow Bible: two run at once, at most 32 wait, each for at most 30 seconds, and the wait is checked again right before a request starts. Past that they fail at once, and `/raid-log` shows its busy notice.
+- A `/raid-log` refresh turned away because the capture queue is full no longer breaks the sharing of a capture already running: the requests behind it reuse that image instead of capturing again, and a refresh already accepted still keeps later requests off the older image.
+
+## 2026-10-03
+
+### Fixed
+- An error notice that quotes a very long input, such as a roster name, is cut to Discord's 4096-character limit instead of turning into the generic failure reply.
 
 ### Changed (internal)
 - Dependencies every caller passes are now required instead of guarded with `typeof` checks and fallbacks that never ran; lostark.bible's origin, region and timeout live in one `bible-endpoint.js`; the unused multi-raid parse hint and its locale lines are gone. No behavior change.
