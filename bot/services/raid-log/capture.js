@@ -372,12 +372,9 @@ function createRaidLogCapture({
     if (cached) return { ...cached, cached: true };
     const shared = (useCache || refresh) && pendingCaptures.get(key);
     if (shared && (!refresh || shared.refresh)) return { ...await shared.promise, cached: true };
-    if (refresh) {
-      // New requests must queue behind the refresh rather than join an older capture.
-      for (const pendingKey of pendingCaptures.keys()) if (pendingKey.startsWith(prefix)) pendingCaptures.delete(pendingKey);
-    }
     const started = Date.now();
     const deadline = started + timeoutMs;
+    const pending = { refresh };
     const capture = queue.run(async () => {
       const queueMs = Date.now() - started;
       // Another queued request may already have rendered this exact view.
@@ -398,10 +395,15 @@ function createRaidLogCapture({
       }
       if (useCache) cache.set(key, result);
       return { ...result, queueMs };
-    }, deadline);
+    }, deadline, () => {
+      // Only an accepted refresh separates new requests from older captures.
+      if (refresh) {
+        for (const pendingKey of pendingCaptures.keys()) if (pendingKey.startsWith(prefix)) pendingCaptures.delete(pendingKey);
+      }
+      if (useCache || refresh) pendingCaptures.set(key, pending);
+    });
+    pending.promise = capture;
     if (!useCache && !refresh) return capture;
-    const pending = { promise: capture, refresh };
-    pendingCaptures.set(key, pending);
     try { return await capture; }
     finally { if (pendingCaptures.get(key) === pending) pendingCaptures.delete(key); }
   }

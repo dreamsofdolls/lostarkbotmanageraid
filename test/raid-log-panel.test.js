@@ -140,6 +140,26 @@ test("private characters are blocked initially and changing to private revokes t
   assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
 });
 
+test("refresh revokes the displayed image when logs become private, disappear or no longer match the character", async () => {
+  for (const code of ["logs_private", "no_logs", "character_mismatch"]) {
+    const f = fixture();
+    await f.run();
+    f.verifyFailure = new RaidLogError(code);
+    const refresh = f.owner("raid", "__refresh");
+    await f.click(refresh);
+    assert.equal(f.events.filter(event => event === "refresh").length, 1);
+    assert.equal(f.events.filter(event => event === "verify").length, 0);
+    assert.equal(captures(f).length, 1, `${code} must revoke before another capture`);
+    assert.deepEqual(f.payload.attachments, []);
+    assert.deepEqual(f.payload.files, []);
+    assert.ok(f.payload.components.every(row => row.toJSON().components.every(component => component.disabled)));
+    f.verifyFailure = null;
+    await f.click(refresh);
+    assert.equal(captures(f).length, 1);
+    assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
+  }
+});
+
 test("more than 25 raid choices paginate without losing raid selection or exposing unavailable logs", async () => {
   const f = fixture({ logs: Array.from({ length: 30 }, (_, i) => logEntry(`l${i}`, `raid${i}`, 100 - i)) });
   await f.run();

@@ -22,9 +22,11 @@ function createRenderQueue({ maxPending = 4 } = {}) {
   }
 
   return {
-    run(run, deadline) {
+    run(run, deadline, onAccepted) {
       if (active && pending.length >= maxPending) return Promise.reject(new RaidLogError("busy"));
       return new Promise((resolve, reject) => {
+        // Admission bookkeeping runs synchronously only for accepted jobs.
+        onAccepted?.();
         const job = { run, deadline, resolve, reject };
         job.timer = setTimeout(() => {
           const index = pending.indexOf(job);

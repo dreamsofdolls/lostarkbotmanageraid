@@ -790,6 +790,65 @@ test("a queued refresh prevents a later request from returning the old cached im
   }
 });
 
+test("a rejected refresh preserves sharing of an image already being captured", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser({ onScreenshot: async () => { screenshots++; enter(); await held; } });
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000, maxPending: 0 });
+  const first = capture(URL, { useCache: true });
+  await entered;
+  let following;
+  try {
+    await assert.rejects(capture(URL, { useCache: true, refresh: true }), { code: "busy" });
+    following = Promise.allSettled(Array.from({ length: 6 }, () => capture(URL, { useCache: true })));
+    finish();
+    const initial = await first;
+    const results = await following;
+    assert.ok(results.every(result => result.status === "fulfilled"), "a rejected refresh must preserve the active shared render");
+    for (const result of results) assert.equal(result.value.images[0].buffer, initial.images[0].buffer);
+    assert.equal(screenshots, 1);
+  } finally {
+    finish();
+    await Promise.allSettled([first, following]);
+    await capture.close();
+  }
+});
+
+test("a rejected refresh of another tab preserves an accepted refresh's cache barrier", async () => {
+  let enter, finish;
+  const entered = new Promise(resolve => { enter = resolve; });
+  const held = new Promise(resolve => { finish = resolve; });
+  let screenshots = 0;
+  const fake = fakeBrowser();
+  fake.page.screenshot = async () => {
+    const shot = ++screenshots;
+    if (shot === 2) { enter(); await held; }
+    return Buffer.from(`png-${shot}`);
+  };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000, maxPending: 1 });
+  await capture(URL, { useCache: true });
+  const blocking = capture("https://lostark.bible/logs/another");
+  await entered;
+  const refreshing = capture(URL, { useCache: true, refresh: true });
+  let following;
+  try {
+    await assert.rejects(capture(URL, { useCache: true, refresh: true, tab: "tanked" }), { code: "busy" });
+    following = capture(URL, { useCache: true });
+    finish();
+    await blocking;
+    const fresh = await refreshing;
+    assert.equal(fresh.images[0].buffer.toString(), "png-3");
+    assert.equal((await following).images[0].buffer, fresh.images[0].buffer);
+    assert.equal(screenshots, 3);
+  } finally {
+    finish();
+    await Promise.allSettled([blocking, refreshing, following]);
+    await capture.close();
+  }
+});
+
 test("capture passes its deadline abort signal into PNG framing", async t => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const fake = fakeBrowser();
