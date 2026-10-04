@@ -105,6 +105,7 @@ function createRaidStatusSync(deps) {
 
   async function loadStatusUserDoc(discordId, seedDoc) {
     let userDoc;
+    let backgroundSyncPromise = null;
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
     const piggybackOutcome = createOutcome();
@@ -166,16 +167,19 @@ function createRaidStatusSync(deps) {
       if (autoManageTimedOut) {
         autoManageCollected = null;
         autoManageReleaseInBackground = true;
-        autoManagePromise
-          .then((backgroundCollected) =>
-            applyAutoManageCollectedForStatus(
+        backgroundSyncPromise = autoManagePromise
+          .then(async (backgroundCollected) => {
+            const snapshot = await applyAutoManageCollectedForStatus(
               discordId,
               autoManageWeekResetStart,
               backgroundCollected,
               "background"
-            )
-          )
+            );
+            piggybackOutcome.outcome = backgroundCollected ? "not-applicable" : "failed";
+            return snapshot;
+          })
           .catch(async (err) => {
+            piggybackOutcome.outcome = "failed";
             console.warn(
               "[raid-status] background auto-manage apply failed:",
               err?.message || err
@@ -183,11 +187,8 @@ function createRaidStatusSync(deps) {
             await stampAutoManageAttempt(discordId);
           })
           .finally(() => releaseAutoManageSyncSlot(discordId));
-        // Timeout itself is silent here · the `[raid-status] background
-        // auto-manage finished ... outcome=...` log fired by the
-        // .then handler above is the truth signal (no background log
-        // implies no timeout). A second log line would duplicate every slow
-        // Bible response.
+        // Keep the slot through persistence and expose completion so the
+        // open card can reload after work that outlives the initial budget.
       }
 
       const hasCollectedRefresh =
@@ -230,7 +231,7 @@ function createRaidStatusSync(deps) {
       }
     }
 
-    return { userDoc, piggybackOutcome };
+    return { userDoc, piggybackOutcome, backgroundSyncPromise };
   }
 
   async function runManualStatusSync(discordId, options = {}) {

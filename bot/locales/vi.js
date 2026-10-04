@@ -940,7 +940,7 @@ module.exports = {
           "Tớ ngó qua logs rồi, chưa thấy gate nào mới.",
         ],
       },
-      timeout: "Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~",
+      timeout: "Bible đang chậm tay, Artist vẫn đang đồng bộ ngầm. Bảng này sẽ tự cập nhật khi xong nha~",
       failed: "Bible đang dở chứng nên tớ tạm đọc cache. Cậu thử lại sau vài phút.",
     },
     embed: {

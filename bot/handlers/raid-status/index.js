@@ -514,6 +514,9 @@ function createRaidStatusCommand(deps) {
     });
     liveApplyRefresh.start();
     const queueBackgroundRender = (label) => liveApplyRefresh.request(label);
+    // Catch writes made while the first reply was rendering, before the
+    // apply subscription existed, without waiting for roster/Bible I/O.
+    void queueBackgroundRender("open");
 
     void markRaidStatusOpenedDay({
       User,
@@ -537,6 +540,15 @@ function createRaidStatusCommand(deps) {
             );
           }
           backgroundRefreshing = false;
+          // Bible may persist after the initial 2.5s budget. Refresh this
+          // same card when that work settles, without requiring a click.
+          if (refreshed?.backgroundSyncPromise) {
+            void refreshed.backgroundSyncPromise
+              .then(() => queueBackgroundRender("sync-completed"))
+              .catch((err) => {
+                console.warn("[raid-status] background sync completion failed:", err?.message || err);
+              });
+          }
           console.log(
             `[raid-status] background refresh ms=${Date.now() - refreshStarted} outcome=${refreshed?.piggybackOutcome?.outcome || "unknown"}`
           );

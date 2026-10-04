@@ -917,7 +917,7 @@ module.exports = {
           "I checked the logs, nothing new has landed yet.",
         ],
       },
-      timeout: "Bible is slow today - Artist is still pulling in the background. Re-open in ~10s for fresh data~",
+      timeout: "Bible is slow today - Artist is still syncing in the background. This card will update automatically when it finishes~",
       failed: "Bible is misbehaving, so I am reading from cache. Please retry in a few minutes.",
     },
     embed: {
