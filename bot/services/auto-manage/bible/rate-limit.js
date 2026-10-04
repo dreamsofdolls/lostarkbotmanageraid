@@ -4,6 +4,7 @@ const DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS = 60 * 1000;
 const MAX_BIBLE_RATE_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
 const DEFAULT_BIBLE_MAX_PENDING = 32;
 const DEFAULT_BIBLE_QUEUE_WAIT_MS = 30_000;
+const BIBLE_QUEUE_FULL_CODE = "BIBLE_QUEUE_FULL";
 
 /**
  * Read a Retry-After header value as a delay.
@@ -131,7 +132,7 @@ class BibleRequestLimiter {
     }
     if (this.active >= this.max && this.queue.length >= this.maxPending) {
       return Promise.reject(Object.assign(new Error("LostArk Bible request queue is full; try again shortly"), {
-        name: "BibleQueueFullError", code: "BIBLE_QUEUE_FULL",
+        name: "BibleQueueFullError", code: BIBLE_QUEUE_FULL_CODE,
       }));
     }
 
@@ -166,6 +167,10 @@ class BibleRequestLimiter {
     return Object.assign(new Error("Bible request timed out while waiting for an available slot"), {
       name: "TimeoutError",
     });
+  }
+
+  _isPastDeadline(deadline) {
+    return deadline !== undefined && this.nowMs() >= deadline;
   }
 
   _createBackoffError(remainingMs) {
@@ -226,7 +231,7 @@ class BibleRequestLimiter {
       detach();
       // Recheck the deadline before dispatch: a busy event loop can run the
       // active request's completion before an already-due timeout callback.
-      if (deadline !== undefined && this.nowMs() >= deadline) {
+      if (this._isPastDeadline(deadline)) {
         reject(signal?.aborted ? signal.reason : this._createQueueTimeoutError());
         continue;
       }
@@ -234,7 +239,7 @@ class BibleRequestLimiter {
       Promise.resolve()
         .then(() => {
           signal?.throwIfAborted();
-          if (deadline !== undefined && this.nowMs() >= deadline) throw this._createQueueTimeoutError();
+          if (this._isPastDeadline(deadline)) throw this._createQueueTimeoutError();
           return fn();
         })
         .catch((error) => {
@@ -250,6 +255,7 @@ class BibleRequestLimiter {
 }
 
 module.exports = {
+  BIBLE_QUEUE_FULL_CODE,
   BibleRequestLimiter,
   createBibleHttpError,
   getBibleHttpStatus,

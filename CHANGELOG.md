@@ -11,6 +11,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed (internal)
 - Dependencies every caller passes are now required instead of guarded with `typeof` checks and fallbacks that never ran; lostark.bible's origin, region and timeout live in one `bible-endpoint.js`; the unused multi-raid parse hint and its locale lines are gone. No behavior change.
+- The Bible queue-full code and the open-card refresh labels are named constants shared across files, the 4096-char notice limit is named, and the gold replacement prompt goes straight through the card's redraw queue. No behavior change.
 
 ## 2026-10-02
 

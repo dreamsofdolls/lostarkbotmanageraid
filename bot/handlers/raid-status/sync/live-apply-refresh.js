@@ -8,7 +8,13 @@ const {
 } = require("../../../utils/async/latest-only-queue");
 
 const LOCAL_SYNC_APPLY_RENDER_LABEL = "local-sync-apply";
-const STATUS_STATE_REFRESH_LABELS = new Set(["open", "sync-completed", LOCAL_SYNC_APPLY_RENDER_LABEL]);
+const STATUS_OPEN_RENDER_LABEL = "open";
+const SYNC_COMPLETED_RENDER_LABEL = "sync-completed";
+const STATUS_STATE_REFRESH_LABELS = new Set([
+  STATUS_OPEN_RENDER_LABEL,
+  SYNC_COMPLETED_RENDER_LABEL,
+  LOCAL_SYNC_APPLY_RENDER_LABEL,
+]);
 const MAX_STATUS_APPLY_OWNER_SUBSCRIPTIONS = 25;
 
 function visibleRosterOwnerIds(viewerDiscordId, accounts) {
@@ -64,7 +70,7 @@ function createRaidStatusLiveApplyRefresh({
         if (stopped || isSessionEnded()) return;
         rebuildStatusUserMeta();
         refreshSubscriptions();
-        if (getCurrentView() === "sync" && (ownJobId || labels.includes("open"))) {
+        if (getCurrentView() === "sync" && (ownJobId || labels.includes(STATUS_OPEN_RENDER_LABEL))) {
           setLocalSyncSnapshot(await refreshLocalSyncSnapshot({ jobId: ownJobId }));
         }
       }
@@ -123,5 +129,7 @@ function createRaidStatusLiveApplyRefresh({
 }
 
 module.exports = {
+  STATUS_OPEN_RENDER_LABEL,
+  SYNC_COMPLETED_RENDER_LABEL,
   createRaidStatusLiveApplyRefresh,
 };

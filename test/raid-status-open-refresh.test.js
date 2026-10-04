@@ -2,15 +2,14 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const discord = require("discord.js");
 const { createRaidStatusCommand } = require("../bot/handlers/raid-status");
 const User = require("../bot/models/user");
-const RosterShare = require("../bot/models/RosterShare");
-const RaidEvent = require("../bot/models/RaidEvent");
-const UserBackground = require("../bot/models/userBackground");
-const common = require("../bot/utils/raid/common/shared");
-const character = require("../bot/utils/raid/common/character");
 const { t: translate } = require("../bot/services/i18n");
+const {
+  createCollectorMessage,
+  createStatusCommandDeps,
+  mockStatusSideReads,
+} = require("./helpers/raid-status-command-fixture");
 
 const flushBackground = async () => {
   for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve));
@@ -44,10 +43,7 @@ function createFixture(t, { localSync = false, slowBible = false, slowRoster = f
     return { select() { return this; }, lean: async () => snapshot,
       then: (resolve, reject) => Promise.resolve(doc).then(resolve, reject) };
   });
-  t.mock.method(User, "updateOne", async () => ({ matchedCount: 1 }));
-  t.mock.method(RosterShare, "find", () => ({ lean: async () => [] }));
-  t.mock.method(RaidEvent, "find", () => ({ sort() { return this; }, lean: async () => [] }));
-  t.mock.method(UserBackground, "findOne", () => ({ select() { return this; }, lean: async () => null }));
+  mockStatusSideReads(t);
   const listeners = new Map(), edits = [];
   let finishBible, finishRoster;
   const heldBible = new Promise(resolve => { finishBible = resolve; });
@@ -58,21 +54,18 @@ function createFixture(t, { localSync = false, slowBible = false, slowRoster = f
     doc.lastAutoManageSyncAt = Date.now();
     doc.lastLocalSyncAt = Date.now();
   };
-  const message = { createMessageComponentCollector: () => ({ on(event, handler) { listeners.set(event, handler); return this; } }) };
+  const message = createCollectorMessage(listeners);
   const interaction = { user: { id: databaseDoc.discordId }, guildId: "guild",
     deferReply: async () => {}, editReply: async payload => {
       edits.push(payload);
       if (edits.length === 1 && onFirstReply) onFirstReply(() => markUpdated(databaseDoc));
       return message;
     } };
-  const command = createRaidStatusCommand({
-    ...discord, ...common, ...character, User,
-    saveWithRetry: async fn => fn(), ensureFreshWeek: () => false,
+  const command = createRaidStatusCommand(createStatusCommandDeps({
     collectStaleAccountRefreshes: async () => slowRoster ? heldRoster : [],
     applyStaleAccountRefreshes: () => false,
     getStatusRaidsForCharacter: char => char.raids,
-    getAutoManageCooldownMs: () => 0, getRosterRefreshCooldownMs: () => 0,
-    formatRosterRefreshCooldownRemaining: () => "", weekResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
     acquireAutoManageSyncSlot: async () => ({ acquired: true }),
     releaseAutoManageSyncSlot: () => { releases += 1; },
     gatherAutoManageLogsForUserDoc: async () => {
@@ -92,11 +85,7 @@ function createFixture(t, { localSync = false, slowBible = false, slowRoster = f
       return structuredClone(databaseDoc);
     },
     stampAutoManageAttempt: async () => { failureStamps += 1; },
-    buildPaginationRow: (_page, _pages, disabled) => new discord.ActionRowBuilder().addComponents(
-      new discord.ButtonBuilder().setCustomId("status:prev").setLabel("Previous").setStyle(discord.ButtonStyle.Secondary).setDisabled(disabled),
-      new discord.ButtonBuilder().setCustomId("status:next").setLabel("Next").setStyle(discord.ButtonStyle.Secondary).setDisabled(disabled),
-    ),
-  });
+  }));
   return {
     edits,
     open: () => command.handleStatusCommand(interaction),

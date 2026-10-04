@@ -1,6 +1,7 @@
 "use strict";
 
 const { BIBLE_ERROR_KIND, classifyBibleError } = require("../auto-manage/bible/error-kinds");
+const { BIBLE_QUEUE_FULL_CODE } = require("../auto-manage/bible/rate-limit");
 
 const BIBLE_ERROR_CODES = new Map([
   [BIBLE_ERROR_KIND.notFound, "character_not_found"],
@@ -18,7 +19,7 @@ class RaidLogError extends Error {
 
 function raidLogErrorCode(error) {
   if (error instanceof RaidLogError) return error.code;
-  if (error?.code === "BIBLE_QUEUE_FULL") return "busy";
+  if (error?.code === BIBLE_QUEUE_FULL_CODE) return "busy";
   if (["TimeoutError", "AbortError"].includes(error?.name)) return "timeout";
   return BIBLE_ERROR_CODES.get(classifyBibleError(error)) || "failed";
 }

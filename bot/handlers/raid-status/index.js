@@ -62,6 +62,8 @@ const {
   markRaidStatusOpenedDay,
 } = require("../../services/auto-manage/runtime/support/daily-backfill");
 const {
+  STATUS_OPEN_RENDER_LABEL,
+  SYNC_COMPLETED_RENDER_LABEL,
   createRaidStatusLiveApplyRefresh,
 } = require("./sync/live-apply-refresh");
 
@@ -515,7 +517,7 @@ function createRaidStatusCommand(deps) {
     const queueBackgroundRender = (label) => liveApplyRefresh.request(label);
     // Catch writes made while the first reply was rendering, before the
     // apply subscription existed, without waiting for roster/Bible I/O.
-    void queueBackgroundRender("open");
+    void queueBackgroundRender(STATUS_OPEN_RENDER_LABEL);
 
     void markRaidStatusOpenedDay({
       User,
@@ -543,7 +545,7 @@ function createRaidStatusCommand(deps) {
           // same card when that work settles, without requiring a click.
           if (refreshed?.backgroundSyncPromise) {
             void refreshed.backgroundSyncPromise
-              .then(() => queueBackgroundRender("sync-completed"))
+              .then(() => queueBackgroundRender(SYNC_COMPLETED_RENDER_LABEL))
               .catch((err) => {
                 console.warn("[raid-status] background sync completion failed:", err?.message || err);
               });

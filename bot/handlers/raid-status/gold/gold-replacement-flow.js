@@ -39,14 +39,13 @@ function createGoldReplacementFlow(ctx) {
     UI,
     User,
     saveWithRetry,
-    interaction,
     discordId,
     lang,
     reloadViewerAccounts,
     formatGold,
     truncateText,
     canEditAccountFn,
-    showPrompt = payload => interaction.editReply(payload).then(() => true),
+    showPrompt,
   } = ctx;
   const sessions = new Map();
 

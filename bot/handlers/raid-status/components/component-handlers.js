@@ -132,14 +132,13 @@ function createStatusComponentRouteHandlers(ctx) {
     UI,
     User,
     saveWithRetry,
-    interaction,
     discordId,
     lang,
     reloadViewerAccounts,
     formatGold,
     truncateText,
     canEditAccountFn,
-    showPrompt: payload => redrawMessage.show(payload),
+    showPrompt: redrawMessage.show,
   });
   let latestViewTicket = 0;
 
