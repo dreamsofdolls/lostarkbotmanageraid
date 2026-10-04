@@ -196,7 +196,7 @@ function attachRaidStatusComponentCollector({
       const embeds = buildCurrentEmbeds().map((embed) => EmbedBuilder.from(embed));
       // The footer goes on the last embed, the bottom of the message.
       embeds[embeds.length - 1].setFooter({ text: expiredFooter });
-      await interaction.editReply({
+      await redrawCard.finish({
         embeds,
         components: buildComponents(true),
         attachments: [],

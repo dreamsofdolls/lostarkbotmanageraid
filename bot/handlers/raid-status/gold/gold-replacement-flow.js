@@ -46,6 +46,7 @@ function createGoldReplacementFlow(ctx) {
     formatGold,
     truncateText,
     canEditAccountFn,
+    showPrompt = payload => interaction.editReply(payload).then(() => true),
   } = ctx;
   const sessions = new Map();
 
@@ -106,12 +107,12 @@ function createGoldReplacementFlow(ctx) {
       targetAccountName,
     });
 
-    const edited = await interaction.editReply({
+    const edited = await showPrompt({
       embeds: [embed],
       components: [row],
       attachments: [],
       files: [],
-    }).then(() => true).catch((err) => {
+    }).catch((err) => {
       console.warn("[raid-status gold replace] prompt edit failed:", err?.message || err);
       return false;
     });

@@ -65,6 +65,8 @@ async function createRaidStatusSessionState({
   let totalCharacters = countCharacters(accounts);
   let lastReloadedAtMs = Number(now());
   let interactiveReloadPromise = null;
+  let interactiveReloadTicket = 0;
+  let latestReloadTicket = 0;
 
   const recomputeRosterNavigation = () => {
     rosterFilterEntries = buildStatusRosterFilterEntries({
@@ -106,15 +108,18 @@ async function createRaidStatusSessionState({
   recomputeDerivedState();
 
   async function reloadViewerAccounts(nextOwnDoc = null) {
+    const ticket = ++latestReloadTicket;
     // Fresh share authorization and the own roster are independent reads. Keep
     // both fresh on reload, while overlapping their Mongo round trips.
     const [reloadedOwnDoc, sharedAccounts] = await Promise.all([
       nextOwnDoc || User.findOne({ discordId }),
       buildMergedAccounts(discordId, []),
     ]);
+    // A newer reload may already have applied a write or revoked a share.
+    if (ticket !== latestReloadTicket) return userDoc;
     if (reloadedOwnDoc && Array.isArray(reloadedOwnDoc.accounts)) {
       userDoc = reloadedOwnDoc;
-    } else if (!userDoc || !Array.isArray(userDoc.accounts)) {
+    } else {
       userDoc = { discordId, accounts: [] };
     }
 
@@ -130,14 +135,16 @@ async function createRaidStatusSessionState({
     const normalizedMaxAgeMs = Math.max(0, Number(maxAgeMs) || 0);
     const ageMs = Math.max(0, Number(now()) - lastReloadedAtMs);
     if (ageMs < normalizedMaxAgeMs) return Promise.resolve(false);
-    if (interactiveReloadPromise) return interactiveReloadPromise;
+    if (interactiveReloadPromise && interactiveReloadTicket === latestReloadTicket) return interactiveReloadPromise;
 
-    interactiveReloadPromise = reloadViewerAccounts()
+    const pending = reloadViewerAccounts()
       .then(() => true)
       .finally(() => {
-        interactiveReloadPromise = null;
+        if (interactiveReloadPromise === pending) interactiveReloadPromise = null;
       });
-    return interactiveReloadPromise;
+    interactiveReloadTicket = latestReloadTicket;
+    interactiveReloadPromise = pending;
+    return pending;
   }
 
   function movePage(delta) {

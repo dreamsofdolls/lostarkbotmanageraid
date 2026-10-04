@@ -525,12 +525,14 @@ function createRaidStatusCommand(deps) {
 
     if (backgroundRefreshing) {
       const refreshStarted = Date.now();
+      const refreshSeed = statusState.userDoc;
       void startBackgroundRefresh()
         .then(async (refreshed) => {
           if (refreshed?.userDoc) {
-            await reloadViewerAccounts(refreshed.userDoc);
+            // A click may have loaded newer state while this refresh was gathering.
+            await reloadViewerAccounts(statusState.userDoc === refreshSeed ? refreshed.userDoc : null);
             statusUserMeta = buildStatusUserMeta(
-              refreshed.userDoc,
+              statusState.userDoc,
               refreshed.piggybackOutcome
             );
           }

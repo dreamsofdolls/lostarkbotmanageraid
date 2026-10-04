@@ -139,7 +139,9 @@ function createStatusComponentRouteHandlers(ctx) {
     formatGold,
     truncateText,
     canEditAccountFn,
+    showPrompt: payload => redrawMessage.show(payload),
   });
+  let latestViewTicket = 0;
 
   // _sharedFrom was read when /raid-status opened, and the owner can revoke
   // or downgrade the share while the card stays open, so writes to a shared
@@ -487,11 +489,14 @@ function createStatusComponentRouteHandlers(ctx) {
     },
 
     [STATUS_COMPONENT_ACTION.viewToggle]: async (component) => {
+      const ticket = ++latestViewTicket;
       const picked = firstSelectValue(component, "raid");
       if (picked === "sync") {
         // Both render paths are synchronous, so the console payload has
         // to be resolved here and parked on the session first.
-        session.localSyncSnapshot = await refreshLocalSyncSnapshot();
+        const snapshot = await refreshLocalSyncSnapshot();
+        if (ticket !== latestViewTicket) return noRedraw();
+        session.localSyncSnapshot = snapshot;
         session.currentView = "sync";
         return redraw();
       }
