@@ -2,6 +2,8 @@
 
 const DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS = 60 * 1000;
 const MAX_BIBLE_RATE_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
+const DEFAULT_BIBLE_MAX_PENDING = 32;
+const DEFAULT_BIBLE_QUEUE_WAIT_MS = 30_000;
 
 /**
  * Read a Retry-After header value as a delay.
@@ -71,24 +73,37 @@ function isBibleRateLimitError(error) {
 }
 
 /**
- * Caps concurrent Bible requests. After an HTTP 429 it rejects every queued
- * and new request with a backoff error until the backoff ends.
+ * Caps concurrent Bible requests, waiting queue size and queue wait time.
+ * After an HTTP 429 it rejects every queued and new request with a backoff
+ * error until the backoff ends.
  */
 class BibleRequestLimiter {
   /**
    * @param {number} max - requests allowed in flight at once
-   * @param {{defaultBackoffMs?: number, nowMs?: () => number, log?: Console}} [options]
-   *   `defaultBackoffMs` applies when a 429 carries no Retry-After
+   * @param {{defaultBackoffMs?: number, maxPending?: number, maxQueueWaitMs?: number,
+   *   nowMs?: () => number, log?: Console}} [options]
+   *   `defaultBackoffMs` applies when a 429 carries no Retry-After;
+   *   at most 32 requests wait for a slot, for at most 30 seconds by default.
    */
   constructor(
     max,
     {
       defaultBackoffMs = DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS,
+      maxPending = DEFAULT_BIBLE_MAX_PENDING,
+      maxQueueWaitMs = DEFAULT_BIBLE_QUEUE_WAIT_MS,
       nowMs = () => Date.now(),
       log = console,
     } = {}
   ) {
+    if (!Number.isInteger(maxPending) || maxPending < 0) {
+      throw new RangeError("maxPending must be a non-negative integer");
+    }
+    if (!Number.isFinite(maxQueueWaitMs) || maxQueueWaitMs <= 0) {
+      throw new RangeError("maxQueueWaitMs must be a positive finite number");
+    }
     this.max = Math.max(1, Number(max) || 1);
+    this.maxPending = maxPending;
+    this.maxQueueWaitMs = maxQueueWaitMs;
     this.defaultBackoffMs = Math.max(1, Number(defaultBackoffMs) || 1);
     this.nowMs = nowMs;
     this.log = log;
@@ -114,19 +129,42 @@ class BibleRequestLimiter {
     if (remainingMs > 0) {
       return Promise.reject(this._createBackoffError(remainingMs));
     }
+    if (this.active >= this.max && this.queue.length >= this.maxPending) {
+      return Promise.reject(Object.assign(new Error("LostArk Bible request queue is full; try again shortly"), {
+        name: "BibleQueueFullError", code: "BIBLE_QUEUE_FULL",
+      }));
+    }
 
     return new Promise((resolve, reject) => {
-      const item = { fn, resolve, reject, signal, detach: () => signal?.removeEventListener("abort", abort) };
-      const abort = () => {
+      const item = {
+        fn, resolve, reject, signal,
+        detach: () => {
+          clearTimeout(item.timer);
+          signal?.removeEventListener("abort", abort);
+        },
+      };
+      const remove = error => {
         const index = this.queue.indexOf(item);
         if (index < 0) return;
         this.queue.splice(index, 1);
         item.detach();
-        reject(signal.reason);
+        reject(error);
       };
+      const abort = () => remove(signal.reason);
       signal?.addEventListener("abort", abort, { once: true });
+      if (this.active >= this.max) {
+        item.deadline = this.nowMs() + this.maxQueueWaitMs;
+        item.timer = setTimeout(() => remove(this._createQueueTimeoutError()), this.maxQueueWaitMs);
+        item.timer.unref?.();
+      }
       this.queue.push(item);
       this._dispatch();
+    });
+  }
+
+  _createQueueTimeoutError() {
+    return Object.assign(new Error("Bible request timed out while waiting for an available slot"), {
+      name: "TimeoutError",
     });
   }
 
@@ -184,19 +222,25 @@ class BibleRequestLimiter {
     }
 
     while (this.active < this.max && this.queue.length > 0) {
-      const { fn, resolve, reject, signal, detach } = this.queue.shift();
+      const { fn, resolve, reject, signal, deadline, detach } = this.queue.shift();
       detach();
+      // Recheck the deadline before dispatch: a busy event loop can run the
+      // active request's completion before an already-due timeout callback.
+      if (deadline !== undefined && this.nowMs() >= deadline) {
+        reject(signal?.aborted ? signal.reason : this._createQueueTimeoutError());
+        continue;
+      }
       this.active += 1;
       Promise.resolve()
         .then(() => { signal?.throwIfAborted(); return fn(); })
-        .then(resolve, (error) => {
+        .catch((error) => {
           if (isBibleRateLimitError(error)) this._openCircuit(error);
-          reject(error);
+          throw error;
         })
         .finally(() => {
           this.active -= 1;
           this._dispatch();
-        });
+        }).then(resolve, reject);
     }
   }
 }

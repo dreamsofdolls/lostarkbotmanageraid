@@ -18,6 +18,7 @@ class RaidLogError extends Error {
 
 function raidLogErrorCode(error) {
   if (error instanceof RaidLogError) return error.code;
+  if (error?.code === "BIBLE_QUEUE_FULL") return "busy";
   if (["TimeoutError", "AbortError"].includes(error?.name)) return "timeout";
   return BIBLE_ERROR_CODES.get(classifyBibleError(error)) || "failed";
 }
