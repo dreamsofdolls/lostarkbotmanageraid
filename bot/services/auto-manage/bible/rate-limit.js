@@ -232,7 +232,11 @@ class BibleRequestLimiter {
       }
       this.active += 1;
       Promise.resolve()
-        .then(() => { signal?.throwIfAborted(); return fn(); })
+        .then(() => {
+          signal?.throwIfAborted();
+          if (deadline !== undefined && this.nowMs() >= deadline) throw this._createQueueTimeoutError();
+          return fn();
+        })
         .catch((error) => {
           if (isBibleRateLimitError(error)) this._openCircuit(error);
           throw error;

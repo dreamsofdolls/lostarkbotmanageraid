@@ -96,6 +96,26 @@ test("Bible queue rechecks elapsed wait time when timer callbacks have not run y
   assert.equal(held.limiter.queue.length, 0);
 });
 
+test("Bible queue does not start HTTP if its deadline passes between dispatch and the callback", async t => {
+  let now = 0;
+  const held = heldLimiter(t, { maxQueueWaitMs: 25, nowMs: () => now });
+  held.run(() => held.gate);
+  const controller = new AbortController();
+  let started = false;
+  const queued = held.run(() => { started = true; }, { signal: controller.signal });
+  held.release();
+  // Observe slot assignment before the callback's next microtask executes.
+  for (let turn = 0; turn < 50 && held.limiter.queue.length; turn++) await Promise.resolve();
+  assert.equal(held.limiter.queue.length, 0);
+  assert.equal(started, false);
+  now = 25;
+  await assert.rejects(queued, { name: "TimeoutError" });
+  assert.equal(started, false);
+  assert.equal(held.limiter.active, 0);
+  assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+  assert.equal(await held.run(async () => "recovered"), "recovered");
+});
+
 test("aborting a Bible waiter frees capacity and keeps surviving requests in FIFO order", async t => {
   const held = heldLimiter(t, { maxPending: 2 });
   const started = [];

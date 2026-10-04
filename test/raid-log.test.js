@@ -279,7 +279,7 @@ test("memory pressure after encoding or before warm reuse closes the retained br
 });
 
 test("memory reads respect the capture deadline without retaining the render queue", async t => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1000 });
   const fake = fakeBrowser();
   let blocked = true;
   const capture = createRaidLogCapture({ ...fake, timeoutMs: 25,
