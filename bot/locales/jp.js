@@ -1008,6 +1008,7 @@ module.exports = {
       localNewLinkFailedDescription: "リンクの作成中にエラーが発生しました: `{error}`。数秒後にもう一度お試しくださいませ。",
       localNewLinkSuccessTitle: "新しいリンクをご用意しましたわ♪",
       localNewLinkSuccessDescription: "上の **Local Reader を開く** ボタンは新しいリンクに切り替わりましたわ♪ 古いリンクはたった今無効になりましたので、開いたままのタブは閉じてくださいませ。",
+      localNewLinkSuccessPublicDescription: "新しいリンクはチャンネルの他の方が開けないよう、この個人メッセージにだけ載せていますわ: {url} 古いリンクはたった今無効になりましたので、開いたままのタブは閉じてくださいませ。",
       noControlTitle: "コマンドを実行した人だけが操作できますわ",
       noControlDescription: "このページネーションは別の人の `/raid-status` セッションですわ～ アーティストはコマンド実行者だけに操作させてますの。自分の `/raid-status` を新しく開いてくださいね♪",
       noAutoSyncTitle: "自動同期がまだオフですわ",

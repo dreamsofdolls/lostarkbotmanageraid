@@ -1030,6 +1030,7 @@ module.exports = {
       localNewLinkFailedDescription: "Artist gặp lỗi khi tạo link: `{error}`. Thử lại sau vài giây nhé.",
       localNewLinkSuccessTitle: "Link mới đã sẵn sàng",
       localNewLinkSuccessDescription: "Nút **Mở Local Reader** phía trên đã trỏ sang link mới. Link cũ ngừng hoạt động ngay lúc này, tab nào còn mở nó thì cậu đóng giúp tớ nhé.",
+      localNewLinkSuccessPublicDescription: "Link mới chỉ nằm trong tin nhắn riêng này để người khác trong channel không mở được dữ liệu của cậu: {url} Link cũ ngừng hoạt động ngay lúc này, tab nào còn mở nó thì cậu đóng giúp tớ nhé.",
       noControlTitle: "Chỉ người mở mới điều khiển được",
       noControlDescription: "Card này là `/raid-status` của người khác nên chỉ người mở mới bấm được. Cậu gõ `/raid-status` để mở card của mình nhé.",
       noAutoSyncTitle: "Cậu chưa bật auto-sync",

@@ -1007,6 +1007,7 @@ module.exports = {
       localNewLinkFailedDescription: "Artist hit an error creating the link: `{error}`. Try again in a few seconds.",
       localNewLinkSuccessTitle: "New link ready",
       localNewLinkSuccessDescription: "The **Open Local Reader** button above now points to the new link. The old link stopped working just now, so please close any tab that still has it open.",
+      localNewLinkSuccessPublicDescription: "The new link lives only in this private message so others in the channel cannot open your data: {url} The old link stopped working just now, so please close any tab that still has it open.",
       noControlTitle: "Only the command author can drive this view",
       noControlDescription: "This pagination belongs to someone else's `/raid-status` session. Open your own with `/raid-status` to interact.",
       noAutoSyncTitle: "Auto-sync isn't enabled",

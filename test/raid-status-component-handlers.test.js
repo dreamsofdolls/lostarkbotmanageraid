@@ -122,6 +122,7 @@ function createHandlerHarness(overrides = {}) {
     getAutoManageCooldownMs: () => 0,
     buildMyRaidDetailEmbed: () => ({}),
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
+    isReplyPrivate: overrides.isReplyPrivate || (() => true),
   });
 
   return { handlers, session, taskFilters, goldFilters, get reloadCount() { return reloadCount; } };
@@ -312,6 +313,91 @@ test("raid-status Solo Companion reports token failures only in the deferred pri
   assert.match(privatePayload.embeds[0].title, /Solo Local Reader/);
   assert.match(privatePayload.embeds[0].description, /token unavailable/);
   assert.equal(privatePayload.components, undefined);
+});
+
+test("raid-status local-new-link on a public reply delivers the URL only in the ephemeral follow-up", async (t) => {
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  process.env.PUBLIC_BASE_URL = "https://raid.example.test";
+  t.after(() => {
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  let originalEditCount = 0;
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    isReplyPrivate: () => false,
+    interaction: {
+      async editReply() {
+        originalEditCount += 1;
+      },
+    },
+    async rotateLocalSyncTokenFn() {
+      return "rotated token.value";
+    },
+  });
+  const component = {
+    user: { id: "viewer", username: "Player" },
+    async deferUpdate() {},
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.localNewLink](component);
+
+  assert.deepEqual(result, { redraw: false });
+  // The public card itself never carries the signed URL: no in-place edit
+  // happened and the session's resume-link cache stays empty.
+  assert.equal(originalEditCount, 0);
+  assert.equal(harness.session.cachedUrl, null);
+  // The rotated link rides the ephemeral follow-up instead.
+  assert.equal(followUpPayload.flags, 64);
+  assert.match(
+    followUpPayload.embeds[0].description,
+    /https:\/\/raid\.example\.test\/sync#token=rotated%20token\.value/,
+  );
+});
+
+test("raid-status local-new-link on a private reply still points the card at the new link", async (t) => {
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  process.env.PUBLIC_BASE_URL = "https://raid.example.test";
+  t.after(() => {
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  let originalEditCount = 0;
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    interaction: {
+      async editReply() {
+        originalEditCount += 1;
+      },
+    },
+    async rotateLocalSyncTokenFn() {
+      return "rotated token.value";
+    },
+  });
+  const component = {
+    user: { id: "viewer", username: "Player" },
+    async deferUpdate() {},
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.localNewLink](component);
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(originalEditCount, 1);
+  assert.equal(
+    harness.session.cachedUrl,
+    "https://raid.example.test/sync#token=rotated%20token.value",
+  );
+  assert.equal(followUpPayload.flags, 64);
+  // The private notice keeps its wording; the URL lives on the card button.
+  assert.doesNotMatch(followUpPayload.embeds[0].description, /token=/);
 });
 
 test("raid-status component handlers update filter and task view state", async () => {

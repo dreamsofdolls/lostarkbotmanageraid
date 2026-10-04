@@ -112,6 +112,7 @@ function createStatusComponentRouteHandlers(ctx) {
     formatGold,
     truncateText,
     getAutoManageCooldownMs,
+    isReplyPrivate,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
     canEditAccountFn = canEditAccount,
     refreshLocalSyncSnapshot = async () => null,
@@ -226,15 +227,22 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      session.setCachedLocalSyncResumeUrl(freshUrl);
-      await redrawMessage().catch((err) => {
-        console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
-      });
+      // A public reply must never carry the signed URL: Discord link
+      // buttons are clickable by anyone in the channel, so the rotated
+      // link is delivered through the ephemeral follow-up below instead.
+      if (isReplyPrivate()) {
+        session.setCachedLocalSyncResumeUrl(freshUrl);
+        await redrawMessage().catch((err) => {
+          console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
+        });
+      }
 
       await followUpNotice(component, EmbedBuilder, {
         type: "success",
         title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
-        description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
+        description: isReplyPrivate()
+          ? t("raid-status.sync.localNewLinkSuccessDescription", lang)
+          : t("raid-status.sync.localNewLinkSuccessPublicDescription", lang, { url: freshUrl }),
       }).catch(() => {});
       return noRedraw();
     },

@@ -139,8 +139,9 @@ function createRaidStatusComponentLayout({
       if (button && getRowComponentCount(row) < 5) row.addComponents(button);
     };
 
-    // Both builders return null when no public base URL is configured, in
-    // which case there is no web row at all.
+    // The resume link only builds for a private reply (no cached URL on a
+    // public one), while the new-link launcher is interaction-driven and
+    // URL-less, so a public card keeps the row without exposing the token.
     const companionButtons = localSync
       ? [buildSyncButton(syncDisabled), buildLocalSyncNewButton(syncDisabled)].filter(Boolean)
       : [];

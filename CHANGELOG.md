@@ -6,6 +6,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-10-04
 
+### Fixed
+- A public `/raid-status` card no longer carries the signed Local Reader link, since anyone in the channel can click a link button. There, **New link** sends the fresh link in a private follow-up; a private card still points its **Open Local Reader** button at it.
+
 ### Changed (internal)
 - Dependencies every caller passes are now required instead of guarded with `typeof` checks and fallbacks that never ran; lostark.bible's origin, region and timeout live in one `bible-endpoint.js`; the unused multi-raid parse hint and its locale lines are gone. No behavior change.
 

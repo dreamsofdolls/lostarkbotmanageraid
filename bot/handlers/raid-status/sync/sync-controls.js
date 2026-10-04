@@ -23,6 +23,7 @@ function createRaidStatusSyncControls({
   formatNextCooldownRemaining,
   getAutoManageCooldownMs,
   getStatusUserMeta,
+  isReplyPrivate,
 }) {
   let cachedLocalSyncResumeUrl = null;
 
@@ -40,6 +41,10 @@ function createRaidStatusSyncControls({
 
   async function hydrateLocalSyncResumeUrl(interactionUser) {
     if (!getStatusUserMeta().localSyncEnabled) return;
+    // Discord link buttons are clickable by anyone who can see the message,
+    // so a public reply must never hold the signed URL. localSyncEnabled
+    // can flip mid-session after the privacy probe fixed the reply type.
+    if (!isReplyPrivate()) return;
     try {
       cachedLocalSyncResumeUrl = await issueLocalSyncAccessUrl({
         discordId,
@@ -54,6 +59,9 @@ function createRaidStatusSyncControls({
   }
 
   function setCachedLocalSyncResumeUrl(value) {
+    // Same guard as hydrate: rotation on a public reply delivers the URL
+    // via the ephemeral follow-up, never through the message itself.
+    if (!isReplyPrivate()) return;
     cachedLocalSyncResumeUrl = value;
   }
 
@@ -73,7 +81,6 @@ function createRaidStatusSyncControls({
       ButtonStyle,
       t,
       lang,
-      url: cachedLocalSyncResumeUrl,
       disabled,
     });
 
@@ -121,12 +128,15 @@ function createRaidStatusSyncControls({
   };
 
   const buildSyncRow = (disabled) => {
+    const localSync = getStatusUserMeta().localSyncEnabled === true;
+    // On a public reply the resume link is null (no cached URL), but the
+    // new-link and refresh controls still render around it.
     const button = buildSyncButton(disabled);
-    if (!button) return null;
-    const row = new ActionRowBuilder().addComponents(button);
-    if (getStatusUserMeta().localSyncEnabled) {
-      const newButton = buildLocalSyncNewButton(disabled);
-      if (newButton) row.addComponents(newButton);
+    if (!button && !localSync) return null;
+    const row = new ActionRowBuilder();
+    if (button) row.addComponents(button);
+    if (localSync) {
+      row.addComponents(buildLocalSyncNewButton(disabled));
       row.addComponents(buildLocalSyncRefreshButton(disabled));
     }
     return row;

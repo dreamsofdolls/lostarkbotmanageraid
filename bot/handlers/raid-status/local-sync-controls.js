@@ -17,15 +17,16 @@ function buildLocalSyncResumeButton({
     .setDisabled(disabled);
 }
 
+// Custom-id button carrying no URL: safe to render on a public reply,
+// where the fresh link is delivered through the ephemeral follow-up
+// instead of the card message.
 function buildLocalSyncNewButton({
   ButtonBuilder,
   ButtonStyle,
   t,
   lang,
-  url,
   disabled,
 }) {
-  if (!url) return null;
   return new ButtonBuilder()
     .setCustomId("status:local-new-link")
     .setLabel(t("raid-status.sync.localNewLinkButtonLabel", lang))

@@ -31,7 +31,7 @@ function componentCustomId(component) {
   return component?.data?.custom_id || component?.data?.customId || "";
 }
 
-function buildControls(getStatusUserMeta) {
+function buildControls(getStatusUserMeta, isReplyPrivate = () => true) {
   return createRaidStatusSyncControls({
     ActionRowBuilder,
     ButtonBuilder,
@@ -42,6 +42,7 @@ function buildControls(getStatusUserMeta) {
     formatNextCooldownRemaining: () => "",
     getAutoManageCooldownMs: () => 0,
     getStatusUserMeta,
+    isReplyPrivate,
   });
 }
 
@@ -236,6 +237,40 @@ test("local-sync mode splits in-Discord actions from the web companion buttons",
 
   assert.ok(rows.length <= 5, "Discord allows at most 5 action rows");
   assert.ok(rows.every((row) => row.components.length <= 5));
+});
+
+test("local-sync mode on a public reply keeps the signed URL off the message", async (t) => {
+  const statusUserMeta = { autoManageEnabled: false, localSyncEnabled: true };
+  const controls = buildControls(() => statusUserMeta, () => false);
+
+  // Rotation hands a fresh URL to the session, but the public guard in the
+  // cache setter must drop it, so no resume link can ever build.
+  controls.setCachedLocalSyncResumeUrl("https://example.test/sync?token=t");
+  assert.equal(controls.buildSyncButton(false), null);
+
+  // Hydration must not mint a token for a public reply either. A missing
+  // guard would reach the real token provider with a stub User and surface
+  // as the "token resolve failed" warning.
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  t.after(() => {
+    console.warn = originalWarn;
+  });
+  await controls.hydrateLocalSyncResumeUrl({ id: "viewer", username: "Player" });
+  console.warn = originalWarn;
+  assert.deepEqual(warnings, []);
+
+  // The new-link launcher is interaction-driven and carries no URL itself,
+  // and the sync row keeps it next to the refresh control.
+  const newButton = controls.buildLocalSyncNewButton(false);
+  assert.equal(componentCustomId(newButton), "status:local-new-link");
+  assert.equal(newButton.data.url, undefined);
+
+  const row = controls.buildSyncRow(false);
+  const rowIds = row.components.map(componentCustomId);
+  assert.deepEqual(rowIds, ["status:local-new-link", "status:local-refresh"]);
+  assert.ok(row.components.every((component) => component.data.url === undefined));
 });
 
 test("bible auto-sync mode keeps its single button row", () => {

@@ -360,6 +360,7 @@ function createRaidStatusCommand(deps) {
       formatNextCooldownRemaining,
       getAutoManageCooldownMs,
       getStatusUserMeta: () => statusUserMeta,
+      isReplyPrivate: () => replyIsPrivate,
     });
 
     // Local-sync token and personal raid events hydrate after the first render;
@@ -465,6 +466,7 @@ function createRaidStatusCommand(deps) {
       buildMyRaidDetailEmbed,
       refreshLocalSyncSnapshot,
       runLocalSyncAction,
+      isReplyPrivate: () => replyIsPrivate,
     });
 
     const message = messageFromEdit?.createMessageComponentCollector
