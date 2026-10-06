@@ -327,7 +327,11 @@ function createRaidLogCapture({
       succeeded = true;
       return { ...log, view, tab, bracketed, ...evidence, players: resource.baseline.players, images };
     } catch (error) {
-      if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
+      if (expired || error.name === "TimeoutError") {
+        const timeout = new RaidLogError("timeout", error);
+        timeout.stage = stage;
+        throw timeout;
+      }
       if ((resource?.crashed && !resource.closing) || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
         logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
           id: log.id, view, tab, bracketed, player: player?.label || "team", stage, clip, deviceScaleFactor: 1,

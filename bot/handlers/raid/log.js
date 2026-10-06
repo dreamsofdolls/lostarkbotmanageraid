@@ -24,6 +24,16 @@ const ACTION_TYPES = { picker: PICKER_ACTION_TYPES, recent: RECENT_ACTION_TYPES,
 // Errors meaning the character stopped sharing logs: the panel becomes a lock card.
 const REVOKING_CODES = new Set(["logs_private", "no_logs", "character_mismatch"]);
 
+// RaidLogError keeps the underlying failure as its cause; a bare code such as
+// "timeout" says nothing about which capture step or Bible call ran out.
+function describeFailure(error) {
+  const details = [
+    error.stage && `stage=${error.stage}`,
+    error.cause?.message && error.cause.message.split("\n")[0],
+  ].filter(Boolean);
+  return details.length ? ` (${details.join("; ")})` : "";
+}
+
 // A menu value must be one the card offered.
 function requireOption(options, value) {
   if (!options.some(option => option.value === value)) throw new RaidLogError("invalid_selection");
@@ -134,7 +144,7 @@ function createRaidLogCommand({
     } catch (error) {
       if (state) sessions.delete(state.id);
       const code = raidLogErrorCode(error);
-      log.warn(`[raid-log] ${code}: ${error.message}`);
+      log.warn(`[raid-log] ${code}: ${error.message}${describeFailure(error)}`);
       await interaction.editReply({ content: null, embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang })],
         components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
     } finally {
@@ -301,7 +311,7 @@ function createRaidLogCommand({
       completed = true;
     } catch (error) {
       const code = raidLogErrorCode(error);
-      log.warn(`[raid-log] ${code}: ${error.message}`);
+      log.warn(`[raid-log] ${code}: ${error.message}${describeFailure(error)}`);
       if (state.stage === "log" && REVOKING_CODES.has(code)) {
         sessions.delete(id);
         await interaction.editReply({

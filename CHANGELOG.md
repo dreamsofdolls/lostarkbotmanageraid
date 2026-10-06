@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-06
+
+### Changed (internal)
+- A failed `/raid-log` action logs the step and the underlying cause next to its error code, such as `timeout: Raid log: timeout (stage=navigation; page.waitForLoadState: …)`, so a timeout says which capture step or Bible call ran out. The notice users see is unchanged.
+
 ## 2026-10-04
 
 ### Fixed
