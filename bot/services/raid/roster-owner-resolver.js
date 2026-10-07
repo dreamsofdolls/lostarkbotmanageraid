@@ -127,9 +127,13 @@ function createRosterOwnerResolver({
       return null;
     }
     const accessible = accessibleResult.value || [];
-    const sharedMatch = accessible.find(
+    const sharedMatches = accessible.filter(
       (entry) => !entry.isOwn && normalizeName(entry.accountName) === target
     );
+    // Two owners can share rosters with the same name. A view share would
+    // fail canEditAccount at apply time, so an edit share wins the tie.
+    const sharedMatch = sharedMatches.find((entry) => entry.accessLevel === "edit")
+      || sharedMatches[0];
     if (!sharedMatch) return null;
 
     // access-control already loaded the owner document to build this entry.

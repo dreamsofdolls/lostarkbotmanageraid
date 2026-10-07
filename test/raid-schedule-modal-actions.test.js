@@ -113,7 +113,7 @@ function makeSavedEvent(overrides = {}) {
   };
 }
 
-function makeActions({ event, editCalls }) {
+function makeActions({ event, editCalls, rejectUnlessLeadMutable = async () => false }) {
   return createScheduleModalActions({
     ActionRowBuilder: FakeActionRowBuilder,
     ModalBuilder: FakeModalBuilder,
@@ -127,7 +127,7 @@ function makeActions({ event, editCalls }) {
       editCalls.push({ submit, fresh, lang });
       return true;
     },
-    rejectUnlessLeadMutable: async () => false,
+    rejectUnlessLeadMutable,
     noticePayload: (lang, tone, titleKey, descriptionKey) => ({
       lang,
       tone,
@@ -188,3 +188,35 @@ test("schedule modal action saves a parsed start time and replies with Discord t
   assert.match(submit.replies[0].embeds[0].description, /<t:\d+:R>/);
   assert.match(submit.replies[0].embeds[0].description, /<t:\d+:f>/);
 });
+
+for (const [action, modalId, fields] of [
+  ["handleSetRoom", "rse:roommodal:event-1", { room: "Bckg" }],
+  ["handleEditTime", "rse:timemodal:event-1", { when: "+2h" }],
+]) {
+  test(`${action} leaves an event alone when it was cancelled while the modal was open`, async () => {
+    const event = makeSavedEvent({ status: "open" });
+    const editCalls = [];
+    const guardedTargets = [];
+    const submit = makeSubmit({ modalId, userId: "lead", fields });
+    const interaction = makeInteraction({ submit });
+    const awaitSubmit = interaction.awaitModalSubmit;
+    interaction.awaitModalSubmit = async (options) => {
+      event.status = "cancelled";
+      return awaitSubmit(options);
+    };
+    const actions = makeActions({
+      event,
+      editCalls,
+      rejectUnlessLeadMutable: async (target, current) => {
+        guardedTargets.push(target);
+        return current.status === "cancelled";
+      },
+    });
+
+    await actions[action](interaction, event, "vi");
+
+    assert.equal(event.saved, 0);
+    assert.equal(editCalls.length, 0);
+    assert.equal(guardedTargets.at(-1), submit);
+  });
+}

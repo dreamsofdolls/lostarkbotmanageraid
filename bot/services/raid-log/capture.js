@@ -224,7 +224,7 @@ function createRaidLogCapture({
                 status: 429, headers: { get: name => response.headers()[name] },
               });
             }
-            throw new RaidLogError("unavailable");
+            throw new RaidLogError("unavailable", new Error(`LostArk Bible HTTP ${response?.status() ?? "no response"}`));
           }
         };
         // Only page loading uses a Bible slot; local tabs and PNG encoding do not.
@@ -342,6 +342,7 @@ function createRaidLogCapture({
         crashed.stage = stage;
         throw crashed;
       }
+      error.stage ??= stage;
       throw error;
     } finally {
       clearTimeout(timer);

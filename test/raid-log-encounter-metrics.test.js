@@ -55,6 +55,16 @@ test("JSON5 comments and nested identity fields do not change support matching",
   assert.deepEqual([...supportSharesFromEncounter(literal, options)], [["1-3", 30], ["2-3", 14.3]]);
 });
 
+test("bare numeric keys, valid in a JavaScript literal, read like quoted ones", () => {
+  const literal = [
+    "{ id: 'public-log', encounter: { entityList: [",
+    "  { name: 'Paladin #1', class: 'Paladin', entityType: 'PLAYER', skills: { a: { rdpsContributed: { 1: 100, 3: 150, 5: 50 } } } },",
+    "  { name: 'Paladin #2', class: 'Paladin', entityType: 'PLAYER', skills: { 0: { rdpsContributed: { 3: 143 } } } }",
+    "] } }",
+  ].join("\n");
+  assert.deepEqual([...supportSharesFromEncounter(literal, options)], [["1-3", 30], ["2-3", 14.3]]);
+});
+
 test("large retained player payloads are scanned without passing them to JSON5.parse", t => {
   const originalParse = JSON5.parse;
   let largestParsed = 0;

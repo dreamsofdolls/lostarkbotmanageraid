@@ -139,9 +139,9 @@ function verifyToken(token) {
   } catch (err) {
     return { ok: false, reason: "no_secret", error: err.message };
   }
-  // Buffer compare lengths must match for timingSafeEqual; pad short
-  // sigs to expected length so a forged short token still hits the
-  // constant-time path.
+  // timingSafeEqual needs equal lengths. The HMAC length is fixed and
+  // public, so rejecting a wrong length early reveals nothing about the
+  // secret.
   const sigBuf = Buffer.from(sigB64);
   const expBuf = Buffer.from(expected);
   if (sigBuf.length !== expBuf.length) return { ok: false, reason: "signature" };

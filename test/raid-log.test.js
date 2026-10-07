@@ -524,6 +524,17 @@ test("invalid input never launches a browser and unavailable browser has a typed
     { code: "browser_unavailable" });
 });
 
+test("capture failures carry the stage they stopped in, and a failed page load its HTTP status", async () => {
+  const notFound = await createRaidLogCapture(fakeBrowser({ status: 404 }))(URL).catch(error => error);
+  assert.equal(notFound.code, "unavailable");
+  assert.equal(notFound.stage, "navigation");
+  assert.match(notFound.cause.message, /HTTP 404/);
+  const noBrowser = await createRaidLogCapture({ launchBrowser: async () => { throw new Error("Missing executable"); } })(URL)
+    .catch(error => error);
+  assert.equal(noBrowser.code, "browser_unavailable");
+  assert.equal(noBrowser.stage, "launch");
+});
+
 test("capture deadline cancels a queued Bible request before a slot opens or a browser launches", async t => {
   t.mock.method(Date, "now", () => 0);
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -984,7 +995,7 @@ test("a completed but broken image is never accepted as capture-ready", async ()
   } finally { dom.window.close(); }
 });
 
-function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit } = {}) {
+function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit, log = silentLog } = {}) {
   const calls = [];
   let payload;
   let modal;
@@ -994,7 +1005,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
     editReply: async next => { payload = { ...payload, ...next }; calls.push([next.files ? "edit" : next.embeds ? "picker" : "content", next]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
-    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log: silentLog,
+    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log,
     loadCaller: async () => { calls.push(["roster"]); return null; },
     resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
     logCatalog: { open: async name => {
@@ -1048,6 +1059,14 @@ test("handler acknowledges first, attaches a public image with source link in al
     assert.doesNotMatch(JSON.stringify(embed), /raid-log\./);
     assert.deepEqual(payload.allowedMentions, { parse: [] });
   }
+});
+
+test("handler warning names the failed stage and the first line of its cause", async () => {
+  const warnings = [];
+  const error = Object.assign(new RaidLogError("unavailable", new Error("LostArk Bible HTTP 404\n    at goto")), { stage: "navigation" });
+  const fixture = handlerFixture({ error, log: { ...silentLog, warn: message => warnings.push(message) } });
+  await fixture.run();
+  assert.ok(warnings.includes("[raid-log] unavailable: Raid log: unavailable (stage=navigation; LostArk Bible HTTP 404)"), warnings.join("\n"));
 });
 
 test("handler keeps invalid names private, avoids capture and returns localized errors without attachments", async () => {

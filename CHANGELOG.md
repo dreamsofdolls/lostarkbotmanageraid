@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-07
+
+### Fixed
+- Changing a raid schedule's room or time no longer saves when the event was cleared or cancelled while the modal was open; the lead gets the "event closed" notice instead.
+- `/raid-set` on a roster name that two managers share with you picks the share that lets you edit, instead of whichever came first and then refusing as view-only.
+- `/raid-log` support shares (bD%) read encounter data whose objects use bare number keys such as `{ 0: … }`, instead of showing "-".
+
+### Changed (internal)
+- Every `/raid-log` capture failure carries the step it stopped in, not only timeouts, and a page that fails to load logs its HTTP status, such as `unavailable: Raid log: unavailable (stage=navigation; LostArk Bible HTTP 404)`.
+
 ## 2026-10-06
 
 ### Changed (internal)

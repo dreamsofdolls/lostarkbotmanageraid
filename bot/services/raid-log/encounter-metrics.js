@@ -140,7 +140,10 @@ function propertyName(source, start, limit) {
     end++;
   }
   if (end === start) throw syntaxError();
-  const holder = JSON5.parse("{" + source.slice(start, end) + ":null}");
+  const bareName = source.slice(start, end);
+  // JavaScript accepts bare integer keys; JSON5 accepts only identifiers.
+  if (/^(?:0|[1-9]\d*)$/.test(bareName)) return { name: bareName, end };
+  const holder = JSON5.parse("{" + bareName + ":null}");
   return { name: Object.keys(holder)[0], end };
 }
 

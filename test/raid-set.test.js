@@ -1285,6 +1285,26 @@ test("resolveRosterOwner starts helper/share lookups together and reuses shared 
   assert.equal(resolved.viaShare, true);
 });
 
+test("resolveRosterOwner prefers an edit share over a view share with the same roster name", async () => {
+  const shareFrom = (ownerDiscordId, accessLevel) => {
+    const ownerDoc = { discordId: ownerDiscordId, accounts: [{ accountName: "Shared", characters: [] }] };
+    return {
+      ownerDiscordId, ownerLabel: ownerDiscordId, accountName: "Shared", account: ownerDoc.accounts[0],
+      ownerDoc, accessLevel, isOwn: false,
+    };
+  };
+  const { factory } = makeFactory({
+    loadUserForAutocomplete: async () => ({ accounts: [] }),
+    loadAccountsRegisteredBy: async () => [],
+    getAccessibleAccounts: async () => [shareFrom("viewer-owner", "view"), shareFrom("editor-owner", "edit")],
+  });
+
+  const resolved = await factory.resolveRosterOwner("grantee-1", "Shared");
+
+  assert.equal(resolved.ownerDiscordId, "editor-owner");
+  assert.equal(resolved.shareLevel, "edit");
+});
+
 test("resolveRosterOwner: empty rosterName returns null without DB calls", async () => {
   let loadCalled = false;
   const { factory } = makeFactory({

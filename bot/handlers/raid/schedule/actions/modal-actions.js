@@ -66,6 +66,8 @@ function createScheduleModalActions({
       await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
       return;
     }
+    // The modal stays open up to two minutes; the event may close meanwhile.
+    if (await rejectUnlessLeadMutable(submit, fresh, lang)) return;
     fresh.roomName = roomName || null;
     fresh.roomPassword = password || null;
     await fresh.save();
@@ -109,6 +111,7 @@ function createScheduleModalActions({
       await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
       return;
     }
+    if (await rejectUnlessLeadMutable(submit, fresh, lang)) return;
     fresh.startAt = startAt;
     await fresh.save();
 
