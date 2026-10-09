@@ -8,7 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Fixed
 - The weekly reset clears "Gold nhận" include/exclude choices again. On a stored document the old `delete` on the `assignedRaids` subdoc never reached the database, so last week's choice carried into every new week.
-- `/raid-status` reports a sync as failed when every character's Bible read failed (outage, 429), on both the Sync button and the card-open sync, instead of "synced, no new clears".
+- `/raid-status` reports a sync as failed when every character's Bible read failed (outage, 429), on both the Sync button and the card-open sync, instead of "synced, no new clears". A sync with no character to read still shows as synced.
 
 ## 2026-10-07
 

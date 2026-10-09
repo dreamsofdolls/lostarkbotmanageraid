@@ -17,6 +17,7 @@
  */
 const {
   countAppliedAutoManageGates,
+  getAutoManageEntries,
   hasSuccessfulAutoManageReport,
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
@@ -30,13 +31,14 @@ const {
 
 const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_STATUS_STALE_MS;
 
-// A report in which every character failed (Bible outage, 429) synced
-// nothing. hasSuccessfulAutoManageReport is the same rule that decides
-// whether lastAutoManageSyncAt is stamped, so the card and the stored
-// freshness agree.
+// A report whose entries all failed (Bible outage, 429) synced nothing. An
+// empty report means no character needed a read, which is not a failure;
+// the same split as resolveSyncOutcome in auto-manage/reports/embeds.js.
 function autoManageReportOutcome(report) {
   const newGatesApplied = countAppliedAutoManageGates(report);
-  if (!hasSuccessfulAutoManageReport(report)) return { outcome: "failed", newGatesApplied };
+  const everyEntryFailed = getAutoManageEntries(report).length > 0
+    && !hasSuccessfulAutoManageReport(report);
+  if (everyEntryFailed) return { outcome: "failed", newGatesApplied };
   return { outcome: newGatesApplied > 0 ? "applied" : "synced-no-new", newGatesApplied };
 }
 
