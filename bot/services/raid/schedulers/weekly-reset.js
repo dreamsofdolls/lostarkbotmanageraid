@@ -100,20 +100,22 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   const assignedRaids = character.assignedRaids || {};
   for (const raidKey of RAID_GROUP_KEYS) {
     if (!assignedRaids[raidKey]) continue;
-    delete assignedRaids[raidKey].goldOverride;
-    delete assignedRaids[raidKey].goldDisabled;
-    delete assignedRaids[raidKey].goldForced;
-    const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
+    // assignedRaids is a strict:false subdoc: `delete` on the live subdoc
+    // never reaches what save() writes, so clear a plain copy and assign it
+    // back (the re-cast carries the removal through).
+    const raid = toPlainAssignedRaid(assignedRaids[raidKey]);
+    delete raid.goldOverride;
+    delete raid.goldDisabled;
+    delete raid.goldForced;
+    const gateKeys = Object.keys(raid).filter((gate) => /^G\d+$/i.test(gate));
     for (const gate of gateKeys) {
-      if (!assignedRaids[raidKey][gate]) continue;
-      if (shouldPreserveCurrentWeekCompletion(
-        assignedRaids[raidKey][gate].completedDate,
-        preserveSinceMs
-      )) {
+      if (!raid[gate]) continue;
+      if (shouldPreserveCurrentWeekCompletion(raid[gate].completedDate, preserveSinceMs)) {
         continue;
       }
-      assignedRaids[raidKey][gate].completedDate = null;
+      raid[gate].completedDate = null;
     }
+    assignedRaids[raidKey] = raid;
     applyPendingModeAfterGateClear(character, assignedRaids, raidKey);
   }
 

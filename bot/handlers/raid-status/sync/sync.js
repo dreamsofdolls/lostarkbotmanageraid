@@ -17,6 +17,7 @@
  */
 const {
   countAppliedAutoManageGates,
+  hasSuccessfulAutoManageReport,
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
 const {
@@ -28,6 +29,16 @@ const {
 } = require("../../../services/raid/view-refresh-commit");
 
 const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_STATUS_STALE_MS;
+
+// A report in which every character failed (Bible outage, 429) synced
+// nothing. hasSuccessfulAutoManageReport is the same rule that decides
+// whether lastAutoManageSyncAt is stamped, so the card and the stored
+// freshness agree.
+function autoManageReportOutcome(report) {
+  const newGatesApplied = countAppliedAutoManageGates(report);
+  if (!hasSuccessfulAutoManageReport(report)) return { outcome: "failed", newGatesApplied };
+  return { outcome: newGatesApplied > 0 ? "applied" : "synced-no-new", newGatesApplied };
+}
 
 function createRaidStatusSync(deps) {
   const {
@@ -212,10 +223,7 @@ function createRaidStatusSync(deps) {
           autoManageWeekResetStart,
           autoManageBibleHit,
           onAutoManageReport: (autoReport) => {
-            const newGates = countAppliedAutoManageGates(autoReport);
-            piggybackOutcome.newGatesApplied = newGates;
-            piggybackOutcome.outcome =
-              newGates > 0 ? "applied" : "synced-no-new";
+            Object.assign(piggybackOutcome, autoManageReportOutcome(autoReport));
           },
         });
       }
@@ -280,10 +288,7 @@ function createRaidStatusSync(deps) {
           );
           committedSnapshot = committed?.snapshot || null;
           if (committed?.report) {
-            const newGates = countAppliedAutoManageGates(committed.report);
-            manualOutcome.newGatesApplied = newGates;
-            manualOutcome.outcome =
-              newGates > 0 ? "applied" : "synced-no-new";
+            Object.assign(manualOutcome, autoManageReportOutcome(committed.report));
           }
         }
       }

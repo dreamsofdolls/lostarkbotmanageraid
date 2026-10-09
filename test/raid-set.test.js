@@ -34,6 +34,7 @@ const {
   getGatesForRaid,
 } = require("../bot/domain/raid-catalog");
 const { clearCharacterProgress } = require("../bot/services/raid/schedulers/weekly-reset");
+const User = require("../bot/models/user");
 
 function makeUserModel() {
   const docs = new Map();
@@ -1086,6 +1087,46 @@ test("clearCharacterProgress: clears weekly gold override setup flags", () => {
   assert.equal(character.assignedRaids.armoche.G1.completedDate, null);
   assert.equal(character.assignedRaids.armoche.G2.completedDate, null);
 });
+
+// A real User document, because `delete` on the strict:false assignedRaids
+// subdoc behaves differently from a plain object: toObject() shows what save()
+// would write.
+for (const pendingModeKey of [undefined, "hard"]) {
+  test(`clearCharacterProgress clears gold override flags on a real User document (pending=${pendingModeKey || "none"})`, () => {
+    const doc = new User({
+      discordId: "reset-user",
+      accounts: [{
+        accountName: "Roster",
+        characters: [{
+          id: "c1",
+          name: "Aki",
+          class: "Bard",
+          itemLevel: 1730,
+          assignedRaids: {
+            armoche: {
+              modeKey: "normal",
+              ...(pendingModeKey ? { pendingModeKey } : {}),
+              goldOverride: "exclude",
+              goldDisabled: true,
+              goldForced: true,
+              G1: { difficulty: "Normal", completedDate: 111 },
+              G2: { difficulty: "Normal", completedDate: 222 },
+            },
+          },
+        }],
+      }],
+    });
+
+    clearCharacterProgress(doc.accounts[0].characters[0]);
+
+    const raid = doc.toObject().accounts[0].characters[0].assignedRaids.armoche;
+    assert.equal(raid.goldOverride, undefined);
+    assert.equal(raid.goldDisabled, undefined);
+    assert.equal(raid.goldForced, undefined);
+    assert.equal(raid.G1.completedDate, null);
+    assert.equal(raid.modeKey, pendingModeKey || "normal");
+  });
+}
 
 test("normalizeAssignedRaid: preserves over-tier stamped difficulty (no auto-downgrade)", () => {
   // Inverse of the auto-upgrade case: an over-tier stored difficulty
