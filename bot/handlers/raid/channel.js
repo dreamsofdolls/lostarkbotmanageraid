@@ -174,7 +174,8 @@ function createRaidChannelCommand({
     }
 
     const action = interaction.options.getString("action", true);
-    const handler = actionHandlers[action];
+    // The action option is autocomplete-only, so Discord accepts any typed text.
+    const handler = Object.hasOwn(actionHandlers, action) ? actionHandlers[action] : null;
     if (!handler) {
       await replyChannelNotice({
         type: "warn",

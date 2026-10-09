@@ -162,14 +162,16 @@ function getRaidRequirementList() {
 }
 
 function getRaidRequirementMap() {
-  return Object.fromEntries(
+  // Null prototype: /raid-set reads raid values as typed autocomplete text, and
+  // a plain object would answer "constructor" with an inherited member.
+  return Object.assign(Object.create(null), Object.fromEntries(
     buildRaidRequirementList().map((raid) => [raid.value, {
       label: raid.label,
       minItemLevel: raid.minItemLevel,
       raidKey: raid.raidKey,
       modeKey: raid.modeKey,
     }])
-  );
+  ));
 }
 
 // Boss display name -> (raidKey, gate). Difficulty comes from the log row,

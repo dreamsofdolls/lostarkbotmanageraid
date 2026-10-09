@@ -9,7 +9,9 @@ const SHARED_TASK_CAP_SCHEDULED = 5;
 
 const SCHEDULED_RESET = "scheduled";
 
-const SHARED_TASK_PRESETS = Object.freeze({
+// Null prototype: preset keys arrive as typed autocomplete text, and a plain
+// object would answer "constructor" with an inherited member.
+const SHARED_TASK_PRESETS = Object.freeze(Object.assign(Object.create(null), {
   custom: Object.freeze({
     preset: "custom",
     label: "Custom shared task",
@@ -54,7 +56,7 @@ const SHARED_TASK_PRESETS = Object.freeze({
     endMinuteExclusive: 6 * 60,
     scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM UTC-4",
   }),
-});
+}));
 
 function getSharedTaskPreset(preset) {
   return SHARED_TASK_PRESETS[preset] || SHARED_TASK_PRESETS.custom;

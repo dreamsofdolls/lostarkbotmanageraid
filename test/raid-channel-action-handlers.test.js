@@ -341,3 +341,31 @@ test("raid-channel language action persists valid language and renders success i
   assert.deepEqual(writes[0][1], "jp");
   assert.match(replies.embeds[0].title, /jp:raid-channel-language\.successTitle/);
 });
+
+test("raid-channel treats a typed object member name as an unknown action", async () => {
+  const { PermissionFlagsBits } = require("discord.js");
+  const { createRaidChannelCommand } = require("../bot/handlers/raid/channel");
+  const { clearUserLanguageCache } = require("../bot/services/i18n");
+  clearUserLanguageCache();
+  const { handleRaidChannelCommand } = createRaidChannelCommand({
+    EmbedBuilder,
+    PermissionFlagsBits,
+    UI,
+    User: { findOne: () => ({ lean: async () => ({ language: "en" }) }) },
+    GuildConfig: {},
+    normalizeName: (value) => String(value || "").toLowerCase(),
+  });
+
+  for (const action of ["constructor", "toString", "__proto__"]) {
+    const replies = [];
+    await handleRaidChannelCommand({
+      guildId: "guild-1",
+      user: { id: "admin-1" },
+      memberPermissions: { has: () => true },
+      options: { getString: () => action },
+      reply: async (payload) => { replies.push(payload); },
+    });
+    assert.equal(replies.length, 1, `one reply for "${action}"`);
+    assert.match(replies[0].embeds[0].data.title, /Unknown action/);
+  }
+});

@@ -9,7 +9,7 @@ const { createAddAllHandler } = require("../bot/handlers/raid/task/add/add-all")
 const { createSharedAddHandler } = require("../bot/handlers/raid/task/shared/shared-add");
 
 const factories = { single: createAddSingleHandler, all: createAddAllHandler, shared: createSharedAddHandler };
-function harness(kind, { deny = false, allRosters = false, saveError = null, duplicateOnRetry = false, revokeOnRetry = false } = {}) {
+function harness(kind, { deny = false, allRosters = false, saveError = null, duplicateOnRetry = false, revokeOnRetry = false, preset = "chaos_gate" } = {}) {
   clearUserLanguageCache();
   const events = [];
   const notices = [];
@@ -48,7 +48,7 @@ function harness(kind, { deny = false, allRosters = false, saveError = null, dup
   const interaction = {
     user: { id: "executor" },
     options: {
-      getString: name => ({ roster: "main", character: "Alpha", name: "Task", reset: "daily", preset: "chaos_gate" })[name] ?? null,
+      getString: name => ({ roster: "main", character: "Alpha", name: "Task", reset: "daily", preset })[name] ?? null,
       getBoolean: () => allRosters,
     },
   };
@@ -112,3 +112,13 @@ test("shared retry skips a task added concurrently without saving or retaining f
   assert.equal(state.notices[0].type, "info");
   assert.equal(state.docs[1].accounts[0].sharedTasks.length, 1);
 });
+
+for (const preset of ["constructor", "toString", "__proto__"]) {
+  test(`shared add refuses the typed preset "${preset}" instead of saving a task`, async () => {
+    const state = harness("shared", { preset });
+    await state.run();
+    assert.equal(state.saves, 0);
+    assert.equal(state.notices.length, 1);
+    assert.match(state.notices[0].title, /Preset invalid/);
+  });
+}
