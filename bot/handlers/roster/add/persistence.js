@@ -9,7 +9,7 @@ function getSessionBibleNameSet(session) {
   return session.bibleNames instanceof Set ? session.bibleNames : new Set();
 }
 
-function findAddRosterMergeAccount({ accounts, normalizedSeed, rosterNameSet, normalizeName, getCharacterName }) {
+function findSeedOrSelectionAccount({ accounts, normalizedSeed, rosterNameSet, normalizeName, getCharacterName }) {
   return (accounts || []).find((item) => {
     if (normalizeName(item.accountName) === normalizedSeed) return true;
     const chars = Array.isArray(item.characters) ? item.characters : [];
@@ -24,14 +24,12 @@ function findAddRosterMergeAccount({ accounts, normalizedSeed, rosterNameSet, no
 
 function findCollidingBibleRosterAccount({
   accounts,
-  targetAccount,
   bibleNameSet,
   normalizeName,
   getCharacterName,
 }) {
   if (bibleNameSet.size === 0) return null;
   return (accounts || []).find((item) => {
-    if (targetAccount && item === targetAccount) return false;
     const chars = Array.isArray(item.characters) ? item.characters : [];
     return chars.some((character) =>
       bibleNameSet.has(normalizeName(getCharacterName(character)))
@@ -48,9 +46,7 @@ function createDuplicateRosterError(accountName) {
   return err;
 }
 
-function ensureAddRosterTargetAccount({ userDoc, session, account }) {
-  if (account) return account;
-
+function appendAddRosterAccount({ userDoc, session }) {
   const newAccount = {
     accountName: session.seedCharName,
     characters: [],
@@ -62,30 +58,6 @@ function ensureAddRosterTargetAccount({ userDoc, session, account }) {
   return userDoc.accounts[userDoc.accounts.length - 1];
 }
 
-function buildExistingCharacterMap({ account, normalizeName, getCharacterName }) {
-  return new Map(
-    account.characters.map((character) => [
-      normalizeName(getCharacterName(character)),
-      character,
-    ])
-  );
-}
-
-function buildSelectedCharacterRecords({
-  account,
-  selectedChars,
-  normalizeName,
-  getCharacterName,
-  buildCharacterRecord,
-  createCharacterId,
-}) {
-  const existingMap = buildExistingCharacterMap({ account, normalizeName, getCharacterName });
-  return selectedChars.map((character) => buildPickedCharacterRecord(
-    character,
-    existingMap.get(normalizeName(character.charName)),
-    { buildCharacterRecord, createCharacterId }
-  ));
-}
 
 function buildSavedAccountSnapshot({ account, getCharacterName, getCharacterClass }) {
   return {
@@ -127,18 +99,18 @@ function createAddRosterPersistence({
       }
       ensureFreshWeek(userDoc);
 
-      const normalizedSeed = normalizeName(session.seedCharName);
-      let account = findAddRosterMergeAccount({
+      // The command refuses a roster that is already saved, so an account
+      // matching this seed, selection or Bible roster here was saved by a
+      // concurrent picker after that check. Refuse it rather than replace
+      // the characters that picker saved.
+      const collidingAccount = findSeedOrSelectionAccount({
         accounts: userDoc.accounts,
-        normalizedSeed,
+        normalizedSeed: normalizeName(session.seedCharName),
         rosterNameSet,
         normalizeName,
         getCharacterName,
-      });
-
-      const collidingAccount = findCollidingBibleRosterAccount({
+      }) || findCollidingBibleRosterAccount({
         accounts: userDoc.accounts,
-        targetAccount: account,
         bibleNameSet,
         normalizeName,
         getCharacterName,
@@ -147,15 +119,12 @@ function createAddRosterPersistence({
         throw createDuplicateRosterError(collidingAccount.accountName);
       }
 
-      account = ensureAddRosterTargetAccount({ userDoc, session, account });
-      account.characters = buildSelectedCharacterRecords({
-        account,
-        selectedChars,
-        normalizeName,
-        getCharacterName,
-        buildCharacterRecord,
-        createCharacterId,
-      });
+      const account = appendAddRosterAccount({ userDoc, session });
+      account.characters = selectedChars.map((character) => buildPickedCharacterRecord(
+        character,
+        null,
+        { buildCharacterRecord, createCharacterId }
+      ));
       account.lastRefreshedAt = Date.now();
       await userDoc.save();
       savedAccount = buildSavedAccountSnapshot({

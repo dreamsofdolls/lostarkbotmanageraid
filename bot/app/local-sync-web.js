@@ -2,7 +2,7 @@
  * app/local-sync-web.js
  * Compose-root for the local-sync HTTP server. Wires the catalog +
  * roster + preview-job + apply endpoints into the `apiHandlers` lookup
- * table accepted by http-server.js, then starts the server.
+ * table accepted by services/local-sync/http/server.js, then starts the server.
  * LOCAL_SYNC_HTTP_DISABLED=true env opts out (useful when running multiple
  * bot instances and only one should host the Local Reader surface).
  */

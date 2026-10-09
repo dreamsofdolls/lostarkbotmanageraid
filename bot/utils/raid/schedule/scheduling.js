@@ -11,6 +11,12 @@
  */
 
 const { weeklyResetStartMs } = require("./reset-windows");
+const {
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+  getLangTzOffsetMinutes,
+} = require("./artist-clock");
+const { normalizeLanguage } = require("../../../services/i18n");
 
 /**
  * Build the reader that normalizes a guild's `announcements` subdoc.
@@ -118,6 +124,13 @@ function createSchedulingHelpers({
     return candidate.getTime();
   }
 
+  // Bedtime and wake-up fire at a local hour in the guild language's time
+  // zone, the rule the cleanup scheduler applies through artist-clock.js.
+  function nextLocalHourBoundaryMs(now, localHour, lang) {
+    const utcHour = localHour - getLangTzOffsetMinutes(lang) / 60;
+    return nextDailyUtcBoundaryMs(now, ((utcHour % 24) + 24) % 24);
+  }
+
   function nextMaintenanceBoundaryMs(now, minutesKey) {
     // Single source of truth: the slot config snapshot from the scheduler
     // module. Changing that config automatically flows into this preview.
@@ -201,13 +214,13 @@ function createSchedulingHelpers({
       note: "The nudge posts only if that tick finds a user whose logs are private.",
     },
     "artist-bedtime": {
-      eligibleBoundary: (now) => nextDailyUtcBoundaryMs(now, 20),
+      eligibleBoundary: (now, lang) => nextLocalHourBoundaryMs(now, ARTIST_QUIET_START_HOUR_VN, lang),
       schedulerCheck: cleanupSchedulerCheck,
       disabledWhen: cleanupScheduleDisabled,
       disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)",
     },
     "artist-wakeup": {
-      eligibleBoundary: (now) => nextDailyUtcBoundaryMs(now, 1),
+      eligibleBoundary: (now, lang) => nextLocalHourBoundaryMs(now, ARTIST_QUIET_END_HOUR_VN, lang),
       schedulerCheck: cleanupSchedulerCheck,
       disabledWhen: cleanupScheduleDisabled,
       disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)",
@@ -238,9 +251,14 @@ function createSchedulingHelpers({
    * trigger is tied to a calendar boundary. This is NOT always the same as
    * the next actual scheduler check because the bot polls every 30 minutes
    * from its boot phase.
+   * @param {string} typeKey - announcement type key
+   * @param {Date} [now=new Date()] - test clock
+   * @param {string} [lang] - guild language; sets the Artist bedtime and
+   *   wake-up time zone (unknown falls back to vi)
+   * @returns {number|null} boundary ms, or null for types without one
    */
-  function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date()) {
-    return announcementScheduleRules[typeKey]?.eligibleBoundary?.(now) ?? null;
+  function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date(), lang) {
+    return announcementScheduleRules[typeKey]?.eligibleBoundary?.(now, lang) ?? null;
   }
   
   /**
@@ -326,7 +344,11 @@ function createSchedulingHelpers({
     }
   
     const lines = [];
-    const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(typeKey, now);
+    const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(
+      typeKey,
+      now,
+      normalizeLanguage(guildCfg?.language)
+    );
     if (eligibleBoundaryMs) {
       lines.push(`**Next eligible boundary:** ${formatDiscordTimestampPair(eligibleBoundaryMs)}`);
     }

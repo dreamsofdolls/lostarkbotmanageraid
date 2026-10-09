@@ -1,8 +1,8 @@
 /**
  * db.js
  * Manages a single shared Mongoose connection to MongoDB.
- * Uses a lazy-connect pattern so the connection is established
- * on first use rather than at startup.
+ * bot.js connects once at startup; later connectDB calls reuse that
+ * connection or join the attempt in progress.
  */
 
 const mongoose = require("mongoose");

@@ -199,7 +199,7 @@ function createInteractionRouter({
     if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu?.()) {
       // Exact-match table first (covers static customIds like
       // "raid-help:select"); then prefix-match routes (used when the
-      // customId carries dynamic data such as a session ID — same shape
+      // customId carries dynamic data such as a session ID, the same shape
       // as buttonRoutes below). First matching prefix wins.
       const handler = selectHandlers[interaction.customId];
       if (handler) {

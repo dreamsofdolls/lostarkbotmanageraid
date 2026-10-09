@@ -120,7 +120,7 @@ test("raid-auto-manage action:off dispatches through the basic action handler", 
     },
   });
 
-  assert.deepEqual(updates[0].filter, { discordId: "u-off" });
+  assert.deepEqual(updates[0].filter, { discordId: "u-off", autoManageEnabled: true });
   assert.deepEqual(updates[0].update, {
     $inc: { __v: 1 },
     $set: {

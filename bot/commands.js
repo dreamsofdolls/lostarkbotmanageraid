@@ -81,7 +81,6 @@ const { applyPreviewJob } = require("./services/local-sync");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
-  ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("./services/roster/refresh");
 const { createManualRosterRefreshRunner } = require("./services/roster/manual-refresh");
 const { createAutoManageSyncService } = require("./services/auto-manage/runtime/sync");
@@ -224,14 +223,9 @@ if (RAID_MANAGER_ID.size === 0) {
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
   );
 }
-// /raid-check intentionally has no command-line raid choice: its inline
-// filter owns per-raid focus. /raid-set continues to use its independent
-// autocomplete-driven raid input.
 function isRaidLeader(interaction) {
-  // Env-allowlist check against the invoker's Discord user ID. Set is
-  // built once at module load (see services/access/manager.js) so this is O(1)
-  // per call. interaction.user.id is always present on slash commands -
-  // no need to defensive-check member or guild context.
+  // Env-allowlist check against the invoker's Discord user ID; the Set is
+  // built once at module load in services/access/manager.js.
   const userId = interaction.user?.id;
   return isManagerId(userId);
 }
@@ -246,17 +240,13 @@ const commands = createRaidCommandDefinitions({
 // and rosterRefreshMap so lookups line up across the three structures.
 const ROSTER_KEY_SEP = "\x1f";
 
-// Generic Prev/Next pagination row builder. Customize customId prefix per
-// command so the same visual/behavioral pattern works without collision:
+// Generic Prev/Next pagination row builder. Each command passes its own
+// customId prefix so its collector matches only its own buttons:
 // /raid-status uses `status:prev` / `status:next`, /raid-check uses
-// `raid-check-page:prev` / `raid-check-page:next`. Each command's collector
-// matches its own prefix; bot.js's global router doesn't see either
-// (status:* isn't routed, raid-check-page:* deliberately NOT prefixed
-// "raid-check:" to avoid the existing handleRaidCheckButton dispatcher).
+// `raid-check-all-page:prev` / `raid-check-all-page:next`. The global router
+// routes neither (raid-check-all-page:* is deliberately not prefixed
+// "raid-check:", which handleRaidCheckButton owns).
 function buildPaginationRow(currentPage, totalPages, disabled, { prevId, nextId, lang }) {
-  // Lang is optional - back-compat with callers that haven't been
-  // migrated yet (default "vi" via t() fallback). When passed, button
-  // labels render in the viewer's locale.
   const { t } = require("./services/i18n");
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1019,8 +1009,6 @@ module.exports = {
     applyStaleAccountRefreshes,
     formatNextCooldownRemaining,
     buildAccountFreshnessLine,
-    ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
-    MANAGER_ROSTER_REFRESH_COOLDOWN_MS: require("./services/access/manager").MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
     isManagerId,
     getAutoManageCooldownMs,
     getTargetVNDayKey,

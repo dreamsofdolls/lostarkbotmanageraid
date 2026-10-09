@@ -343,9 +343,13 @@ function createAllModeHandler({
     collector.on("end", guardCollectorListener("[raid-check all] session end", async () => {
       state.sessionEnded = true;
       await backgroundRenderQueue.flush();
-      await followup
-        .edit({ components: buildComponents(true) })
-        .catch(() => {});
+      // The reply is ephemeral, so only the interaction webhook can edit it;
+      // Message#edit goes through the channel route and fails.
+      await interaction
+        .editReply({ components: buildComponents(true) })
+        .catch((err) => {
+          console.warn("[raid-check all] disabling controls at session end failed:", err?.message || err);
+        });
     }));
 
     void refreshIncompleteAuthorMeta()

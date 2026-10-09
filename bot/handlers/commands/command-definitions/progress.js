@@ -3,6 +3,8 @@
 const { SlashCommandBuilder } = require("discord.js");
 
 function createRaidCheckCommandDefinition() {
+  // No command-line options: the raid filter dropdown inside the embed owns
+  // per-raid focus, so a command option and a component never set the same state.
   const raidCheckCommand = new SlashCommandBuilder()
     .setName("raid-check")
     .setDescription("(Raid Leader) Cross-raid overview of guild progress")

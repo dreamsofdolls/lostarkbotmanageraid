@@ -164,23 +164,17 @@ test("invalid language value falls back to default vi", async () => {
   assert.match(embedJson.title, /\(VI\)/);
 });
 
-test("detail embed in English: notes with VN: prefix are stripped", async () => {
-  // /raid-add-roster section has paired EN: / VN: notes — under en mode,
-  // the VN-prefixed lines must NOT appear.
+test("detail embed in English renders the English notes, not the Vietnamese ones", async () => {
   const factory = makeFactory();
   const interaction = makeSelectInteraction("raid-add-roster", { lang: "en" });
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
-  // EN line about fetching the full account survives.
   assert.match(allFields, /fetches the full account/i);
-  // VN line about "fetch toàn bộ roster" must not appear.
   assert.doesNotMatch(allFields, /toàn bộ roster/);
-  // The "VN: " prefix itself shouldn't leak into the rendered text.
-  assert.doesNotMatch(allFields, /^VN:/m);
 });
 
-test("detail embed in Vietnamese: notes with EN: prefix are stripped", async () => {
+test("detail embed in Vietnamese renders the Vietnamese notes, not the English ones", async () => {
   const factory = makeFactory();
   const interaction = makeSelectInteraction("raid-add-roster", { lang: "vi" });
   await factory.handleRaidHelpSelect(interaction);
@@ -188,12 +182,10 @@ test("detail embed in Vietnamese: notes with EN: prefix are stripped", async () 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
   assert.match(allFields, /toàn bộ roster/);
   assert.doesNotMatch(allFields, /fetches the full account/i);
-  assert.doesNotMatch(allFields, /^EN:/m);
 });
 
-test("detail embed: untagged technical bullets render in BOTH languages", async () => {
-  // Notes lines starting with "•" (no EN:/VN: prefix) are shared
-  // technical jargon — they must survive both language filters.
+test("detail embed keeps the shared cap line in both languages", async () => {
+  // Both locale packs carry the cap line with the singular "char" wording.
   const factory = makeFactory();
 
   const enInteraction = makeSelectInteraction("raid-add-roster", { lang: "en" });
@@ -204,8 +196,6 @@ test("detail embed: untagged technical bullets render in BOTH languages", async 
   await factory.handleRaidHelpSelect(viInteraction);
   const viFields = getAllFieldValues(viInteraction._calls.update[0].embeds[0].toJSON());
 
-  // Cap line is a shared technical line (no EN:/VN: prefix) — must
-  // appear in both languages using the singular "char" contract.
   assert.match(enFields, /Cap 20 char\/roster/);
   assert.match(viFields, /Cap 20 char\/roster/);
 });
@@ -252,9 +242,9 @@ test("handleRaidHelpSelect: invalid section key falls back to overview", async (
 });
 
 test("handleRaidHelpSelect: every known section key renders without throwing", async () => {
-  // Smoke test — guards against future sections forgetting required
-  // fields (key/label/icon/short/shortVn/options/example/notes) which
-  // would crash buildHelpDetailEmbed at render time.
+  // Smoke test: guards against a section missing a field
+  // (label/icon/short/options/example/notes) that buildHelpDetailEmbed
+  // reads at render time.
   const factory = makeFactory();
   for (const key of EXPECTED_SECTION_KEYS) {
     const interaction = makeSelectInteraction(key);
@@ -303,7 +293,7 @@ test("detail embeds never show a raw raid-help key in any locale", async () => {
 
 test("detail embed: every field value stays within Discord's 1024-char limit", async () => {
   // Regression guard against an overlong notes string crashing render.
-  // splitHelpFieldValue is supposed to chunk; this asserts that
+  // addChunkedHelpField is supposed to chunk; this asserts that
   // contract holds across every section's actual content.
   const factory = makeFactory();
   for (const key of EXPECTED_SECTION_KEYS) {
@@ -358,8 +348,8 @@ test("detail embed: 'Không có options' surfaces when section has empty options
 
 test("dropdown options carry section icons as emoji + truncated descriptions ≤100 chars", async () => {
   // Discord StringSelectMenu option description has a 100-char limit.
-  // raid-help builds options with `section.short.slice(0, 100)` — verify
-  // that and that emoji are passed through.
+  // raid-help builds options with `sectionShort(key, lang).slice(0, 100)`;
+  // verify that and that emoji are passed through.
   const factory = makeFactory();
   const interaction = makeReplyInteraction();
   await factory.handleRaidHelpCommand(interaction);

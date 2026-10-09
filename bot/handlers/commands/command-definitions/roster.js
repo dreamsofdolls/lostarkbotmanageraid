@@ -31,11 +31,6 @@ function createAddRosterCommandDefinition() {
         .setRequired(false)
     );
 
-  // /raid-check has no command-line options. Cross-raid overview is the
-  // sole entry point; per-raid focus is achieved via the inline raid-
-  // filter dropdown inside the embed, avoiding duplicate command and
-  // component controls for the same state.
-
   return addRosterCommand;
 }
 

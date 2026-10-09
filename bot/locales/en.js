@@ -892,6 +892,8 @@ module.exports = {
     notice: {
       noRosterTitle: "You don't have any rosters yet",
       noRosterDescription: "Artist can't find any roster of yours in the DB. Use `/raid-add-roster` to register your first roster, then `/raid-status` will show your progress~",
+      shareLookupFailedTitle: "Shared rosters didn't load",
+      shareLookupFailedDescription: "Artist couldn't read the rosters shared with you this time. Try `/raid-status` again in a moment~",
     },
     freshness: {
       lastUpdated: "Last updated",

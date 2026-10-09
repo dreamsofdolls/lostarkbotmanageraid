@@ -915,6 +915,8 @@ module.exports = {
     notice: {
       noRosterTitle: "Cậu chưa có roster nào",
       noRosterDescription: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+      shareLookupFailedTitle: "Chưa tải được roster được chia sẻ",
+      shareLookupFailedDescription: "Lần này Artist chưa đọc được các roster người khác chia sẻ cho cậu. Cậu thử lại `/raid-status` sau một chút nhé~",
     },
     freshness: {
       lastUpdated: "Cập nhật",

@@ -143,3 +143,21 @@ test("raid-bg processes one upload at a time", async (t) => {
   assert.equal(results.length, 3);
   assert.equal(peak, 1);
 });
+
+test("raid-bg refuses an attachment Discord reports as oversized before downloading it", async (t) => {
+  let downloads = 0;
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    downloads += 1;
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  await assert.rejects(
+    processBgAttachment({ url: "https://cdn.example/huge.png", name: "huge.png", size: 20 * 1024 * 1024, contentType: "image/png" }),
+    (err) => err.key === "raidBg.errors.sizeTooBig"
+  );
+  assert.equal(downloads, 0);
+});

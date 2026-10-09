@@ -168,14 +168,18 @@ function createRaidStatusCommand(deps) {
     } = viewerState;
     let userDoc = viewerState.userDoc;
 
-    if (viewerState.noRoster) {
+    const openingNotice = [
+      { when: viewerState.shareLookupFailed, type: "warn", key: "shareLookupFailed" },
+      { when: viewerState.noRoster, type: "info", key: "noRoster" },
+    ].find((notice) => notice.when);
+    if (openingNotice) {
       await interaction.editReply({
         content: initialContent,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-status.notice.noRosterTitle", lang),
-            description: t("raid-status.notice.noRosterDescription", lang),
+            type: openingNotice.type,
+            title: t(`raid-status.notice.${openingNotice.key}Title`, lang),
+            description: t(`raid-status.notice.${openingNotice.key}Description`, lang),
           }),
         ],
         files: [],

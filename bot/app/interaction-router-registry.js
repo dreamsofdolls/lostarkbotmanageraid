@@ -5,8 +5,8 @@
  * new slash command must be added to RAID_COMMAND_NAMES below or the
  * router rejects it with "unknown command" - the dispatch map in
  * commands.js alone is not enough. A parity test in
- * test/router-registry.test.js asserts every registered slash command
- * appears here.
+ * test/interaction-router-registry.test.js asserts every registered slash
+ * command appears here.
  */
 
 "use strict";
@@ -38,7 +38,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
  * Build the interaction router for the bot's command surface. Wires
  * the slash dispatcher + per-command autocomplete handlers +
  * prefix-routed select/button handlers into a single Interaction
- * dispatcher consumed by lifecycle.js.
+ * dispatcher consumed by bot.js.
  * @param {{MessageFlags: object, handlers: object, instanceIdentity?: string, log?: object, UserModel?: object}} deps - handlers must expose every method named below
  * @returns {Function} interaction dispatcher · async (interaction) => void
  */

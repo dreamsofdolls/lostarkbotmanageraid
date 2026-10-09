@@ -49,6 +49,7 @@ import {
 } from "/sync/js/sync/sqlite-schema.js";
 import {
   buildEncounterPreviewSql,
+  capPartyDeltas,
   filterRowsForSyncScope,
 } from "/sync/js/sync/encounter-query.js";
 import {
@@ -880,7 +881,7 @@ async function buildPreviewStateFromRows(
   const partyBuckets = syncScope === "full"
     ? bucketize(expandPartyEncounterRows(actionableSourceRows))
     : [];
-  const partyDeltas = partyBuckets
+  const partyDeltas = capPartyDeltas(partyBuckets
     .filter((bucket) => (
       String(bucket.charName || "").trim().toLowerCase()
       !== String(bucket.sourceCharName || "").trim().toLowerCase()
@@ -892,7 +893,7 @@ async function buildPreviewStateFromRows(
       charName: bucket.charName,
       sourceCharName: bucket.sourceCharName,
       lastClearMs: bucket.lastClearMs,
-    }));
+    })));
   return {
     deltas,
     partyDeltas,

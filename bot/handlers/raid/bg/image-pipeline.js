@@ -47,7 +47,18 @@ class RaidBgError extends Error {
   }
 }
 
+function sizeTooBigError(bytes) {
+  return new RaidBgError("raidBg.errors.sizeTooBig", {
+    sizeMb: (bytes / 1024 / 1024).toFixed(1),
+    maxMb: RAID_BG_UPLOAD_MAX_MB.toFixed(0),
+  });
+}
+
 async function downloadAttachment(attachment) {
+  // Discord reports the size with the attachment, so an oversized upload is
+  // refused before its bytes are fetched.
+  const reportedBytes = Number(attachment.size) || 0;
+  if (reportedBytes > RAID_BG_UPLOAD_MAX_BYTES) throw sizeTooBigError(reportedBytes);
   const response = await fetch(attachment.url);
   if (!response.ok) {
     throw new RaidBgError("raidBg.errors.downloadFailed", { status: response.status });
@@ -247,10 +258,7 @@ async function decodeBgImage(buffer, mime) {
 async function validateBgAttachment(attachment, buffer) {
   const uploadedBytes = Number(attachment.size) || buffer.length;
   if (uploadedBytes > RAID_BG_UPLOAD_MAX_BYTES || buffer.length > RAID_BG_UPLOAD_MAX_BYTES) {
-    throw new RaidBgError("raidBg.errors.sizeTooBig", {
-      sizeMb: (Math.max(uploadedBytes, buffer.length) / 1024 / 1024).toFixed(1),
-      maxMb: RAID_BG_UPLOAD_MAX_MB.toFixed(0),
-    });
+    throw sizeTooBigError(Math.max(uploadedBytes, buffer.length));
   }
   const mime = detectMime(attachment, buffer);
   if (mime && !RAID_BG_ALLOWED_MIME.has(mime)) {

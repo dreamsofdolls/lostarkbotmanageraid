@@ -172,3 +172,33 @@ test("artist schedule rules share the cleanup scheduler phase", () => {
     cleanupCheck
   );
 });
+
+test("raid-announce show places Artist bedtime and wake-up in the guild language's time zone", () => {
+  const now = new Date(Date.UTC(2026, 3, 24, 12, 10, 0, 0));
+  const cases = [
+    { lang: "vi", bedtimeUtcHour: 20, wakeupUtcHour: 1 },
+    { lang: "jp", bedtimeUtcHour: 18, wakeupUtcHour: 23 },
+    { lang: "en", bedtimeUtcHour: 3, wakeupUtcHour: 8 },
+  ];
+  const boundaryAt = (utcHour) => {
+    const day = utcHour > 12 ? 24 : 25;
+    return Math.floor(Date.UTC(2026, 3, day, utcHour, 0, 0, 0) / 1000);
+  };
+  for (const { lang, bedtimeUtcHour, wakeupUtcHour } of cases) {
+    const guildCfg = { raidChannelId: "123", autoCleanupEnabled: true, language: lang };
+    for (const [typeKey, utcHour] of [["artist-bedtime", bedtimeUtcHour], ["artist-wakeup", wakeupUtcHour]]) {
+      const text = __test.buildAnnouncementWhenItFiresText(
+        typeKey,
+        { trigger: "t" },
+        { enabled: true, channelId: null },
+        guildCfg,
+        now,
+        {}
+      );
+      assert.ok(
+        text.includes(`Next eligible boundary:** <t:${boundaryAt(utcHour)}:R>`),
+        `${lang} ${typeKey}: ${text}`
+      );
+    }
+  }
+});

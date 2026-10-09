@@ -163,3 +163,30 @@ test("web i18n overlays Solo copy without changing full companion copy", async (
     delete global.window;
   }
 });
+
+test("the Solo Reader names Bible auto-sync, not Local Sync, when its link is disabled", async () => {
+  const { TRANSLATIONS } = await import("../web/js/core/locales.js");
+  for (const lang of ["vi", "jp", "en"]) {
+    assert.match(TRANSLATIONS[lang].solo.identity.disabled || "", /Bible/, lang);
+  }
+});
+
+test("party deltas past the preview job limit keep the newest clears", async () => {
+  const { capPartyDeltas } = await import("../web/js/sync/encounter-query.js");
+  const { normalizePreviewDeltas } = require("../bot/services/local-sync/core/preview-jobs");
+  const partyDeltas = Array.from({ length: 700 }, (_, index) => ({
+    boss: "Boss",
+    difficulty: "Normal",
+    cleared: 1,
+    charName: `Member${index}`,
+    sourceCharName: "Source",
+    lastClearMs: index + 1,
+  }));
+
+  const capped = capPartyDeltas(partyDeltas);
+
+  assert.doesNotThrow(() => normalizePreviewDeltas(capped));
+  assert.equal(Math.min(...capped.map((delta) => delta.lastClearMs)), 700 - capped.length + 1);
+  const few = partyDeltas.slice(0, 3);
+  assert.deepEqual(capPartyDeltas(few), few);
+});

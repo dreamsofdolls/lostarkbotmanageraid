@@ -10,6 +10,18 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The weekly reset clears "Gold nhận" include/exclude choices again. On a stored document the old `delete` on the `assignedRaids` subdoc never reached the database, so last week's choice carried into every new week.
 - `/raid-status` reports a sync as failed when every character's Bible read failed (outage, 429), on both the Sync button and the card-open sync, instead of "synced, no new clears". A sync with no character to read still shows as synced.
 - Typed text such as `constructor` in `/raid-channel config action:`, `/raid-set raid:` or `/raid-task shared-add preset:` is answered as unknown, instead of no reply, a raid accepted with no data, or a shared task named "undefined".
+- Turning off a sync mode that is already off (`/raid-auto-manage action:off` in Local mode, `action:local-off` with Bible on) no longer revokes the other mode's Reader link.
+- A second `/raid-add-roster` picker confirmed for a roster another picker just saved gets the "another session committed first" notice, instead of replacing the characters the first one saved.
+- `/raid-check` disables its buttons when the session ends; the edit used the channel route, which an ephemeral reply does not accept.
+- `/raid-status` asks for a retry when the shared-roster lookup fails for a viewer who only has shared rosters, instead of "no roster yet", and a refresh keeps the shared pages when the lookup fails.
+- The Local Reader sends at most the newest 512 party clears, instead of a sync the server refuses whole (own clears included) once a large party history passes that limit.
+- The Solo Local Reader says "Bible auto-sync is off" when its link is disabled, instead of "Local Sync is off".
+- `/raid-announce show` places Artist bedtime and wake-up in the guild language's time zone, the hours they actually post.
+- `/raid-bg` refuses an attachment Discord reports as over 8 MiB before downloading it.
+- The emoji bootstrap keeps the emoji already uploaded when its replacement file is over 256 KB, instead of deleting it and then failing the upload.
+
+### Changed (internal)
+- Corrected comments that no longer matched the code (DB connect timing, router test file, Local Reader server path, deploy script exit, pagination ids, auto-manage action count, emoji bootstrap path, `/raid-check` options note), renamed raid-help tests to what they assert, removed two unused `__test` exports, and removed em-dashes from the README and a router comment.
 
 ## 2026-10-07
 

@@ -60,15 +60,19 @@ async function updateExclusiveSyncMode({
   discordId,
   enabled,
   force,
+  modeField,
   conflictField,
   enableSet,
   forceSet,
   disableSet,
 }) {
   const requiresConflictGuard = Boolean(enabled && !force);
+  // A disable also clears the Reader token both modes share, so it writes only
+  // while this mode is on: turning off a mode that is already off must leave
+  // the other mode's link alone.
   const filter = requiresConflictGuard
     ? { discordId, [conflictField]: { $ne: true } }
-    : { discordId };
+    : { discordId, ...(enabled ? {} : { [modeField]: true }) };
   const setFields = enabled
     ? { ...enableSet, ...(force ? forceSet : {}) }
     : disableSet;
@@ -89,6 +93,13 @@ async function updateExclusiveSyncMode({
     updated = await UserModel.findOneAndUpdate(filter, update, { new: true });
   }
   if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
+  if (!enabled) {
+    // The mode was already off; only a missing document is a failure.
+    const existing = await UserModel.findOne({ discordId }).lean();
+    return existing
+      ? { ok: true, reason: RESULT.ok, doc: existing }
+      : { ok: false, reason: RESULT.noUser };
+  }
   if (!requiresConflictGuard) return { ok: false, reason: RESULT.noUser };
 
   // A guarded write can miss because the opposite mode is active or because
@@ -116,6 +127,7 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
     discordId,
     enabled,
     force,
+    modeField: "localSyncEnabled",
     conflictField: "autoManageEnabled",
     enableSet: {
       localSyncEnabled: true,
@@ -157,6 +169,7 @@ async function setBibleAutoSyncEnabled(discordId, enabled, opts = {}, deps = {})
     discordId,
     enabled,
     force,
+    modeField: "autoManageEnabled",
     conflictField: "localSyncEnabled",
     enableSet: {
       autoManageEnabled: true,

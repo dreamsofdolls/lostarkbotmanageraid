@@ -84,8 +84,8 @@ function createRaidAutoManageCommandDefinition() {
         })
         .setRequired(true)
         // Autocomplete, rather than static choices, hides redundant and
-        // mutex-blocked actions from the dropdown. Six actions total
-        // (bible on/off/sync, local on/off, status); filter logic lives
+        // mutex-blocked actions from the dropdown. Seven actions total
+        // (bible on/off/sync, local on/off, status, reset); filter logic lives
         // in handleRaidAutoManageAutocomplete and reads both flags.
         .setAutocomplete(true)
     );

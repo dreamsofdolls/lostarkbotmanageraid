@@ -336,3 +336,48 @@ test("raid-check auto-sync button follows the flag of a refreshed roster", async
   assert.ok(!buttonIds().includes("raid-check:disable-auto-one:roster-user"));
   await handlers.end();
 });
+
+test("raid-check disables its controls at session end through the interaction, not the ephemeral message", async () => {
+  clearUserLanguageCache();
+  const { createAllModeHandler } = require("../bot/handlers/raid-check/all-mode/all-mode");
+  const handlers = {};
+  const replies = [];
+  const userDoc = {
+    discordId: "roster-user", discordDisplayName: "Roster user", autoManageEnabled: false,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+  };
+  const User = {
+    find: () => ({ select() { return this; }, lean: async () => [userDoc] }),
+    findOne: () => ({ lean: async () => ({ language: "en" }) }),
+  };
+  const command = createAllModeHandler({
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder,
+    User, ensureFreshWeek: () => {}, truncateText: text => String(text),
+    buildAccountPageEmbed: () => new EmbedBuilder().setTitle("Roster"),
+    buildStatusFooterText: () => "Weekly progress",
+    summarizeRaidProgress: raids => ({ completed: 0, total: raids.length }),
+    getStatusRaidsForCharacter: () => [{ raidKey: "act4", modeKey: "hard", goldReceives: true, isCompleted: false }],
+    buildPaginationRow: (_page, _total, disabled) => new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("raid-check-all-page:prev").setLabel("Previous").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId("raid-check-all-page:next").setLabel("Next").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    ),
+    isRaidLeader: () => true, RAID_CHECK_USER_QUERY_FIELDS: "", RAID_CHECK_PAGINATION_SESSION_MS: 1000,
+  });
+  // Discord serves an ephemeral reply only through the interaction webhook,
+  // so the channel-route Message#edit fails.
+  const message = {
+    createMessageComponentCollector: () => ({ on: (event, handler) => { handlers[event] = handler; } }),
+    edit: async () => { throw new Error("Unknown Message"); },
+  };
+  await command.handleRaidCheckAllCommand({
+    user: { id: "ui-manager" }, guildId: "guild",
+    deferReply: async () => {},
+    editReply: async payload => { replies.push(payload); return message; },
+  });
+
+  await handlers.end();
+
+  const rows = replies.at(-1).components.map(row => row.toJSON());
+  assert.ok(rows.length > 0);
+  assert.ok(rows.flatMap(row => row.components).every(item => item.disabled));
+});

@@ -253,11 +253,6 @@ async function deleteStaleEmoji({ client, appId, namespace, existing, state, del
 }
 
 async function uploadEmoji({ client, appId, namespace, filename, fileBase, displayKey, buffer, expectedName, existing, emojiMap, state, delayMs }) {
-  if (buffer.byteLength > 256 * 1024) {
-    console.warn(`[${namespace}] ${filename} is ${buffer.byteLength}B (over 256KB cap); skipping`);
-    state.failed += 1;
-    return;
-  }
   try {
     const dataUri = `data:${detectMime(buffer)};base64,${buffer.toString("base64")}`;
     const created = await client.rest.post(`/applications/${appId}/emojis`, {
@@ -300,6 +295,14 @@ async function syncEmojiFile({ client, appId, namespace, iconsDir, filename, emo
   const existing = findExistingForFileBase(existingByName, fileBase);
   if (existing?.name === expectedName) {
     mapExistingEmoji(fileBase, displayKey, existing, emojiMap, state);
+    return;
+  }
+  // Checked before the stale emoji is deleted: Discord would refuse this
+  // upload, so the emoji already on the application stays in use.
+  if (buffer.byteLength > 256 * 1024) {
+    console.warn(`[${namespace}] ${filename} is ${buffer.byteLength}B (over 256KB cap); skipping`);
+    state.failed += 1;
+    if (existing) mapExistingEmoji(fileBase, displayKey, existing, emojiMap, state);
     return;
   }
   if (existing && !(await deleteStaleEmoji({ client, appId, namespace, existing, state, delayMs }))) {

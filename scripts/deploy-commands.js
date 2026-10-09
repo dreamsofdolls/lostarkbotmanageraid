@@ -47,10 +47,8 @@ const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
       body: slashCommands,
     });
     console.log("Slash commands registered successfully.");
-    // Force clean exit: discord.js REST client keeps a keep-alive HTTP agent
-    // alive which prevents natural event-loop drain. Without explicit exit(0)
-    // the Railway `&& node bot.js` chain does not advance to bot startup,
-    // leaving the database disconnected and the bot offline.
+    // Force a clean exit: the discord.js REST client keeps a keep-alive HTTP
+    // agent open, so without exit(0) the script never returns to the shell.
     process.exit(0);
   } catch (error) {
     if (error?.status === 404) {

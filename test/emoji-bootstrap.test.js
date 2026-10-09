@@ -52,3 +52,34 @@ test("generic emoji bootstrap uploads canonical art once and maps aliases to its
   assert.equal(result.total, 2);
   assert.equal(emojiMap.soulmaster, emojiMap.force_master);
 });
+
+test("an oversized replacement keeps the uploaded emoji instead of deleting it", async (t) => {
+  const os = require("node:os");
+  const iconsDir = fs.mkdtempSync(path.join(os.tmpdir(), "emoji-oversize-"));
+  t.after(() => fs.rmSync(iconsDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(iconsDir, "big.png"), Buffer.alloc(256 * 1024 + 1));
+  const deleted = [];
+  const posted = [];
+  const client = {
+    application: { id: "app-1" },
+    rest: {
+      get: async () => [{ id: "old-1", name: "big_aaaaaa" }],
+      delete: async (route) => { deleted.push(route); },
+      post: async (_route, { body }) => { posted.push(body.name); return { id: "new-1", name: body.name }; },
+    },
+  };
+  const emojiMap = {};
+
+  const result = await bootstrapEmojiFolder(client, {
+    namespace: "test-emoji",
+    iconsDir,
+    emojiMap,
+    resolveDisplayKey: (fileBase) => (fileBase === "big" ? "big" : null),
+    mutationDelayMs: 0,
+  });
+
+  assert.deepEqual(deleted, []);
+  assert.deepEqual(posted, []);
+  assert.equal(emojiMap.big, "<:big_aaaaaa:old-1>");
+  assert.equal(result.failed, 1);
+});

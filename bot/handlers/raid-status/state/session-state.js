@@ -111,9 +111,12 @@ async function createRaidStatusSessionState({
     const ticket = ++latestReloadTicket;
     // Fresh share authorization and the own roster are independent reads. Keep
     // both fresh on reload, while overlapping their Mongo round trips.
-    const [reloadedOwnDoc, sharedAccounts] = await Promise.all([
+    const [reloadedOwnDoc, reloadedShared] = await Promise.all([
       nextOwnDoc || User.findOne({ discordId }),
-      buildMergedAccounts(discordId, []),
+      buildMergedAccounts(discordId, []).catch((err) => {
+        console.warn("[raid-status] share check failed during reload:", err?.message || err);
+        return null;
+      }),
     ]);
     // A newer reload may already have applied a write or revoked a share.
     if (ticket !== latestReloadTicket) return userDoc;
@@ -123,6 +126,9 @@ async function createRaidStatusSessionState({
       userDoc = { discordId, accounts: [] };
     }
 
+    // A failed share lookup keeps the shared pages the card already shows
+    // instead of dropping them until the next reload.
+    const sharedAccounts = reloadedShared ?? accounts.filter((account) => account._sharedFrom);
     accounts = [...userDoc.accounts, ...sharedAccounts];
     totalCharacters = countCharacters(accounts);
     raidGetter.clear();

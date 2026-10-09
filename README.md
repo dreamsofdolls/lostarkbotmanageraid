@@ -1,4 +1,4 @@
-# Artist — Lost Ark Raid Management Bot
+# Artist - Lost Ark Raid Management Bot
 
 ![Node](https://img.shields.io/badge/Node-20-339933?logo=node.js&logoColor=white)
 ![discord.js](https://img.shields.io/badge/discord.js-5865F2?logo=discord&logoColor=white)
@@ -6,9 +6,9 @@
 ![Railway](https://img.shields.io/badge/Railway-deploy-635BFF?logo=railway&logoColor=white)
 ![Languages](https://img.shields.io/badge/i18n-vi%20%C2%B7%20ja%20%C2%B7%20en-informational)
 
-**Artist** automates weekly raid-progress tracking for a Lost Ark guild — no more shared spreadsheets. It syncs each member's roster from `lostark.bible`, records raid-gate completion from chat posts or automatic reconciliation against the clear-logs, shows at a glance who still owes which raid, and resets the entire guild every Wednesday at 17:00 VN. Every surface is available in Vietnamese, Japanese, and English.
+**Artist** automates weekly raid-progress tracking for a Lost Ark guild, replacing shared spreadsheets. It syncs each member's roster from `lostark.bible`, records raid-gate completion from chat posts or automatic reconciliation against the clear-logs, shows at a glance who still owes which raid, and resets the entire guild every Wednesday at 17:00 VN. Every surface is available in Vietnamese, Japanese, and English.
 
-Beyond progress tracking, Artist ships a **zero-upload Local Reader** that reads `encounters.db` on the user's device and writes the new clears when the user presses Sync on the page. The raw database never leaves the browser. Artist also includes raid signup boards, an auction-bid calculator, per-character side-tasks, and weekly gold management — one bot for the entire raid week.
+Beyond progress tracking, Artist ships a **zero-upload Local Reader** that reads `encounters.db` on the user's device and writes the new clears when the user presses Sync on the page. The raw database never leaves the browser. Artist also includes raid signup boards, an auction-bid calculator, per-character side-tasks, and weekly gold management: one bot for the entire raid week.
 
 ## Contents
 
@@ -443,7 +443,7 @@ npm start                   # or: npm run dev (node --watch)
 npm test                    # node --test on test/
 ```
 
-Logic-only changes (inside a command, no new option or name tweak) don't require `deploy:commands` — Discord keeps the cached schema.
+Logic-only changes (inside a command, no new option or name tweak) don't require `deploy:commands`; Discord keeps the cached schema.
 
 ## Railway Deploy
 
@@ -453,12 +453,12 @@ Logic-only changes (inside a command, no new option or name tweak) don't require
 4. Railway builds from `Dockerfile` (node:20-slim, `npm ci --omit=dev`) and starts via `node bot.js`.
 5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
 
-The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema — fail-soft. `scripts/deploy-commands.js` stays around only for dev-machine force-registers.
+The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema (fail-soft). `scripts/deploy-commands.js` stays around only for dev-machine force-registers.
 
 ## Development
 
 - Run tests before pushing: `npm test`
-- Commits auto-deploy via Railway on push to `main` — think of `main` as production
+- Commits auto-deploy via Railway on push to `main`; think of `main` as production
 - No CI pipeline; test suite is the only gate
 - Prefer editing existing files; don't create documentation files unless asked
 

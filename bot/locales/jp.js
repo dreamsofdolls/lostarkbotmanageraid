@@ -893,6 +893,8 @@ module.exports = {
     notice: {
       noRosterTitle: "まだロスターが無いですわ",
       noRosterDescription: "DB の中にあなたのロスターが見つかりませんでしたわ～ まず `/raid-add-roster` で最初のロスターを登録してから `/raid-status` で進捗を見てくださいね♪",
+      shareLookupFailedTitle: "共有ロスターを読み込めませんでしたわ",
+      shareLookupFailedDescription: "今回は共有されたロスターを読み込めませんでしたの。少し待ってから `/raid-status` をもう一度お試しくださいませ。",
     },
     freshness: {
       lastUpdated: "最終更新",

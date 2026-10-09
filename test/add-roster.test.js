@@ -264,56 +264,62 @@ test("persistSelectedRoster: preserves an existing user's disabled Local Sync ch
   assert.equal(stored.autoManageEnabled, false);
 });
 
-test("persistSelectedRoster: matches existing account by name and merges new chars", async () => {
+function savedCharacter(name, extra = {}) {
+  return {
+    id: `${name}-id`,
+    name,
+    class: "Bard",
+    itemLevel: 1700,
+    combatScore: "85000",
+    assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+    tasks: [],
+    ...extra,
+  };
+}
+
+function assertRaceDuplicate(accountName) {
+  return (err) => {
+    assert.equal(err.code, "RACE_DUP_ROSTER");
+    assert.equal(err.collidingAccountName, accountName);
+    return true;
+  };
+}
+
+test("persistSelectedRoster: refuses the roster a concurrent picker just saved instead of replacing its characters", async () => {
+  // The handler refuses a saved roster when the command runs, so a matching
+  // account here was saved by another picker after that check.
   const { factory, docs } = makeFactory();
-  // Pre-existing account "Alpha" with one char.
   docs.set("user-1", {
     discordId: "user-1",
-    accounts: [
-      {
-        accountName: "Alpha",
-        characters: [
-          {
-            id: "char-alpha-id",
-            name: "Alpha",
-            class: "Bard",
-            itemLevel: 1700,
-            combatScore: "85000",
-            assignedRaids: { armoche: {}, kazeros: { G1: { difficulty: "Hard", completedDate: 111 } }, serca: {} },
-            tasks: [],
-            bibleSerial: "serial-alpha",
-            bibleCid: "cid-alpha",
-            bibleRid: "rid-alpha",
-            publicLogDisabled: true,
-          },
-        ],
-      },
-    ],
+    accounts: [{
+      accountName: "Alpha",
+      characters: [
+        savedCharacter("Alpha", {
+          assignedRaids: { armoche: {}, kazeros: { G1: { difficulty: "Hard", completedDate: 111 } }, serca: {} },
+        }),
+        savedCharacter("Beta"),
+        savedCharacter("Gamma"),
+        savedCharacter("Delta"),
+      ],
+    }],
   });
 
   const session = makeSession({
     seedCharName: "Alpha",
-    bibleNames: ["alpha", "beta"],
+    bibleNames: ["alpha", "beta", "gamma", "delta"],
   });
   const selected = [
     { charName: "Alpha", className: "Bard", itemLevel: 1705, combatScore: "86000" },
-    { charName: "Beta", className: "Paladin", itemLevel: 1690, combatScore: "82000" },
   ];
 
-  const saved = await factory.__test.persistSelectedRoster(session, selected);
+  await assert.rejects(
+    () => factory.__test.persistSelectedRoster(session, selected),
+    assertRaceDuplicate("Alpha")
+  );
 
-  assert.equal(saved.characters.length, 2);
-  // Existing per-char state preserved on the kept char (raid completion).
   const stored = docs.get("user-1");
-  const persistedAlpha = stored.accounts[0].characters.find((c) => c.name === "Alpha");
-  assert.equal(persistedAlpha.id, "char-alpha-id"); // id preserved
-  assert.equal(persistedAlpha.assignedRaids.kazeros.G1.completedDate, 111);
-  assert.equal(persistedAlpha.bibleSerial, "serial-alpha");
-  assert.equal(persistedAlpha.bibleCid, "cid-alpha");
-  assert.equal(persistedAlpha.bibleRid, "rid-alpha");
-  assert.equal(persistedAlpha.publicLogDisabled, true);
-  // Bible-side fields refreshed.
-  assert.equal(persistedAlpha.itemLevel, 1705);
+  assert.deepEqual(stored.accounts[0].characters.map((c) => c.name), ["Alpha", "Beta", "Gamma", "Delta"]);
+  assert.equal(stored.accounts[0].characters[0].assignedRaids.kazeros.G1.completedDate, 111);
 });
 
 test("persistSelectedRoster: race-safe guard throws RACE_DUP_ROSTER when another account already covers this bible roster", async () => {
@@ -366,43 +372,23 @@ test("persistSelectedRoster: race-safe guard throws RACE_DUP_ROSTER when another
   assert.equal(stored.accounts[0].accountName, "Alpha");
 });
 
-test("persistSelectedRoster: race guard does NOT false-positive on the legitimate target account", async () => {
-  // When the user re-runs /raid-add-roster on an EXISTING roster (same seed,
-  // same chars), the matched account IS the merge target. The race guard
-  // must skip it explicitly — overlap there is by design.
+test("persistSelectedRoster: refuses an account named after the seed when Bible gave no roster names", async () => {
   const { factory, docs } = makeFactory();
   docs.set("user-1", {
     discordId: "user-1",
-    accounts: [
-      {
-        accountName: "Alpha",
-        characters: [
-          {
-            id: "alpha-id",
-            name: "Alpha",
-            class: "Bard",
-            itemLevel: 1700,
-            combatScore: "85000",
-            assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
-            tasks: [],
-          },
-        ],
-      },
-    ],
+    accounts: [{ accountName: "Alpha", characters: [savedCharacter("Alpha")] }],
   });
 
-  const session = makeSession({
-    seedCharName: "Alpha",
-    bibleNames: ["alpha", "beta"],
-  });
+  const session = makeSession({ seedCharName: "Alpha", bibleNames: [] });
   const selected = [
     { charName: "Alpha", className: "Bard", itemLevel: 1700, combatScore: "85000" },
-    { charName: "Beta", className: "Paladin", itemLevel: 1690, combatScore: "82000" },
   ];
 
-  const saved = await factory.__test.persistSelectedRoster(session, selected);
-  assert.equal(saved.accountName, "Alpha");
-  assert.equal(saved.characters.length, 2);
+  await assert.rejects(
+    () => factory.__test.persistSelectedRoster(session, selected),
+    assertRaceDuplicate("Alpha")
+  );
+  assert.equal(docs.get("user-1").accounts.length, 1);
 });
 
 test("persistSelectedRoster: race guard does NOT trigger on unrelated rosters", async () => {
@@ -456,15 +442,7 @@ test("persistSelectedRoster: stamps account.lastRefreshedAt for /raid-status laz
   assert.ok(stamp >= before && stamp <= after, `expected lastRefreshedAt in [${before},${after}], got ${stamp}`);
 });
 
-test("persistSelectedRoster: matches existing account when selection chars overlap saved chars (different seed)", async () => {
-  // Edge case: user had previously saved [Alpha, Beta] under accountName
-  // "Alpha". They now run /raid-add-roster with seed "Charlie" but the bible
-  // roster they see is the SAME one (Alpha's roster), so their selection
-  // includes Alpha or Beta. The account-match logic should still find
-  // account "Alpha" via the chars-in-selection rule and merge into it.
-  // (This case actually triggers the pre-fetch guard in the real
-  // handler — but persistSelectedRoster's account-match must remain
-  // correct on its own, so test here.)
+test("persistSelectedRoster: refuses a selection that overlaps a saved account under another seed", async () => {
   const { factory, docs } = makeFactory();
   docs.set("user-1", {
     discordId: "user-1",
@@ -487,17 +465,15 @@ test("persistSelectedRoster: matches existing account when selection chars overl
     { charName: "Charlie", className: "Berserker", itemLevel: 1680, combatScore: "80000" },
   ];
 
-  const saved = await factory.__test.persistSelectedRoster(session, selected);
-
-  // Should merge into "Alpha" account, NOT create a new "Charlie" account.
-  assert.equal(saved.accountName, "Alpha");
-  assert.equal(saved.characters.length, 2);
+  await assert.rejects(
+    () => factory.__test.persistSelectedRoster(session, selected),
+    assertRaceDuplicate("Alpha")
+  );
 
   const stored = docs.get("user-1");
-  assert.equal(stored.accounts.length, 1, "should remain 1 account, not split");
-
-  const persistedAlpha = stored.accounts[0].characters.find((c) => c.name === "Alpha");
-  assert.equal(persistedAlpha.assignedRaids.kazeros.G1.completedDate, 999, "Alpha's raid completion preserved");
+  assert.equal(stored.accounts.length, 1, "no second account splits the roster");
+  assert.deepEqual(stored.accounts[0].characters.map((c) => c.name), ["Alpha"]);
+  assert.equal(stored.accounts[0].characters[0].assignedRaids.kazeros.G1.completedDate, 999);
 });
 
 test("persistSelectedRoster: stamps registeredBy with callerId when actingForOther is true", async () => {
@@ -562,11 +538,7 @@ test("persistSelectedRoster: leaves registeredBy null when user self-adds", asyn
   );
 });
 
-test("persistSelectedRoster: preserves existing registeredBy on merge into pre-stamped account", async () => {
-  // Edge case: another /raid-add-roster session (or a future re-register flow)
-  // already created an account with `registeredBy = X`. Running this
-  // helper against that account again must NOT overwrite the existing
-  // stamp - the original helper Manager keeps their authorization.
+test("persistSelectedRoster: a manager's concurrent add leaves the saved account and its registeredBy alone", async () => {
   const { factory, docs } = makeFactory();
   docs.set("user-2", {
     discordId: "user-2",
@@ -599,13 +571,12 @@ test("persistSelectedRoster: preserves existing registeredBy on merge into pre-s
     { charName: "Charlie", className: "Bard", itemLevel: 1705, combatScore: "86000" },
   ];
 
-  await factory.__test.persistSelectedRoster(session, selected);
+  await assert.rejects(
+    () => factory.__test.persistSelectedRoster(session, selected),
+    assertRaceDuplicate("Charlie")
+  );
 
   const stored = docs.get("user-2");
-  assert.equal(stored.accounts.length, 1, "should merge, not create new account");
-  assert.equal(
-    stored.accounts[0].registeredBy,
-    "original-helper",
-    "merge must preserve the original registeredBy stamp"
-  );
+  assert.equal(stored.accounts.length, 1);
+  assert.equal(stored.accounts[0].registeredBy, "original-helper");
 });

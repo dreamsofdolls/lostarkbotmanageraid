@@ -25,7 +25,8 @@ function loadIncomingSharedAccounts({
         "[raid-status] share check failed during viewer load:",
         err?.message || err
       );
-      return [];
+      // null, not []: a failed lookup must not read as "no shared rosters".
+      return null;
     });
 }
 
@@ -76,7 +77,7 @@ async function loadStatusViewerState({
   const pendingIncomingShares =
     incomingSharesPromise ||
     loadIncomingSharedAccounts({ discordId, getAccessibleAccountsFn });
-  const [seedDoc, incomingSharedAccounts] = await Promise.all([
+  const [seedDoc, incomingShareLookup] = await Promise.all([
     pendingSeedDoc,
     pendingIncomingShares,
   ]);
@@ -86,7 +87,26 @@ async function loadStatusViewerState({
   });
   const hasOwnAccounts =
     seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+  const shareLookupFailed = incomingShareLookup === null;
+  const incomingSharedAccounts = incomingShareLookup || [];
   const hasIncomingShare = incomingSharedAccounts.length > 0;
+
+  // Without an own roster the card would only hold shared ones, so a failed
+  // lookup asks for a retry instead of claiming the viewer has no roster.
+  if (!hasOwnAccounts && shareLookupFailed) {
+    return {
+      lang,
+      seedDoc,
+      hasOwnAccounts,
+      hasIncomingShare,
+      incomingSharedAccounts,
+      noRoster: false,
+      shareLookupFailed: true,
+      piggybackOutcome: null,
+      startBackgroundRefresh: null,
+      userDoc: null,
+    };
+  }
 
   if (!hasOwnAccounts && !hasIncomingShare) {
     return {

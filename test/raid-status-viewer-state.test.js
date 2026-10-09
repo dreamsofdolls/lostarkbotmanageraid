@@ -526,3 +526,49 @@ test("raid-status local-sync probe times out safe-ephemeral before Discord ack d
   assert.equal(result, true);
   assert.match(warnings[0], /local-sync probe exceeded 5ms/);
 });
+
+test("raid-status viewer state reports a failed share lookup instead of an empty roster", async () => {
+  clearUserLanguageCache();
+  const User = makeUserModel({ seedDoc: null });
+
+  const state = await loadStatusViewerState({
+    User,
+    discordId: "viewer",
+    prepareStatusUserDoc: () => {
+      throw new Error("own roster preparation should not run");
+    },
+    getAccessibleAccountsFn: async () => {
+      throw new Error("connection reset");
+    },
+  });
+
+  assert.equal(state.shareLookupFailed, true);
+  assert.equal(state.noRoster, false);
+});
+
+test("raid-status reload keeps the shared pages when the share lookup fails", async () => {
+  let nowMs = 1_000;
+  let shareLookups = 0;
+  const shared = { accountName: "Shared", characters: [{ name: "S1" }, { name: "S2" }], _sharedFrom: { ownerDiscordId: "owner" } };
+  const state = await createRaidStatusSessionState({
+    User: { findOne: async () => ({ accounts: [{ accountName: "Own", characters: [{ name: "A" }] }] }) },
+    discordId: "viewer",
+    userDoc: { accounts: [{ accountName: "Own", characters: [{ name: "A" }] }] },
+    incomingSharedAccounts: [shared],
+    buildMergedAccounts: async (_discordId, accounts) => {
+      shareLookups += 1;
+      if (shareLookups > 1) throw new Error("connection reset");
+      return [...accounts, shared];
+    },
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+    now: () => nowMs,
+    interactiveRefreshMaxAgeMs: 5_000,
+  });
+  assert.equal(state.totalCharacters, 3);
+
+  nowMs += 5_000;
+  assert.equal(await state.refreshViewerAccountsIfStale(), true);
+  assert.equal(state.totalCharacters, 3);
+});

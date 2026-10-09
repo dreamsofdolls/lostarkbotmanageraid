@@ -101,6 +101,7 @@ const VI = {
     identity: {
       noTokenHint: "Mở /raid-status → 🗃️ Local Sync trên Discord để lấy link Solo mới.",
       malformedHint: "Mở /raid-status → 🗃️ Local Sync trên Discord để lấy link Solo mới.",
+      disabled: "Bible Auto-sync đang tắt",
       disabledHint: "Bật lại Bible Auto-sync rồi lấy link Solo mới ở /raid-status → 🗃️ Local Sync.",
     },
     well: {
@@ -220,6 +221,7 @@ const JP = {
     identity: {
       noTokenHint: "Discord の /raid-status → 🗃️ ローカル同期 から新しい Solo リンクを開いてくださいませ。",
       malformedHint: "Discord の /raid-status → 🗃️ ローカル同期 から新しい Solo リンクを開いてくださいませ。",
+      disabled: "Bible 自動同期がオフになっていますわ",
       disabledHint: "Bible 自動同期を有効に戻してから、/raid-status → 🗃️ ローカル同期 で新しい Solo リンクを開いてくださいませ。",
     },
     well: {
@@ -339,6 +341,7 @@ const EN = {
     identity: {
       noTokenHint: "Open /raid-status → 🗃️ Local Sync in Discord for a fresh Solo link.",
       malformedHint: "Open /raid-status → 🗃️ Local Sync in Discord for a fresh Solo link.",
+      disabled: "Bible auto-sync is off",
       disabledHint: "Turn Bible auto-sync back on, then open a fresh Solo link from /raid-status → 🗃️ Local Sync.",
     },
     well: {

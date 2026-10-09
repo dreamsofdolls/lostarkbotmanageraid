@@ -2,18 +2,22 @@
 
 const { getAccessibleAccounts } = require("../../../services/access/access-control");
 
+/**
+ * Own accounts followed by the accounts shared with the viewer.
+ * A failed share lookup rejects, so a caller can keep the shared pages it
+ * already shows instead of dropping them.
+ * @param {string} viewerDiscordId - the viewer
+ * @param {object[]} ownAccounts - the viewer's own accounts
+ * @param {object} [options]
+ * @param {object[]|null} [options.accessibleAccounts] - shares already read
+ * @returns {Promise<object[]>} merged accounts, shared ones tagged `_sharedFrom`
+ */
 async function buildMergedAccounts(viewerDiscordId, ownAccounts, { accessibleAccounts = null } = {}) {
   const merged = Array.isArray(ownAccounts) ? ownAccounts.slice() : [];
 
-  let accessible;
-  try {
-    accessible = Array.isArray(accessibleAccounts)
-      ? accessibleAccounts
-      : await getAccessibleAccounts(viewerDiscordId, { includeOwn: false });
-  } catch (err) {
-    console.warn("[raid-status] getAccessibleAccounts failed:", err.message);
-    return merged;
-  }
+  const accessible = Array.isArray(accessibleAccounts)
+    ? accessibleAccounts
+    : await getAccessibleAccounts(viewerDiscordId, { includeOwn: false });
 
   for (const entry of accessible) {
     if (entry.isOwn) continue;

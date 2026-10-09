@@ -244,7 +244,7 @@ test("setBibleAutoSyncEnabled(false) revokes the stored companion token", async 
   });
 });
 
-test("setBibleAutoSyncEnabled(false) reports no_user without a conflict probe", async () => {
+test("setBibleAutoSyncEnabled(false) reports no_user when the existence read finds no document", async () => {
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(null),
   });
@@ -252,7 +252,8 @@ test("setBibleAutoSyncEnabled(false) reports no_user without a conflict probe", 
   const result = await setBibleAutoSyncEnabled("u1", false, {}, { UserModel: UserStub });
 
   assert.deepEqual(result, { ok: false, reason: RESULT.noUser });
-  assert.equal(UserStub.calls.findOne.length, 0);
+  assert.deepEqual(UserStub.calls.findOneAndUpdate[0].filter, { discordId: "u1", autoManageEnabled: true });
+  assert.deepEqual(UserStub.calls.findOne.map((call) => call.filter), [{ discordId: "u1" }]);
 });
 
 // ---------- resolveSyncMode (pure) ----------
@@ -368,4 +369,64 @@ test("setBibleAutoSyncEnabled - throws when UserModel missing from deps", async 
     setBibleAutoSyncEnabled("u1", true, {}, {}),
     /UserModel required/
   );
+});
+
+// A stored document that applies $set only when every filter field matches.
+function makeStoredUserStub(doc) {
+  const stub = makeUserStub({
+    findOneAndUpdateImpl: (filter, update) => {
+      const matches = Object.entries(filter).every(([key, value]) => doc[key] === value);
+      if (!matches) return Promise.resolve(null);
+      Object.assign(doc, update.$set);
+      return Promise.resolve({ ...doc });
+    },
+    findOneImpl: (filter) => Promise.resolve(filter.discordId === doc.discordId ? { ...doc } : null),
+  });
+  return stub;
+}
+
+test("setBibleAutoSyncEnabled(false) keeps the Local link when Bible was already off", async () => {
+  const doc = {
+    discordId: "u1",
+    autoManageEnabled: false,
+    localSyncEnabled: true,
+    lastLocalSyncToken: "local-token",
+    lastLocalSyncTokenExpAt: 123,
+  };
+  const result = await setBibleAutoSyncEnabled("u1", false, {}, { UserModel: makeStoredUserStub(doc) });
+
+  assert.equal(result.ok, true);
+  assert.equal(doc.lastLocalSyncToken, "local-token");
+  assert.equal(doc.lastLocalSyncTokenExpAt, 123);
+});
+
+test("setLocalSyncEnabled(false) keeps the Solo link when Local was already off", async () => {
+  const doc = {
+    discordId: "u1",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    lastLocalSyncToken: "solo-token",
+    lastLocalSyncTokenExpAt: 456,
+  };
+  const result = await setLocalSyncEnabled("u1", false, {}, { UserModel: makeStoredUserStub(doc) });
+
+  assert.equal(result.ok, true);
+  assert.equal(doc.lastLocalSyncToken, "solo-token");
+  assert.equal(doc.lastLocalSyncTokenExpAt, 456);
+});
+
+test("turning off the active mode still revokes the shared Reader token", async () => {
+  const doc = {
+    discordId: "u1",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    lastLocalSyncToken: "solo-token",
+    lastLocalSyncTokenExpAt: 456,
+  };
+  const result = await setBibleAutoSyncEnabled("u1", false, {}, { UserModel: makeStoredUserStub(doc) });
+
+  assert.equal(result.ok, true);
+  assert.equal(doc.autoManageEnabled, false);
+  assert.equal(doc.lastLocalSyncToken, null);
+  assert.equal(doc.lastLocalSyncTokenExpAt, null);
 });

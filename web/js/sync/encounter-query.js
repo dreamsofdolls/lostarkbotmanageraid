@@ -1,9 +1,24 @@
 "use strict";
 
 const SOLO_DIFFICULTIES = new Set(["solo", "solo mode"]);
-// Each group becomes at most one delta. Matches MAX_PREVIEW_DELTAS in
-// bot/services/local-sync/core/preview-jobs.js; a test keeps them equal.
+// Each group becomes at most one delta, and capPartyDeltas trims party deltas
+// to the same count. Matches MAX_PREVIEW_DELTAS in
+// bot/services/local-sync/core/preview-jobs.js; tests keep them equal.
 const MAX_ENCOUNTER_GROUPS = 512;
+
+/**
+ * Keep as many party deltas as a preview job accepts, newest clears first.
+ * The server refuses the whole job, the user's own clears included, when
+ * partyDeltas pass its delta limit, which a large party history can reach.
+ * @param {Array<{lastClearMs: number}>} partyDeltas - party clears to send
+ * @returns {Array<{lastClearMs: number}>} the same list when within the limit
+ */
+export function capPartyDeltas(partyDeltas) {
+  if (partyDeltas.length <= MAX_ENCOUNTER_GROUPS) return partyDeltas;
+  return [...partyDeltas]
+    .sort((a, b) => b.lastClearMs - a.lastClearMs)
+    .slice(0, MAX_ENCOUNTER_GROUPS);
+}
 
 function isSoloDifficulty(value) {
   return SOLO_DIFFICULTIES.has(String(value || "").trim().toLowerCase());
