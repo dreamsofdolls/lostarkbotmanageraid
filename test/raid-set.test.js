@@ -1128,6 +1128,42 @@ for (const pendingModeKey of [undefined, "hard"]) {
   });
 }
 
+test("clearCharacterProgress puts the cleared gold flags in the save delta of a stored document", () => {
+  const doc = User.hydrate({
+    _id: "0123456789abcdef01234567",
+    discordId: "reset-user",
+    accounts: [{
+      accountName: "Roster",
+      characters: [{
+        id: "c1",
+        name: "Aki",
+        class: "Bard",
+        itemLevel: 1730,
+        assignedRaids: {
+          armoche: {
+            modeKey: "normal",
+            goldOverride: "exclude",
+            goldDisabled: true,
+            goldForced: true,
+            G1: { difficulty: "Normal", completedDate: 111 },
+          },
+        },
+      }],
+    }],
+  });
+
+  clearCharacterProgress(doc.accounts[0].characters[0]);
+
+  // The bug lived in what save() writes, not in the in-memory document.
+  const sets = doc.getChanges().$set || {};
+  const raidPath = "accounts.0.characters.0.assignedRaids";
+  const written = sets[raidPath]?.armoche ?? sets[`${raidPath}.armoche`];
+  assert.ok(written, "the save rewrites the raid so the cleared flags reach MongoDB");
+  assert.equal(written.goldOverride, undefined);
+  assert.equal(written.goldDisabled, undefined);
+  assert.equal(written.goldForced, undefined);
+});
+
 test("normalizeAssignedRaid: preserves over-tier stamped difficulty (no auto-downgrade)", () => {
   // Inverse of the auto-upgrade case: an over-tier stored difficulty
   // (e.g. Hard manually stamped via /raid-set on a 1700 char that

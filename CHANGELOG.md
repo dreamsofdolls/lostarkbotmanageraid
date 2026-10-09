@@ -4,13 +4,23 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-10
+
+### Fixed
+- `/raid-status` no longer reports a Bible failure when every character's error is private logs ("Logs not enabled"); that is the player's own setting, so the card shows a sync with no new clears.
+- The Sync failure notice no longer says the cooldown was reset; it was not.
+- The "another session committed first" notice of `/raid-add-roster` no longer says the other session was yours, since a manager adding for you can trigger it too.
+
+### Changed (internal)
+- `/raid-check` documents why it reads the stored raid mode while `/raid-status` follows a queued Normal <-> Solo switch; add-roster comments no longer describe the removed merge path; the weekly-reset test checks the save delta of a stored document.
+
 ## 2026-10-09
 
 ### Fixed
 - The weekly reset clears "Gold nhận" include/exclude choices again. On a stored document the old `delete` on the `assignedRaids` subdoc never reached the database, so last week's choice carried into every new week.
 - `/raid-status` reports a sync as failed when every character's Bible read failed (outage, 429), on both the Sync button and the card-open sync, instead of "synced, no new clears". A sync with no character to read still shows as synced.
 - Typed text such as `constructor` in `/raid-channel config action:`, `/raid-set raid:` or `/raid-task shared-add preset:` is answered as unknown, instead of no reply, a raid accepted with no data, or a shared task named "undefined".
-- Turning off a sync mode that is already off (`/raid-auto-manage action:off` in Local mode, `action:local-off` with Bible on) no longer revokes the other mode's Reader link.
+- Turning off a sync mode writes only while that mode is on, so a disable that races with the other mode's enable no longer revokes that mode's Reader link. (`/raid-auto-manage` already refuses `off` or `local-off` for a mode that is off.)
 - A second `/raid-add-roster` picker confirmed for a roster another picker just saved gets the "another session committed first" notice, instead of replacing the characters the first one saved.
 - `/raid-check` disables its buttons when the session ends; the edit used the channel route, which an ephemeral reply does not accept.
 - `/raid-status` asks for a retry when the shared-roster lookup fails for a viewer who only has shared rosters, instead of "no roster yet", and a refresh keeps the shared pages when the lookup fails.

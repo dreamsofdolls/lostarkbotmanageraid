@@ -58,7 +58,6 @@ function appendAddRosterAccount({ userDoc, session }) {
   return userDoc.accounts[userDoc.accounts.length - 1];
 }
 
-
 function buildSavedAccountSnapshot({ account, getCharacterName, getCharacterClass }) {
   return {
     accountName: account.accountName,

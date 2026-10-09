@@ -690,7 +690,7 @@ module.exports = {
       postFetchTitle: "Roster này đã saved ở account khác rồi",
       postFetchDescription: "Artist fetch bible xong thấy có char trùng với account **{accountName}** đã saved của cậu - để tránh roster bị tách đôi nên Artist từ chối nha.\n\nMuốn add char mới: `/raid-edit-roster roster:{accountName}`\nMuốn làm lại từ đầu: `/raid-remove-roster` rồi `/raid-add-roster`",
       raceTitle: "Có phiên khác vừa save trước",
-      raceDescription: "Trong lúc cậu đang chọn chars, một phiên `/raid-add-roster` khác của cậu vừa save xong roster này ở account **{accountName}**.\n\nDùng `/raid-edit-roster roster:{accountName}` để add tiếp chars cậu vừa chọn vào account đó nhé~",
+      raceDescription: "Trong lúc cậu đang chọn chars, một phiên `/raid-add-roster` khác vừa save xong roster này ở account **{accountName}**.\n\nDùng `/raid-edit-roster roster:{accountName}` để add tiếp chars cậu vừa chọn vào account đó nhé~",
     },
     fetch: {
       failed: "{iconWarn} Không fetch được roster từ lostark.bible: {error}",
@@ -1060,7 +1060,7 @@ module.exports = {
         variants: ["Sync xong", "Ngó logs xong rồi", "Đã kiểm tra logs"],
       },
       followupFailedTitle: "Sync gặp trục trặc",
-      followupFailedDescription: "Bible đang dở chứng nên sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút.",
+      followupFailedDescription: "Bible đang dở chứng nên sync chưa lấy được data mới. Cậu thử lại sau vài phút nhé.",
       cooldownFallback: "vài giây",
     },
     expiredFooter: "⏱️ Hết {seconds}s, các nút đã khoá · Gõ /raid-status để mở lại",

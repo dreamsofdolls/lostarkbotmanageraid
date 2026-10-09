@@ -1038,7 +1038,7 @@ module.exports = {
         variants: ["同期しましたわ", "ログを確認しましたの", "ログは確認済みですわ"],
       },
       followupFailedTitle: "同期に失敗しましたわ",
-      followupFailedDescription: "bible が機嫌悪いみたい… 新しいデータが取れませんでしたわ。クールダウンはリセットしたので、数分後にもう一度試してね～",
+      followupFailedDescription: "bible が機嫌悪いみたい… 新しいデータが取れませんでしたわ。数分後にもう一度試してね～",
       cooldownFallback: "数秒",
     },
     expiredFooter: "⏱️ セッションが期限切れですわ ({seconds}秒) · もう一度見るには /raid-status を実行してね♪",

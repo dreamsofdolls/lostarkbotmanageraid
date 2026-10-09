@@ -22,6 +22,10 @@ function isRaidCheckVisibleCharacter(character) {
 // character's three active gold slots (rendered with 🔒 in /raid-status) do
 // not belong in its cards, filters, or pending totals. Bare catalogue/event
 // entries have no goldReceives flag and therefore remain visible.
+// It reads the stored modeKey, not a queued Normal <-> Solo switch: that
+// switch is queued after a clear, so this week's progress belongs to the
+// stored mode, while /raid-status files the raid under the queued mode
+// (getRaidFilterModeKey).
 function isRaidCheckVisibleRaid(raid) {
   return isRaidCheckVisibleMode(raid?.modeKey) && raid?.goldReceives !== false;
 }

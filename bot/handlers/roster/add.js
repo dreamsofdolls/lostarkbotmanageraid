@@ -190,13 +190,10 @@ function createAddRosterCommand({
     // only catches seedCharName collisions with accountName / saved char
     // names - it misses the case where the user seeds with a real bible
     // char they haven't saved yet but whose roster already lives under a
-    // different accountName. Without this check, persistSelectedRoster
-    // would create a SECOND account pointing to the same bible roster
-    // (because the account-match logic only inspects the user's selection,
-    // not the full bible char list), splitting one bible roster across
-    // two accounts and breaking the "1 bible roster = 1 account/user"
-    // invariant that /raid-remove-roster + /raid-set rely on. Direct users to
-    // /raid-edit-roster instead since that's exactly the right tool here.
+    // different accountName. Refusing here, before the picker opens, keeps
+    // the "1 bible roster = 1 account/user" invariant that /raid-remove-roster
+    // + /raid-set rely on and points users to /raid-edit-roster, the tool for
+    // a roster that is already saved.
     // Build the bible name set once: used both for the command-time
     // overlap guard below AND stashed into session.bibleNames so
     // persistSelectedRoster can re-run the same overlap check inside

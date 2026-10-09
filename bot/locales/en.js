@@ -667,7 +667,7 @@ module.exports = {
       postFetchTitle: "This roster is already saved under another account",
       postFetchDescription: "After fetching from bible, Artist found characters that overlap with your existing account **{accountName}** - rejecting to avoid splitting one roster across two accounts.\n\nTo add new characters: `/raid-edit-roster roster:{accountName}`\nTo start over: `/raid-remove-roster` then `/raid-add-roster`",
       raceTitle: "Another session committed first",
-      raceDescription: "While you were picking characters, another `/raid-add-roster` session of yours saved this roster under account **{accountName}**.\n\nUse `/raid-edit-roster roster:{accountName}` to add the characters you just picked into that account.",
+      raceDescription: "While you were picking characters, another `/raid-add-roster` session saved this roster under account **{accountName}**.\n\nUse `/raid-edit-roster roster:{accountName}` to add the characters you just picked into that account.",
     },
     fetch: {
       failed: "{iconWarn} Failed to fetch roster from lostark.bible: {error}",
@@ -1037,7 +1037,7 @@ module.exports = {
         variants: ["Sync done", "Finished checking the logs", "Logs checked"],
       },
       followupFailedTitle: "Sync hit a snag",
-      followupFailedDescription: "Bible is misbehaving - sync couldn't pull fresh data. Cooldown was reset; please retry in a few minutes.",
+      followupFailedDescription: "Bible is misbehaving - sync couldn't pull fresh data. Please retry in a few minutes.",
       cooldownFallback: "a few seconds",
     },
     expiredFooter: "⏱️ Session expired ({seconds}s) · Run /raid-status to reopen",

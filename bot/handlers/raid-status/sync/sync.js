@@ -25,20 +25,23 @@ const {
   AUTO_MANAGE_STATUS_STALE_MS,
   isAutoManageAttemptStale,
 } = require("../../../services/auto-manage/runtime/support/freshness");
+const { isPublicLogDisabledError } = require("../../../services/auto-manage/bible/error-kinds");
 const {
   commitCollectedRaidViewRefresh,
 } = require("../../../services/raid/view-refresh-commit");
 
 const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_STATUS_STALE_MS;
 
-// A report whose entries all failed (Bible outage, 429) synced nothing. An
-// empty report means no character needed a read, which is not a failure;
-// the same split as resolveSyncOutcome in auto-manage/reports/embeds.js.
+// A report with no successful entry and at least one Bible failure (outage,
+// 429) synced nothing. An empty report, or one whose only errors are private
+// logs ("Logs not enabled"), is the user's own setting, not a failed sync.
 function autoManageReportOutcome(report) {
   const newGatesApplied = countAppliedAutoManageGates(report);
-  const everyEntryFailed = getAutoManageEntries(report).length > 0
-    && !hasSuccessfulAutoManageReport(report);
-  if (everyEntryFailed) return { outcome: "failed", newGatesApplied };
+  const hasBibleFailure = getAutoManageEntries(report)
+    .some((entry) => entry?.error && !isPublicLogDisabledError(entry.error));
+  if (hasBibleFailure && !hasSuccessfulAutoManageReport(report)) {
+    return { outcome: "failed", newGatesApplied };
+  }
   return { outcome: newGatesApplied > 0 ? "applied" : "synced-no-new", newGatesApplied };
 }
 

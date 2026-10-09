@@ -276,3 +276,22 @@ test("raid-status card-open sync with no character to read is not a failure", as
 
   assert.equal(result.piggybackOutcome.outcome, "synced-no-new");
 });
+
+test("raid-status card-open sync where every character has private logs is not a Bible failure", async () => {
+  const seedDoc = {
+    discordId: "user-1",
+    accounts: [{ accountName: "Roster", characters: [] }],
+    autoManageEnabled: true,
+  };
+  const freshDoc = { ...seedDoc, save: async () => {}, toObject: () => ({ ...seedDoc }) };
+  const sync = createSync({
+    User: { findOne: async () => freshDoc },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
+    applyAutoManageCollected: () => ({ perChar: [{ error: "Logs not enabled", applied: [] }] }),
+  });
+
+  const result = await sync.loadStatusUserDoc("user-1", seedDoc);
+
+  assert.equal(result.piggybackOutcome.outcome, "synced-no-new");
+});

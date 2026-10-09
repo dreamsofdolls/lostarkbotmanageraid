@@ -554,7 +554,7 @@ test("persistSelectedRoster: a manager's concurrent add leaves the saved account
   });
 
   // Session simulates a different caller running /raid-add-roster target:user-2
-  // and the merge logic finding the same account.
+  // on a roster another picker already saved.
   const session = {
     sessionId: "sess-other-mgr",
     callerId: "different-manager",

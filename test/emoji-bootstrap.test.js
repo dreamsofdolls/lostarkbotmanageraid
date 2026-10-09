@@ -81,5 +81,7 @@ test("an oversized replacement keeps the uploaded emoji instead of deleting it",
   assert.deepEqual(deleted, []);
   assert.deepEqual(posted, []);
   assert.equal(emojiMap.big, "<:big_aaaaaa:old-1>");
+  // The refresh failed, and the emoji kept in use still counts as active.
   assert.equal(result.failed, 1);
+  assert.equal(result.reused, 1);
 });
