@@ -12,7 +12,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A Local Sync apply that starts before the Wednesday reset and writes after it no longer records last week's clears as this week's; the write sees the reset and reports those clears as outside the current week, the same as clears that were already old when the apply started.
 - A gold include/exclude or replacement chosen on `/raid-status` after the weekly reset, before the reset job reached that user, is no longer undone by the rollover: the change now moves the user into the new week first, as a mode change already did.
 - A side or shared task ticked on `/raid-status` right after the daily or weekly reset, before the half-hourly reset job ran, now stays ticked. The click starts the task in the new cycle, so the job no longer clears it, and a task still marked from the previous cycle is ticked on the first click instead of unticked.
-- A `/raid-status` task or gold change on a shared roster no longer saves when the owner revokes or downgrades the share while the save is being retried after a conflict; the viewer gets the view-only notice instead.
+- A `/raid-status` task or gold change on a shared roster no longer saves when the owner revokes or downgrades the share while the save is being retried after a conflict; a task change shows the view-only notice and a gold change the failed-change notice.
+- A roster refresh started from `/raid-status` on a shared roster no longer saves when the owner revokes the share during the lostark.bible fetch or a retried save; the viewer gets the shared-roster lock notice.
 
 ## 2026-10-10
 

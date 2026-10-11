@@ -366,20 +366,27 @@ function createStatusComponentRouteHandlers(ctx) {
       });
       if (!deferred) return noRedraw();
 
+      const sharedLockedNotice = {
+        type: "lock",
+        title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
+        description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
+      };
       // Checked after the defer so the RosterShare read cannot use up
       // Discord's three-second reply window.
       if (sharedFrom && !(await canEditAccountFn(discordId, sharedFrom.ownerDiscordId))) {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "lock",
-          title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
-          description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
-        }).catch(() => {});
+        await followUpNotice(component, EmbedBuilder, sharedLockedNotice).catch(() => {});
         return noRedraw();
       }
 
       const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
       try {
-        const result = await runManualRosterRefresh(writeDiscordId, targetAccountName);
+        const result = await runManualRosterRefresh(writeDiscordId, targetAccountName, {
+          canWrite: sharedFrom ? () => canEditAccountFn(discordId, sharedFrom.ownerDiscordId) : null,
+        });
+        if (result.status === "denied") {
+          await followUpNotice(component, EmbedBuilder, sharedLockedNotice).catch(() => {});
+          return noRedraw();
+        }
         await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
         session.statusUserMeta = buildStatusUserMeta(
           session.userDoc,

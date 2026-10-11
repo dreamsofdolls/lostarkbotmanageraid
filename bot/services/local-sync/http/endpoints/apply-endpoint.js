@@ -25,28 +25,10 @@ function ownEntries(entries) {
   return (entries || []).filter((entry) => !entry?.propagated);
 }
 
-function applyResultOf(outcome) {
-  return outcome.result || outcome.job?.result || null;
-}
-
-// The job owner's event carries the job id their card waits for; each party
-// owner whose roster was written gets a plain refresh for their own cards.
-function buildAppliedEvents(discordId, jobId, outcome) {
-  const partyOwnerIds = new Set();
-  for (const entry of applyResultOf(outcome)?.applied || []) {
-    const targetId = entry?.propagated ? String(entry.targetDiscordId || "") : "";
-    if (targetId && targetId !== discordId) partyOwnerIds.add(targetId);
-  }
-  return [
-    { discordId, jobId },
-    ...[...partyOwnerIds].map((targetId) => ({ discordId: targetId, jobId: "" })),
-  ];
-}
-
 // Party entries carry other owners' IDs, so the page only receives counts of
 // the caller's own writes.
 function buildApplyResponse(outcome) {
-  const result = applyResultOf(outcome);
+  const result = outcome.result || outcome.job?.result || null;
   const written = ownEntries(result?.applied);
   return {
     ok: outcome.state === "applied",
@@ -138,30 +120,27 @@ function createApplyEndpoint({
       return;
     }
     if (outcome?.state === "applied") {
-      for (const event of buildAppliedEvents(discordId, jobId, outcome)) notifyApplied(event);
+      try {
+        const notification = notifyLocalSyncApplied({ discordId, jobId });
+        if (notification && typeof notification.then === "function") {
+          Promise.resolve(notification).catch((err) => {
+            (log.warn || log.error).call(
+              log,
+              "[apply-endpoint] applied notification failed:",
+              err?.message || err
+            );
+          });
+        }
+      } catch (err) {
+        (log.warn || log.error).call(
+          log,
+          "[apply-endpoint] applied notification failed:",
+          err?.message || err
+        );
+      }
     }
     send(res, 200, buildApplyResponse(outcome));
   };
-
-  function warnNotificationFailed(err) {
-    (log.warn || log.error).call(
-      log,
-      "[apply-endpoint] applied notification failed:",
-      err?.message || err
-    );
-  }
-
-  // A failed notification is logged and never holds the Reader response.
-  function notifyApplied(event) {
-    try {
-      const notification = notifyLocalSyncApplied(event);
-      if (notification && typeof notification.then === "function") {
-        Promise.resolve(notification).catch(warnNotificationFailed);
-      }
-    } catch (err) {
-      warnNotificationFailed(err);
-    }
-  }
 }
 
 module.exports = {

@@ -69,6 +69,25 @@ test("a manual refresh that renames the roster to its seed character reports the
   assert.equal(result.accountName, "Alpha");
 });
 
+test("a shared roster refresh writes nothing when the owner revokes the share during the Bible fetch", async () => {
+  const { store, User } = createStore([{
+    accountName: "Alpha",
+    lastRefreshedAt: 0,
+    characters: [{ id: "a", name: "Alpha", class: "Bard", itemLevel: 1700 }],
+  }]);
+  const access = { granted: true };
+  const { runManualRosterRefresh } = createRunner(User, async () => {
+    access.granted = false;
+    return BIBLE_ROSTER;
+  });
+
+  const result = await runManualRosterRefresh("u1", "Alpha", { canWrite: async () => access.granted });
+
+  assert.equal(result.status, "denied");
+  assert.equal(store.accounts[0].characters[0].itemLevel, 1700);
+  assert.equal(store.accounts[0].characters.length, 1);
+});
+
 test("a manual refresh keeps reporting under the old name when the seed name is taken", async () => {
   // Another roster is already called Alpha, so this one is not renamed.
   const { store, User } = createStore([

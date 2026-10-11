@@ -44,7 +44,18 @@ function createManualRosterRefreshRunner({
     throw new Error("[manual-roster-refresh] applyStaleAccountRefreshes required");
   }
 
-  async function runManualRosterRefresh(discordId, accountName) {
+  /**
+   * Refresh one roster from lostark.bible and save it onto the owner's
+   * current document.
+   * @param {string} discordId - roster owner
+   * @param {string} accountName - roster to refresh
+   * @param {{canWrite?: Function}} [options] - for a viewer writing through a
+   *   share: asked before every save attempt, since the owner can revoke the
+   *   share during the Bible fetch or a retry
+   * @returns {Promise<{status: string, accountName: string, userDoc: object|null, entry: object|null}>}
+   *   status "denied" when canWrite refused and nothing was saved
+   */
+  async function runManualRosterRefresh(discordId, accountName, { canWrite = null } = {}) {
     const targetAccountName = String(accountName || "").trim();
     const seedDoc = await User.findOne({ discordId });
     if (!seedDoc) {
@@ -60,8 +71,13 @@ function createManualRosterRefreshRunner({
     const entry = await collectAccountRefresh(seedDoc, targetAccountName);
     const collected = entry ? [entry] : [];
     let savedDoc = null;
+    let denied = false;
 
     await saveWithRetry(async () => {
+      if (canWrite && !(await canWrite())) {
+        denied = true;
+        return null;
+      }
       const fresh = await User.findOne({ discordId });
       if (!fresh) {
         savedDoc = null;
@@ -78,6 +94,9 @@ function createManualRosterRefreshRunner({
       savedDoc = toPlainUserDoc(fresh);
       return savedDoc;
     });
+    if (denied) {
+      return { status: "denied", accountName: targetAccountName, userDoc: null, entry };
+    }
 
     const refreshedAccount = savedDoc
       ? findRefreshedAccount({ entry, userDoc: savedDoc, accountName: targetAccountName, normalizeName })
