@@ -54,6 +54,18 @@ const RESULT_CLASSIFIERS = Object.freeze([
     }),
   },
   {
+    // The write landed after the weekly reset; the clear belongs to the
+    // week the up-front filter already closed.
+    matches: (result) => result.outsideCurrentWeek,
+    append: ({ bucket, effectiveGates, rejected }) => rejected.push({
+      charName: bucket.charName,
+      reason: "outside_current_week",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    }),
+  },
+  {
     matches: (result) => result.noRoster,
     append: ({ bucket, effectiveGates, rejected }) => rejected.push({
       charName: bucket.charName,

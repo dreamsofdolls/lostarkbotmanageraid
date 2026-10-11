@@ -12,6 +12,7 @@ const {
 const { t, getUserLanguage } = require("../../services/i18n");
 const { createRosterOwnerResolver } = require("../../services/raid/roster-owner-resolver");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const { weeklyResetStartMs } = require("../../utils/raid/schedule/reset-windows");
 const {
   findCharacterInUser: findCharacterEntryInUser,
 } = require("../../utils/raid/tasks/side-tasks");
@@ -19,6 +20,14 @@ const { createRaidSetApplyService } = require("./set/apply");
 const { createRaidSetAutocompleteService } = require("./set/autocomplete");
 const { createRaidSetInputHelpers } = require("./set/command-input");
 const { createRaidSetResultResponder } = require("./set/command-result");
+
+// Local Sync passes the week start its clears were filtered against. When a
+// weekly reset has passed since then, the attempt would stamp those clears
+// into the new week, so it writes nothing.
+function weekMovedSince(currentWeekStartMs) {
+  const floorMs = Number(currentWeekStartMs) || 0;
+  return floorMs > 0 && weeklyResetStartMs() > floorMs;
+}
 
 function createRaidSetCommand(deps) {
   const {
@@ -139,6 +148,10 @@ function createRaidSetCommand(deps) {
     await saveWithRetry(async () => {
       result = makeRaidSetResult(raidMeta);
       const userDoc = await User.findOne({ discordId });
+      if (weekMovedSince(currentWeekStartMs)) {
+        result.outsideCurrentWeek = true;
+        return;
+      }
       if (userDoc) ensureFreshWeek(userDoc);
       result = await applyRaidSetToLoadedUserDoc(userDoc, {
         discordId,
@@ -175,6 +188,13 @@ function createRaidSetCommand(deps) {
         results = list.map((entry) => ({
           ...makeRaidSetResult(entry?.raidMeta),
           noRoster: true,
+        }));
+        return;
+      }
+      if (weekMovedSince(currentWeekStartMs)) {
+        results = list.map((entry) => ({
+          ...makeRaidSetResult(entry?.raidMeta),
+          outsideCurrentWeek: true,
         }));
         return;
       }

@@ -30,6 +30,7 @@ function createRaidSetApplyService({
   function makeRaidSetResult(raidMeta) {
     return {
       noRoster: false,
+      outsideCurrentWeek: false,
       authLost: false,
       syncDisabled: false,
       syncDisabledReason: null,
