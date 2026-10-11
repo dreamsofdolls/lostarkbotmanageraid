@@ -220,6 +220,14 @@ const TASK_TOGGLE_RUNNERS = Object.freeze({
   },
 });
 
+/**
+ * Toggle the task a /raid-status dropdown value names on the owner's fresh
+ * document, after moving a stale daily/weekly task into the current cycle.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, parsed (from parseTaskToggleValue), and optionally
+ *   canWrite (asked before every save attempt), now and logger
+ * @returns {Promise<{handled: boolean, ok: boolean, denied?: boolean, error?: Error}>}
+ */
 async function toggleParsedSideTask(options) {
   const {
     parsed,

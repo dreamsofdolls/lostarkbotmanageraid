@@ -147,6 +147,15 @@ async function updateGoldWriteTarget(options, applyUpdate) {
   return { saved, userDoc: savedUserDoc, denied };
 }
 
+/**
+ * Cycle one raid's gold override on the owner's fresh document, rolled into
+ * the current week first.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharName, raidKey, and optionally canWrite
+ *   (asked before every save attempt)
+ * @returns {Promise<{ok: boolean, override: string|null, disabled: boolean, needsReplacement: boolean, replacement: object|null, targetRaid: object|null}>}
+ *   ok is false when nothing was saved, including a refused canWrite
+ */
 async function toggleRaidGoldDisabled(options) {
   const {
     raidKey,
@@ -176,6 +185,14 @@ async function toggleRaidGoldDisabled(options) {
   };
 }
 
+/**
+ * Include one raid and exclude another in a single save, on the owner's
+ * fresh document rolled into the current week.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharName, includeRaidKey, excludeRaidKey, and
+ *   optionally canWrite (asked before every save attempt)
+ * @returns {Promise<{ok: boolean, userDoc?: object|null}>} ok is false when nothing was saved
+ */
 async function replaceRaidGoldSelection(options) {
   const {
     includeRaidKey,
@@ -195,6 +212,13 @@ async function replaceRaidGoldSelection(options) {
   return { ok: update.saved, userDoc: update.userDoc };
 }
 
+/**
+ * Run toggleRaidGoldDisabled for a parsed dropdown value, turning a thrown
+ * save error into ok false.
+ * @param {object} options - toggleRaidGoldDisabled's options with parsed
+ *   (from parseGoldToggleValue) in place of targetCharName/raidKey
+ * @returns {Promise<object>} handled plus toggleRaidGoldDisabled's result
+ */
 async function toggleParsedGoldRaid(options) {
   const { parsed, logger = console } = options;
   if (parsed?.kind !== "single") return { handled: false, ok: false };
@@ -211,6 +235,15 @@ async function toggleParsedGoldRaid(options) {
   }
 }
 
+/**
+ * Set or defer a raid's mode on the owner's fresh document. This is the one
+ * gold write that also saves a week rollover on its own.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharName, raidKey, modeKey, and optionally
+ *   canWrite (asked before every save attempt)
+ * @returns {Promise<{ok: boolean, outcome: string, raidKey: string, modeKey: string, raidLabel: string, modeLabel: string, userDoc?: object|null}>}
+ *   outcome is immediate, deferred, cancelled, noop, ineligible, invalid or denied
+ */
 async function setParsedGoldRaidMode(options) {
   const {
     raidKey,

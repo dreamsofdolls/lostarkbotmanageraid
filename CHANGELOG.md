@@ -15,6 +15,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A `/raid-status` task or gold change on a shared roster no longer saves when the owner revokes or downgrades the share while the save is being retried after a conflict; a task change shows the view-only notice and a gold change the failed-change notice.
 - A roster refresh started from `/raid-status` on a shared roster no longer saves when the owner revokes the share during the lostark.bible fetch or a retried save; the viewer gets the shared-roster lock notice.
 
+### Changed (internal)
+- JSDoc on the `/raid-status` task and gold writers states the `canWrite` option, the week rollover and the denied results.
+
 ## 2026-10-10
 
 ### Fixed
