@@ -28,6 +28,27 @@ test("participant pick resolves a saved character ID after the roster order chan
   assert.equal(event.signups[0].characterName, "Beta");
 });
 
+test("a character that cleared the raid this week can sign up for next week's event", async () => {
+  const clearedAt = Date.parse("2026-10-09T12:00:00Z");
+  const event = {
+    guildId: "guild", status: "open", raidKey: "armoche", minItemLevel: 1700,
+    startAt: new Date("2026-10-16T12:00:00Z"), signups: [], save: async () => {},
+  };
+  const roster = { accounts: [{ accountName: "Roster", characters: [{
+    id: "beta", name: "Beta", class: "Bard", itemLevel: 1800,
+    assignedRaids: { armoche: { G1: { completedDate: clearedAt }, G2: { completedDate: clearedAt } } },
+  }] }] };
+  const actions = createScheduleParticipantActions({
+    User: { findOne: () => ({ lean: async () => roster }) },
+    boardLang: async () => "en",
+    editBoardMessage: async () => true,
+    markSignups: (target, signups) => { target.signups = signups; },
+    editNotice: async (_interaction, _lang, severity) => assert.equal(severity, "success"),
+  });
+  await actions.handlePick({ user: { id: "owner" }, values: ["beta"] }, event, "en");
+  assert.equal(event.signups.length, 1);
+});
+
 test("a waitlister promoted by an absent RSVP is pinged in a public follow-up", async () => {
   const event = {
     guildId: "guild-1",

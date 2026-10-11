@@ -27,6 +27,7 @@ function findOwnEligibleRows(userDoc, event) {
   const rows = listEligibleCharacters(userDoc?.accounts || [], {
     raidKey: event.raidKey,
     minItemLevel: event.minItemLevel,
+    startAt: event.startAt,
   });
   return rows.filter((row) => row.eligible);
 }

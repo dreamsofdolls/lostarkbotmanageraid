@@ -55,6 +55,32 @@ test("listEligibleCharacters flags iLvl gate, role, deficit, cleared", () => {
   assert.equal(low.deficit, 5);
 });
 
+// The weekly reset is Wednesday 10:00 UTC; 2026-10-07..14 is one reset week.
+function clearedArmocheAccounts(clearedAt) {
+  return [{
+    accountName: "Main",
+    characters: [{
+      name: "Morrah", class: "Berserker", itemLevel: 1722,
+      assignedRaids: { armoche: { G1: { completedDate: clearedAt }, G2: { completedDate: clearedAt } } },
+    }],
+  }];
+}
+
+test("a clear this week marks the character cleared for this week's event but not next week's", () => {
+  const accounts = clearedArmocheAccounts(Date.parse("2026-10-09T12:00:00Z"));
+  const target = (startAt) => ({ raidKey: "armoche", minItemLevel: 1720, startAt: new Date(startAt) });
+  assert.equal(listEligibleCharacters(accounts, target("2026-10-11T12:00:00Z"))[0].alreadyCleared, true);
+  assert.equal(listEligibleCharacters(accounts, target("2026-10-16T12:00:00Z"))[0].alreadyCleared, false);
+});
+
+test("last week's clear still stored before the reset job runs does not block this week's event", () => {
+  const accounts = clearedArmocheAccounts(Date.parse("2026-10-05T12:00:00Z"));
+  const rows = listEligibleCharacters(accounts, {
+    raidKey: "armoche", minItemLevel: 1720, startAt: new Date("2026-10-08T12:00:00Z"),
+  });
+  assert.equal(rows[0].alreadyCleared, false);
+});
+
 test("partitionSelectable drops already-cleared chars (not pointless to re-clear)", () => {
   const rows = [
     { name: "A", alreadyCleared: false },
