@@ -12,6 +12,7 @@ const {
   getNextGoldOverride,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
 const {
+  ensureFreshWeek,
   getTargetResetKey,
 } = require("../bot/services/raid/schedulers/weekly-reset");
 const {
@@ -334,6 +335,32 @@ test("raid-status gold replacement survives Mongoose subdoc serialization", asyn
   assert.equal(raids.armoche.goldOverride, "exclude");
   // The re-cast must preserve the rest of the entry, not just the new field.
   assert.equal(raids.armoche.G1.completedDate, 1);
+});
+
+test("a gold choice made after the weekly reset, before the user rolled over, survives the rollover", async (t) => {
+  // The weekly reset job had not reached this user yet, so the stored cursor
+  // is last week's; a choice written onto it would be cleared as old data.
+  const afterReset = new Date("2026-10-14T10:01:00Z");
+  t.mock.timers.enable({ apis: ["Date"], now: afterReset.getTime() });
+  const operations = {
+    toggle: (options) => toggleRaidGoldDisabled({ ...options, raidKey: "horizon" }),
+    replace: (options) => replaceRaidGoldSelection({ ...options, includeRaidKey: "horizon", excludeRaidKey: "armoche" }),
+  };
+  for (const [label, run] of Object.entries(operations)) {
+    const doc = makeMongooseUserDoc({ itemLevel: 1705, horizonModeKey: "normal" });
+    doc.weeklyResetKey = getTargetResetKey(new Date("2026-10-13T12:00:00Z"));
+    const result = await run({
+      User: makeUserModel(doc),
+      saveWithRetry: async (op) => op(),
+      discordId: "user-1",
+      targetAccountName: "Roster",
+      targetCharName: "Aki",
+    });
+    assert.equal(result.ok, true, label);
+    assert.equal(doc.weeklyResetKey, getTargetResetKey(afterReset), label);
+    assert.equal(ensureFreshWeek(doc, afterReset), false, label);
+    assert.equal(horizonOverrideOf(doc), "include", label);
+  }
 });
 
 test("raid-status gold actions report ok=false when target cannot be saved", async () => {

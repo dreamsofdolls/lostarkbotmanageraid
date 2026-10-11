@@ -100,6 +100,7 @@ async function updateGoldWriteTarget(options, applyUpdate) {
     targetAccountName,
     targetCharName,
     canWrite = null,
+    saveRolloverAlone = false,
   } = options;
 
   let saved = false;
@@ -113,12 +114,15 @@ async function updateGoldWriteTarget(options, applyUpdate) {
       return;
     }
     const userDocFresh = await User.findOne({ discordId });
-    const didFreshenWeek = options.freshenWeek && userDocFresh
-      ? ensureFreshWeek(userDocFresh)
-      : false;
+    // Roll a user the weekly reset job has not reached yet into this week
+    // before deciding; a choice written onto last week's cursor is cleared
+    // as old data at the next rollover. The rollover is saved with the
+    // change, or on its own only when the caller asks for it.
+    const didFreshenWeek = userDocFresh ? ensureFreshWeek(userDocFresh) : false;
+    const saveRollover = didFreshenWeek && saveRolloverAlone;
     const target = findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName);
     if (!target) {
-      if (didFreshenWeek) {
+      if (saveRollover) {
         markAccountsModified(userDocFresh);
         await userDocFresh.save();
         saved = true;
@@ -132,7 +136,7 @@ async function updateGoldWriteTarget(options, applyUpdate) {
       account: target.account,
       character: target.character,
     });
-    if (!shouldSave && !didFreshenWeek) return;
+    if (!shouldSave && !saveRollover) return;
 
     markAccountsModified(userDocFresh);
     await userDocFresh.save();
@@ -223,7 +227,7 @@ async function setParsedGoldRaidMode(options) {
   let outcome = "noop";
   let touchedTarget = false;
   const update = await updateGoldWriteTarget(
-    { ...options, freshenWeek: true },
+    { ...options, saveRolloverAlone: true },
     ({ character: target }) => {
       touchedTarget = true;
       const itemLevel = Number(target?.itemLevel) || 0;
