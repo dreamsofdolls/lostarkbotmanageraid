@@ -49,8 +49,16 @@ async function mutateFreshAccount(options, mutateAccount) {
     saveWithRetry,
     discordId,
     targetAccountName,
+    canWrite = null,
   } = options;
+  let denied = false;
   await saveWithRetry(async () => {
+    // Asked on every attempt: a retry follows another write, which can be
+    // the owner revoking the share this write relied on.
+    if (canWrite && !(await canWrite())) {
+      denied = true;
+      return;
+    }
     const userDocFresh = await User.findOne({ discordId });
     const account = findAccountByName(userDocFresh, targetAccountName, normalizeName);
     if (!account) return;
@@ -59,6 +67,7 @@ async function mutateFreshAccount(options, mutateAccount) {
     if (!changed) return;
     await userDocFresh.save();
   });
+  return { denied };
 }
 
 async function toggleBulkSideTask(options) {
@@ -67,7 +76,7 @@ async function toggleBulkSideTask(options) {
     targetNameLower,
   } = options;
 
-  await mutateFreshAccount(options, (account) => {
+  return mutateFreshAccount(options, (account) => {
     if (!Array.isArray(account.characters)) return false;
 
     const owners = [];
@@ -97,7 +106,7 @@ async function toggleSingleSideTask(options) {
     targetTaskId,
   } = options;
 
-  await mutateFreshAccount(options, (account) => {
+  return mutateFreshAccount(options, (account) => {
     if (!Array.isArray(account.characters)) return false;
 
     const target = account.characters.find(
@@ -118,7 +127,7 @@ async function toggleSharedTask(options) {
     now = new Date(),
   } = options;
 
-  await mutateFreshAccount(options, (account) => {
+  return mutateFreshAccount(options, (account) => {
     if (!Array.isArray(account.sharedTasks)) return false;
 
     const task = account.sharedTasks.find((t) => t?.taskId === taskId);
@@ -149,36 +158,39 @@ async function toggleSharedTask(options) {
 const TASK_TOGGLE_RUNNERS = Object.freeze({
   shared: {
     errorLabel: "[raid-status shared-task toggle] save failed:",
-    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed, now }) =>
+    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed, now }) =>
       toggleSharedTask({
         User,
         saveWithRetry,
         discordId,
         targetAccountName,
+        canWrite,
         taskId: parsed.taskId,
         now,
       }),
   },
   bulk: {
     errorLabel: "[raid-status side-task bulk-toggle] save failed:",
-    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed }) =>
+    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed }) =>
       toggleBulkSideTask({
         User,
         saveWithRetry,
         discordId,
         targetAccountName,
+        canWrite,
         targetReset: parsed.targetReset,
         targetNameLower: parsed.targetNameLower,
       }),
   },
   single: {
     errorLabel: "[raid-status side-task toggle] save failed:",
-    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed }) =>
+    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed }) =>
       toggleSingleSideTask({
         User,
         saveWithRetry,
         discordId,
         targetAccountName,
+        canWrite,
         targetCharName: parsed.targetCharName,
         targetTaskId: parsed.targetTaskId,
       }),
@@ -194,7 +206,8 @@ async function toggleParsedSideTask(options) {
   if (!runner) return { handled: false, ok: false };
 
   try {
-    await runner.run(options);
+    const { denied } = await runner.run(options);
+    if (denied) return { handled: true, ok: false, denied: true };
     return { handled: true, ok: true };
   } catch (err) {
     logger.error?.(runner.errorLabel, err?.message || err);

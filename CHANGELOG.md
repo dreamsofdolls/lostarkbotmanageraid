@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-11
+
+### Fixed
+- A `/raid-status` task or gold change on a shared roster no longer saves when the owner revokes or downgrades the share while the save is being retried after a conflict; the viewer gets the view-only notice instead.
+
 ## 2026-10-10
 
 ### Fixed

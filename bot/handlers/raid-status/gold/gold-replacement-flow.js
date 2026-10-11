@@ -156,6 +156,7 @@ function createGoldReplacementFlow(ctx) {
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
+        canWrite: () => canEditAccountFn(discordId, writeDiscordId),
         targetCharName: replacement.targetCharName,
         includeRaidKey: replacement.targetRaid.raidKey,
         excludeRaidKey: removedRaidKey,

@@ -99,11 +99,19 @@ async function updateGoldWriteTarget(options, applyUpdate) {
     discordId,
     targetAccountName,
     targetCharName,
+    canWrite = null,
   } = options;
 
   let saved = false;
   let savedUserDoc = null;
+  let denied = false;
   await saveWithRetry(async () => {
+    // Asked on every attempt: a retry follows another write, which can be
+    // the owner revoking the share this write relied on.
+    if (canWrite && !(await canWrite())) {
+      denied = true;
+      return;
+    }
     const userDocFresh = await User.findOne({ discordId });
     const didFreshenWeek = options.freshenWeek && userDocFresh
       ? ensureFreshWeek(userDocFresh)
@@ -132,7 +140,7 @@ async function updateGoldWriteTarget(options, applyUpdate) {
     savedUserDoc = userDocFresh;
   });
 
-  return { saved, userDoc: savedUserDoc };
+  return { saved, userDoc: savedUserDoc, denied };
 }
 
 async function toggleRaidGoldDisabled(options) {
@@ -254,6 +262,7 @@ async function setParsedGoldRaidMode(options) {
     }
   );
 
+  if (update.denied) outcome = "denied";
   const ok = touchedTarget
     && update.saved
     && outcome !== "ineligible"

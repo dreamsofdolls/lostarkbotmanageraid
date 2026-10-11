@@ -171,6 +171,18 @@ function createStatusComponentRouteHandlers(ctx) {
       targetAccount,
       targetAccountName,
       writeDiscordId,
+      // The writers ask again on every save attempt.
+      canWrite: sharedFrom ? () => canEditAccountFn(discordId, sharedFrom.ownerDiscordId) : null,
+    };
+  }
+
+  function shareViewOnlyNotice(sharedFrom) {
+    return {
+      type: "lock",
+      title: t("raid-task.shareViewOnly.title", lang),
+      description: t("raid-task.shareViewOnly.description", lang, {
+        owner: sharedFrom?.ownerLabel || "(unknown)",
+      }),
     };
   }
 
@@ -568,13 +580,7 @@ function createStatusComponentRouteHandlers(ctx) {
         // lands here from a card drawn before the share or roster changed.
         const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
         await followUpNotice(component, EmbedBuilder, sharedFrom
-          ? {
-            type: "lock",
-            title: t("raid-task.shareViewOnly.title", lang),
-            description: t("raid-task.shareViewOnly.description", lang, {
-              owner: sharedFrom.ownerLabel || "(unknown)",
-            }),
-          }
+          ? shareViewOnlyNotice(sharedFrom)
           : {
             type: "warn",
             title: t("raid-status.taskView.toggleFailedTitle", lang),
@@ -582,15 +588,20 @@ function createStatusComponentRouteHandlers(ctx) {
           }).catch(() => {});
         return noRedraw();
       }
-      const { targetAccountName, writeDiscordId } = writeContext;
+      const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
 
       const toggleResult = await toggleParsedSideTask({
         User,
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
+        canWrite,
         parsed,
       });
+      if (toggleResult.denied) {
+        await followUpNotice(component, EmbedBuilder, shareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
+        return noRedraw();
+      }
       if (!toggleResult.ok) {
         await followUpNotice(component, EmbedBuilder, {
           type: "warn",
@@ -628,7 +639,7 @@ function createStatusComponentRouteHandlers(ctx) {
         detail: `raid=${parsed.raidKey}`,
       });
       if (!writeContext) return noRedraw();
-      const { targetAccountName, writeDiscordId } = writeContext;
+      const { targetAccountName, writeDiscordId, canWrite } = writeContext;
 
       let result;
       try {
@@ -637,6 +648,7 @@ function createStatusComponentRouteHandlers(ctx) {
           saveWithRetry,
           discordId: writeDiscordId,
           targetAccountName,
+          canWrite,
           targetCharName: parsed.targetCharName,
           raidKey: parsed.raidKey,
           modeKey: parsed.modeKey,
@@ -702,13 +714,14 @@ function createStatusComponentRouteHandlers(ctx) {
         detail: `raid=${parsed.raidKey}`,
       });
       if (!writeContext) return noRedraw();
-      const { targetAccountName, writeDiscordId } = writeContext;
+      const { targetAccountName, writeDiscordId, canWrite } = writeContext;
 
       const toggleResult = await toggleParsedGoldRaid({
         User,
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
+        canWrite,
         parsed,
       });
       if (toggleResult.needsReplacement) {
