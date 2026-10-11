@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-10-11
 
 ### Fixed
+- A side or shared task ticked on `/raid-status` right after the daily or weekly reset, before the half-hourly reset job ran, now stays ticked. The click starts the task in the new cycle, so the job no longer clears it, and a task still marked from the previous cycle is ticked on the first click instead of unticked.
 - A `/raid-status` task or gold change on a shared roster no longer saves when the owner revokes or downgrades the share while the save is being retried after a conflict; the viewer gets the view-only notice instead.
 
 ## 2026-10-10

@@ -9,7 +9,23 @@
 
 const { normalizeName } = require("../../../utils/raid/common/shared");
 const { resolveScheduledSharedTaskState } = require("../../../utils/raid/tasks/shared-tasks");
+const { dailyResetStartMs, weeklyResetStartMs } = require("../../../utils/raid/schedule/reset-windows");
 const { findAccountByName } = require("../../../utils/user-doc");
+
+const CYCLE_START_BY_RESET = Object.freeze({
+  daily: dailyResetStartMs,
+  weekly: weeklyResetStartMs,
+});
+
+// The side-task reset scheduler ticks every 30 minutes, so a clicked task can
+// still carry the previous cycle. Reset it the way that tick would, so the
+// toggle starts from this cycle and the tick then leaves the result alone.
+function freshenTaskCycle(task, now) {
+  const cycleStart = CYCLE_START_BY_RESET[task?.reset]?.(now);
+  if (!cycleStart || Number(task.lastResetAt) >= cycleStart) return;
+  task.completed = false;
+  task.lastResetAt = cycleStart;
+}
 
 function parseTaskToggleValue(value) {
   if (!value || value === "noop") return { kind: "noop" };
@@ -74,6 +90,7 @@ async function toggleBulkSideTask(options) {
   const {
     targetReset,
     targetNameLower,
+    now = new Date(),
   } = options;
 
   return mutateFreshAccount(options, (account) => {
@@ -91,6 +108,7 @@ async function toggleBulkSideTask(options) {
     }
     if (owners.length === 0) return false;
 
+    for (const { task } of owners) freshenTaskCycle(task, now);
     const allDone = owners.every((o) => o.task.completed);
     const nextState = !allDone;
     for (const { task } of owners) {
@@ -104,6 +122,7 @@ async function toggleSingleSideTask(options) {
   const {
     targetCharName,
     targetTaskId,
+    now = new Date(),
   } = options;
 
   return mutateFreshAccount(options, (account) => {
@@ -116,6 +135,7 @@ async function toggleSingleSideTask(options) {
     if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
     const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
     if (!task) return false;
+    freshenTaskCycle(task, now);
     task.completed = !task.completed;
     return true;
   });
@@ -148,6 +168,7 @@ async function toggleSharedTask(options) {
         task.completedAt = now.getTime();
       }
     } else {
+      freshenTaskCycle(task, now);
       task.completed = !task.completed;
       task.completedAt = task.completed ? now.getTime() : null;
     }
@@ -171,7 +192,7 @@ const TASK_TOGGLE_RUNNERS = Object.freeze({
   },
   bulk: {
     errorLabel: "[raid-status side-task bulk-toggle] save failed:",
-    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed }) =>
+    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed, now }) =>
       toggleBulkSideTask({
         User,
         saveWithRetry,
@@ -180,11 +201,12 @@ const TASK_TOGGLE_RUNNERS = Object.freeze({
         canWrite,
         targetReset: parsed.targetReset,
         targetNameLower: parsed.targetNameLower,
+        now,
       }),
   },
   single: {
     errorLabel: "[raid-status side-task toggle] save failed:",
-    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed }) =>
+    run: ({ User, saveWithRetry, discordId, targetAccountName, canWrite, parsed, now }) =>
       toggleSingleSideTask({
         User,
         saveWithRetry,
@@ -193,6 +215,7 @@ const TASK_TOGGLE_RUNNERS = Object.freeze({
         canWrite,
         targetCharName: parsed.targetCharName,
         targetTaskId: parsed.targetTaskId,
+        now,
       }),
   },
 });

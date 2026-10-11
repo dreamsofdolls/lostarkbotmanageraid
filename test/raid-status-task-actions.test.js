@@ -177,3 +177,55 @@ test("toggleParsedSideTask logs handler failures and keeps collector alive", asy
     ["[raid-status side-task toggle] save failed:", "mongo offline"],
   ]);
 });
+
+// The reset scheduler ticks every 30 minutes. A click between the reset
+// boundary and that tick must start from the current cycle, and must leave
+// the task in a state the next tick does not clear.
+const {
+  dailyResetStartMs,
+  weeklyResetStartMs,
+} = require("../bot/utils/raid/schedule/reset-windows");
+
+const AFTER_RESET = new Date("2026-10-14T10:01:00Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+test("a daily task clicked after reset, before the reset tick, is marked done for the new cycle", async () => {
+  const userDoc = makeUserDoc();
+  const task = userDoc.accounts[0].characters[0].sideTasks[0];
+  task.completed = true;
+  task.lastResetAt = dailyResetStartMs(AFTER_RESET) - DAY_MS;
+
+  await toggleParsedSideTask({ ...baseOptions(userDoc), parsed: parseTaskToggleValue("Aki::single-1"), now: AFTER_RESET });
+
+  assert.equal(task.completed, true, "yesterday's mark does not turn the first click into an undo");
+  assert.equal(task.lastResetAt, dailyResetStartMs(AFTER_RESET), "the next reset tick sees a current task");
+});
+
+test("a bulk weekly toggle after reset starts every task from the new cycle", async () => {
+  const userDoc = makeUserDoc();
+  const tasks = [userDoc.accounts[0].characters[0].sideTasks[1], userDoc.accounts[0].characters[1].sideTasks[0]];
+  for (const task of tasks) {
+    task.completed = true;
+    task.lastResetAt = weeklyResetStartMs(AFTER_RESET) - 7 * DAY_MS;
+  }
+
+  await toggleParsedSideTask({ ...baseOptions(userDoc), parsed: parseTaskToggleValue("__all__::weekly::chaos"), now: AFTER_RESET });
+
+  for (const task of tasks) {
+    assert.equal(task.completed, true);
+    assert.equal(task.lastResetAt, weeklyResetStartMs(AFTER_RESET));
+  }
+});
+
+test("a weekly shared task clicked after reset is marked done for the new cycle", async () => {
+  const userDoc = makeUserDoc();
+  const task = userDoc.accounts[0].sharedTasks[0];
+  task.completed = true;
+  task.lastResetAt = weeklyResetStartMs(AFTER_RESET) - 7 * DAY_MS;
+
+  await toggleParsedSideTask({ ...baseOptions(userDoc), parsed: parseTaskToggleValue("shared::shared-1"), now: AFTER_RESET });
+
+  assert.equal(task.completed, true);
+  assert.equal(task.completedAt, AFTER_RESET.getTime());
+  assert.equal(task.lastResetAt, weeklyResetStartMs(AFTER_RESET));
+});
