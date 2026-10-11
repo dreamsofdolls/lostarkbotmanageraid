@@ -180,6 +180,80 @@ test("an applied job reports only the caller's own writes", async () => {
   assert.doesNotMatch(res.body, /u2|u3/);
 });
 
+test("an applied job also refreshes each party owner it wrote for, once and without the job id", async () => {
+  const { post, notificationCalls } = setup({
+    applyPreviewJob: async () => ({
+      ok: true,
+      state: "applied",
+      result: {
+        applied: [
+          { charName: "Aki", raidKey: "armoche" },
+          { charName: "Bao", raidKey: "armoche", propagated: true, targetDiscordId: "u2" },
+          { charName: "Bao", raidKey: "kazeros", propagated: true, targetDiscordId: "u2" },
+          { charName: "Cid", raidKey: "armoche", propagated: true, targetDiscordId: "u3" },
+        ],
+        rejected: [{ charName: "Dia", reason: "no_char", propagated: true, targetDiscordId: "u4" }],
+      },
+    }),
+  });
+
+  const res = await post();
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(notificationCalls, [
+    { discordId: "u1", jobId: JOB_ID },
+    { discordId: "u2", jobId: "" },
+    { discordId: "u3", jobId: "" },
+  ]);
+});
+
+test("a party owner's open /raid-status card redraws after a propagated clear", async (t) => {
+  const { createRaidStatusLiveApplyRefresh } = require("../bot/handlers/raid-status/sync/live-apply-refresh");
+  const redraws = { u1: 0, u2: 0 };
+  for (const viewerDiscordId of ["u1", "u2"]) {
+    const card = createRaidStatusLiveApplyRefresh({
+      viewerDiscordId,
+      getAccounts: () => [],
+      getCurrentView: () => "raids",
+      isSessionEnded: () => false,
+      reloadViewerAccounts: async () => {},
+      rebuildStatusUserMeta: () => {},
+      refreshLocalSyncSnapshot: async () => null,
+      setLocalSyncSnapshot: () => {},
+      redrawMessage: async () => { redraws[viewerDiscordId] += 1; },
+    });
+    card.start();
+    t.after(() => card.stop());
+    t.after(() => card.flush());
+  }
+  const token = mintToken("u1", undefined, "en", null, "full");
+  const handler = createApplyEndpoint({
+    User: makeUserModel({
+      discordId: "u1", localSyncEnabled: true, autoManageEnabled: false,
+      lastLocalSyncToken: token, lastLocalSyncTokenExpAt: 9_999_999_999,
+    }),
+    PreviewModel: makePreviewModel({ jobId: JOB_ID, discordId: "u1", scope: "full", status: "pending" }),
+    applyPreviewJob: async () => ({
+      ok: true,
+      state: "applied",
+      result: {
+        applied: [
+          { charName: "Aki", raidKey: "kazeros" },
+          { charName: "Bao", raidKey: "kazeros", propagated: true, targetDiscordId: "u2" },
+        ],
+        rejected: [],
+      },
+    }),
+    log: { error() {}, warn() {} },
+  });
+  const res = makeRes();
+  await handler(makeReq(token, { jobId: JOB_ID }), res);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(redraws, { u1: 1, u2: 1 });
+});
+
 test("a job another request already applied still reads as done", async () => {
   const { post, notificationCalls } = setup({
     applyPreviewJob: async () => ({

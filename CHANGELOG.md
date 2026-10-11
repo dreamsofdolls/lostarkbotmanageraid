@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-10-11
 
 ### Fixed
+- After a Local Sync apply writes a party member's clear, that member's open `/raid-status` card now refreshes too, not only the card of the player who synced.
 - A character that cleared a raid this week can now sign up for a `/raid-schedule` event of next week; a clear only hides a character from events in the reset week it was made in, and last week's clear no longer blocks this week's event while the reset job has not reached the roster.
 - A Local Sync apply that starts before the Wednesday reset and writes after it no longer records last week's clears as this week's; the write sees the reset and reports those clears as outside the current week, the same as clears that were already old when the apply started.
 - A gold include/exclude or replacement chosen on `/raid-status` after the weekly reset, before the reset job reached that user, is no longer undone by the rollover: the change now moves the user into the new week first, as a mode change already did.
