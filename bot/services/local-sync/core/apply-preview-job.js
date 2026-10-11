@@ -18,6 +18,7 @@ const {
   resolveTarget,
 } = require("./apply/apply-targets");
 const { propagatePartyDeltas } = require("./party-propagation");
+const { publishLocalSyncApplied } = require("./apply-events");
 const { recordLocalSyncSuccess } = require("./state");
 const { POST_SYNC_TTL_SEC } = require("./tokens");
 const {
@@ -33,6 +34,25 @@ const {
 
 function previewDeps(PreviewModel) {
   return PreviewModel ? { PreviewModel } : {};
+}
+
+// Party writes land on other owners' rosters, and their open /raid-status
+// cards subscribe to those owners, so each owner gets one refresh event. It
+// carries no job id because the job belongs to the source owner, whose own
+// event the Reader endpoint publishes.
+function announcePartyWrites(discordId, partyPropagation, publish = publishLocalSyncApplied) {
+  const ownerIds = new Set();
+  for (const entry of partyPropagation?.applied || []) {
+    const targetId = String(entry?.targetDiscordId || "");
+    if (targetId && targetId !== discordId) ownerIds.add(targetId);
+  }
+  for (const ownerId of ownerIds) {
+    try {
+      publish({ discordId: ownerId, jobId: "" });
+    } catch (err) {
+      console.warn("[local-sync/apply] party refresh event failed:", err?.message || err);
+    }
+  }
 }
 
 async function loadApplyUser(discordId, UserModel) {
@@ -393,6 +413,8 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
       discordId,
       leaseDeps,
     }, currentWeekStartMs);
+    // Before the failure checks below: these writes are already saved.
+    announcePartyWrites(discordId, partyPropagation, deps.publishLocalSyncApplied);
     summary = mergePartyPropagation(summary, partyPropagation);
     rejectedOutcome = await resolveRejectedSummary({
       jobId,

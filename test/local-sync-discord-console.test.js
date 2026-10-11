@@ -762,6 +762,54 @@ test("full Local Sync applies an evidenced party gate to a registered roster own
   );
 });
 
+test("any Local Sync apply path refreshes the open /raid-status card of a party owner it wrote for", async (t) => {
+  const { createRaidStatusLiveApplyRefresh } = require("../bot/handlers/raid-status/sync/live-apply-refresh");
+  const job = makeJob();
+  job.deltas[0].difficulty = "Normal";
+  job.partyDeltas = [{ ...job.deltas[0], charName: "Bao", sourceCharName: "Aki" }];
+  const sourceUser = {
+    discordId: "u1", localSyncEnabled: true, autoManageEnabled: false, lastLocalSyncToken: null,
+    accounts: [{ accountName: "Source", characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }] }],
+  };
+  const targetUser = {
+    discordId: "u2", localSyncEnabled: false, autoManageEnabled: false,
+    accounts: [{ accountName: "Target", characters: [{ name: "Bao", class: "Bard", itemLevel: 1750, assignedRaids: {} }] }],
+  };
+  let partyOwnerRedraws = 0;
+  const partyOwnerCard = createRaidStatusLiveApplyRefresh({
+    viewerDiscordId: "u2",
+    getAccounts: () => [],
+    getCurrentView: () => "raids",
+    isSessionEnded: () => false,
+    reloadViewerAccounts: async () => {},
+    rebuildStatusUserMeta: () => {},
+    refreshLocalSyncSnapshot: async () => null,
+    setLocalSyncSnapshot: () => {},
+    redrawMessage: async () => { partyOwnerRedraws += 1; },
+  });
+  partyOwnerCard.start();
+  t.after(() => partyOwnerCard.stop());
+
+  // The core apply is what the Reader endpoint, the Discord console and the
+  // in-card Local Sync view all call.
+  const outcome = await applyPreviewJob(job.jobId, "u1", {
+    PreviewModel: makePreviewModel(job),
+    UserModel: {
+      findOne() { return makeConsoleUserQuery(sourceUser); },
+      find() {
+        return { select() { return this; }, collation() { return this; }, async lean() { return [targetUser]; } };
+      },
+      async findOneAndUpdate() { return sourceUser; },
+      async updateOne() { return { matchedCount: 1 }; },
+    },
+    applyRaidSetForDiscordId: async (args) => ({ matched: true, updated: true, displayName: args.characterName }),
+  });
+  await partyOwnerCard.flush();
+
+  assert.equal(outcome.result.partyPropagation.applied, 1);
+  assert.equal(partyOwnerRedraws, 1);
+});
+
 test("party write failures retain source authorization and retry only unfinished targets", async () => {
   const job = makeJob();
   job.partyDeltas = [{
