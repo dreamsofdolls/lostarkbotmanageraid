@@ -9,7 +9,7 @@ const {
   subscribeLocalSyncApplied,
 } = require("../bot/services/local-sync/core/apply-events");
 
-test("Local Reader apply events notify only subscribed roster owners and cleanup fully", () => {
+test("Local Sync apply events notify only subscribed roster owners and cleanup fully", () => {
   const seen = [];
   const unsubscribe = subscribeLocalSyncApplied(["owner-a", "shared-owner"], (event) => {
     seen.push(event);
@@ -25,7 +25,7 @@ test("Local Reader apply events notify only subscribed roster owners and cleanup
   assert.equal(seen.length, 1);
 });
 
-test("Local Reader apply subscriptions stay bounded per roster owner", () => {
+test("Local Sync apply subscriptions stay bounded per roster owner", () => {
   const owner = "bounded-owner";
   const calls = Array.from(
     { length: MAX_LOCAL_SYNC_APPLY_SUBSCRIBERS_PER_USER + 2 },

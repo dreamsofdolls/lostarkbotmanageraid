@@ -15,6 +15,7 @@ const {
   formatSharedResetLabel,
   normalizeName,
 } = require("./shared-tasks");
+const { findSharedRosterEntry } = require("../../share-match");
 const { findAccountByName } = require("../../user-doc");
 
 const TASK_CAP_DAILY = 3;
@@ -170,12 +171,7 @@ function resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible
   if (ownMatch) {
     return { discordId: executorId, viaShare: false };
   }
-  const sharedMatches = entries.filter(
-    (entry) => !entry?.isOwn && normalizeName(entry.accountName) === target
-  );
-  // Two owners can share rosters with the same name; an edit share wins the tie.
-  const sharedMatch = sharedMatches.find((entry) => entry.accessLevel === "edit")
-    || sharedMatches[0];
+  const sharedMatch = findSharedRosterEntry(entries, rosterName, normalizeName);
   if (!sharedMatch) {
     return { discordId: executorId, viaShare: false };
   }

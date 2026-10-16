@@ -8,10 +8,9 @@
 //     explicit, so a UI framework would add runtime weight without improving
 //     the file/query correctness boundary.
 //   - wa-sqlite (asyncify build) served from this deployment. A custom
-//     async VFS (web/js/sync/file/file-vfs.js) that streams from File.slice() so
-//     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
-//     (sql.js, the previous library, required full-file load and broke
-//     at 4 GB with NotReadableError).
+//     async VFS (web/js/sync/file/file-vfs.js) that streams from File.slice()
+//     instead of loading the whole file into memory, so multi-GB
+//     encounters.db files don't blow Chrome's ArrayBuffer cap.
 //   - SQLite only fetches the B-tree pages it needs - tens of MB even
 //     on a 4 GB DB. Schema-detection via PRAGMA table_info adapts the
 //     query to whichever LOA Logs version wrote the file.

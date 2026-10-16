@@ -13,8 +13,8 @@ const { saveWithRetry } = require("../../../models/user");
 const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
 const { t, getGuildLanguage } = require("../../i18n");
+const { RAID_ORDER } = require("../../../domain/raid-catalog");
 const {
-  RAID_GROUP_KEYS,
   getGateKeys,
   getRequirementFor,
   normalizeRaidModeKey,
@@ -97,7 +97,7 @@ function applyPendingModeAfterGateClear(character, assignedRaids, raidKey) {
 
 function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   const assignedRaids = character.assignedRaids || {};
-  for (const raidKey of RAID_GROUP_KEYS) {
+  for (const raidKey of RAID_ORDER) {
     if (!assignedRaids[raidKey]) continue;
     // assignedRaids is a strict:false subdoc: `delete` on the live subdoc
     // never reaches what save() writes, so clear a plain copy and assign it

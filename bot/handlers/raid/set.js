@@ -131,78 +131,39 @@ function createRaidSetCommand(deps) {
     t,
   });
 
-  async function applyRaidSetForDiscordId({
-    discordId,
-    executorId = null,
-    characterName,
-    rosterName = null,
-    raidMeta,
-    statusType,
-    effectiveGates,
-    requireLocalSyncEnabled = false,
-    requireRaidUntouched = false,
-    requiredCompanionScope = null,
-    currentWeekStartMs = 0,
-  }) {
-    let result = makeRaidSetResult(raidMeta);
-    await saveWithRetry(async () => {
-      result = makeRaidSetResult(raidMeta);
-      const userDoc = await User.findOne({ discordId });
-      if (weekMovedSince(currentWeekStartMs)) {
-        result.outsideCurrentWeek = true;
-        return;
-      }
-      if (userDoc) ensureFreshWeek(userDoc);
-      result = await applyRaidSetToLoadedUserDoc(userDoc, {
-        discordId,
-        executorId,
-        characterName,
-        rosterName,
-        raidMeta,
-        statusType,
-        effectiveGates,
-        requireLocalSyncEnabled,
-        requireRaidUntouched,
-        requiredCompanionScope,
-        currentWeekStartMs,
-      });
-      if (result.updated) await userDoc.save();
-    });
-    return result;
-  }
-
-  async function applyRaidSetBatchForDiscordId({
+  // The write sequence behind both facades: load the owner fresh, refuse a
+  // missing user (noRoster) before a week that moved since the caller's
+  // snapshot (outsideCurrentWeek), roll the week, apply the entries in order
+  // and save once if any changed. Returns one result per entry.
+  async function applyRaidSetEntries({
     discordId,
     entries,
-    requireLocalSyncEnabled = false,
-    requireRaidUntouched = false,
-    requiredCompanionScope = null,
-    currentWeekStartMs = 0,
+    requireLocalSyncEnabled,
+    requireRaidUntouched,
+    requiredCompanionScope,
+    currentWeekStartMs,
   }) {
-    const list = Array.isArray(entries) ? entries : [];
-    let results = list.map((entry) => makeRaidSetResult(entry?.raidMeta));
+    const refusedResults = (flag) => entries.map((entry) => ({
+      ...makeRaidSetResult(entry?.raidMeta),
+      [flag]: true,
+    }));
+    let results = [];
     await saveWithRetry(async () => {
       results = [];
       const userDoc = await User.findOne({ discordId });
       if (!userDoc) {
-        results = list.map((entry) => ({
-          ...makeRaidSetResult(entry?.raidMeta),
-          noRoster: true,
-        }));
+        results = refusedResults("noRoster");
         return;
       }
       if (weekMovedSince(currentWeekStartMs)) {
-        results = list.map((entry) => ({
-          ...makeRaidSetResult(entry?.raidMeta),
-          outsideCurrentWeek: true,
-        }));
+        results = refusedResults("outsideCurrentWeek");
         return;
       }
 
       ensureFreshWeek(userDoc);
       const now = Date.now();
       let didUpdate = false;
-      for (const entry of list) {
+      for (const entry of entries) {
         const result = await applyRaidSetToLoadedUserDoc(userDoc, {
           discordId,
           executorId: entry.executorId || null,
@@ -220,12 +181,97 @@ function createRaidSetCommand(deps) {
         if (result.updated) didUpdate = true;
       }
 
-      if (didUpdate) {
-        userDoc.markModified("accounts");
-        await userDoc.save();
-      }
+      if (didUpdate) await userDoc.save();
     });
     return results;
+  }
+
+  /**
+   * Write one raid clear or reset for one character on the owner's stored
+   * document, through the shared write sequence.
+   * @param {object} params
+   * @param {string} params.discordId - owner of the document that is written
+   * @param {string|null} [params.executorId=null] - who runs the write when it
+   *   is not the owner; checked against the roster's registeredBy and edit shares
+   * @param {string} params.characterName
+   * @param {string|null} [params.rosterName=null]
+   * @param {object} params.raidMeta - raid requirement entry (raid, mode, minItemLevel)
+   * @param {string} [params.statusType="process"] - "complete" and "process"
+   *   mark the gates done; any other value resets them
+   * @param {string[]} params.effectiveGates - gates to write; empty means every
+   *   gate the character holds for the raid
+   * @param {boolean} [params.requireLocalSyncEnabled=false] - refuse unless the
+   *   owner has Local Sync on
+   * @param {boolean} [params.requireRaidUntouched=false] - refuse when the raid
+   *   already has a clear this week
+   * @param {string|null} [params.requiredCompanionScope=null] - sync scope the
+   *   write belongs to; the owner must have it on and the mode allowed in it
+   * @param {number} [params.currentWeekStartMs=0] - week start the caller's data
+   *   was filtered against; a weekly reset after it refuses the write, and clears
+   *   before it do not count as progress
+   * @returns {Promise<object>} the write result: `updated` is true when the
+   *   document was saved, otherwise a flag says why (`noRoster`,
+   *   `outsideCurrentWeek`, `authLost`, `syncDisabled`, `scopeNotAllowed`,
+   *   `progressConflict`, `progressProtected`, `alreadyComplete`,
+   *   `alreadyReset`, or `matched` false / `ineligibleItemLevel` for the character)
+   */
+  async function applyRaidSetForDiscordId({
+    discordId,
+    executorId = null,
+    characterName,
+    rosterName = null,
+    raidMeta,
+    statusType,
+    effectiveGates,
+    requireLocalSyncEnabled = false,
+    requireRaidUntouched = false,
+    requiredCompanionScope = null,
+    currentWeekStartMs = 0,
+  }) {
+    const [result] = await applyRaidSetEntries({
+      discordId,
+      entries: [{ executorId, characterName, rosterName, raidMeta, statusType, effectiveGates }],
+      requireLocalSyncEnabled,
+      requireRaidUntouched,
+      requiredCompanionScope,
+      currentWeekStartMs,
+    });
+    return result;
+  }
+
+  /**
+   * Write several raid clears or resets on one owner's stored document with a
+   * single load and at most one save.
+   * @param {object} params
+   * @param {string} params.discordId - owner of the document that is written
+   * @param {Array<object>} params.entries - one per write, with the per-write
+   *   fields of applyRaidSetForDiscordId (`executorId`, `characterName`,
+   *   `rosterName`, `raidMeta`, `statusType` defaulting to "process",
+   *   `effectiveGates`); a non-array counts as empty
+   * @param {boolean} [params.requireLocalSyncEnabled=false] - as in applyRaidSetForDiscordId
+   * @param {boolean} [params.requireRaidUntouched=false] - as in applyRaidSetForDiscordId
+   * @param {string|null} [params.requiredCompanionScope=null] - as in applyRaidSetForDiscordId
+   * @param {number} [params.currentWeekStartMs=0] - as in applyRaidSetForDiscordId
+   * @returns {Promise<object[]>} one result per entry, in entry order, shaped
+   *   as the result of applyRaidSetForDiscordId; a missing user or a moved week
+   *   gives every entry the same refusal flag
+   */
+  async function applyRaidSetBatchForDiscordId({
+    discordId,
+    entries,
+    requireLocalSyncEnabled = false,
+    requireRaidUntouched = false,
+    requiredCompanionScope = null,
+    currentWeekStartMs = 0,
+  }) {
+    return applyRaidSetEntries({
+      discordId,
+      entries: Array.isArray(entries) ? entries : [],
+      requireLocalSyncEnabled,
+      requireRaidUntouched,
+      requiredCompanionScope,
+      currentWeekStartMs,
+    });
   }
 
   // The write is already saved, so a failed re-read must not turn the reply

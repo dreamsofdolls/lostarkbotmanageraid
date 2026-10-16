@@ -1,5 +1,6 @@
 "use strict";
 
+const { RAID_ORDER } = require("../../../../domain/raid-catalog");
 const { t } = require("../../../../services/i18n");
 const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
@@ -52,7 +53,9 @@ function wipeAutoManageState(userDoc) {
     account.lastRefreshedAt = null;
     account.lastRefreshAttemptAt = null;
     for (const character of account.characters || []) {
-      character.assignedRaids = { armoche: {}, kazeros: {}, serca: {}, horizon: {} };
+      character.assignedRaids = Object.fromEntries(
+        RAID_ORDER.map((raidKey) => [raidKey, {}])
+      );
       character.publicLogDisabled = false;
       character.publicLogDisabledAt = null;
       character.bibleSerial = null;

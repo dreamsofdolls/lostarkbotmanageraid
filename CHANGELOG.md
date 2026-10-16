@@ -24,6 +24,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed (internal)
 - `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.
 - `/raid-check` refreshes recompute only the refreshed user's raids; `/raid-status` reloads read the viewer's own roster as a lean render-only snapshot; `/raid-remove-roster` autocomplete and `/raid-gold-earner` read the caller's profile once for roster and language; `/raid-channel action` autocomplete reads language and config together.
+- `/raid-set` and Local Sync raid writes share one load, check and save sequence; a missing roster reports no-roster before outside-current-week; batch saves write only the changed characters' raids and the week reset. The schema's raid keys, the reset seed, the display order and the weekly reset loop come from one catalog list, and the edit-share tie rule lives in one helper.
 
 ## 2026-10-11
 

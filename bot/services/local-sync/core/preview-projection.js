@@ -17,6 +17,7 @@ const {
   normalizeLocalSyncDifficulty,
 } = require("..");
 const {
+  RAID_ORDER,
   RAID_REQUIREMENTS,
   getGatesForRaid,
   getGateGoldParts,
@@ -34,8 +35,7 @@ const {
   resolveBucketModePreference,
 } = require("./apply/apply-roster");
 
-const RAID_KEYS = Object.keys(RAID_REQUIREMENTS);
-const RAID_ORDER_INDEX = new Map(RAID_KEYS.map((raidKey, index) => [raidKey, index]));
+const RAID_ORDER_INDEX = new Map(RAID_ORDER.map((raidKey, index) => [raidKey, index]));
 
 function bucketizeCurrentWeekDeltas(deltas, currentWeekStartMs = 0) {
   const weekStartMs = Number(currentWeekStartMs) || 0;
@@ -260,7 +260,7 @@ function buildFinalRaidProjection(finalRaidStates, appliedGates) {
   const raids = [];
   let projectedCleared = 0;
 
-  for (const raidKey of RAID_KEYS) {
+  for (const raidKey of RAID_ORDER) {
     const state = finalRaidStates.get(raidKey);
     if (!state) continue;
     const gates = getGatesForRaid(raidKey);

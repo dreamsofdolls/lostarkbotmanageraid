@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { RAID_ORDER } = require("../domain/raid-catalog");
 const { sleep } = require("../utils/async");
 
 const assignedRaidSchema = new mongoose.Schema(
@@ -101,12 +102,13 @@ const characterSchema = new mongoose.Schema(
     // Cleared when publicLogDisabled flips back to false on a successful
     // sync (gather sees public log is ON again).
     publicLogDisabledAt: { type: Date, default: null },
-    assignedRaids: {
-      armoche: { type: assignedRaidSchema, default: () => ({}) },
-      kazeros: { type: assignedRaidSchema, default: () => ({}) },
-      serca: { type: assignedRaidSchema, default: () => ({}) },
-      horizon: { type: assignedRaidSchema, default: () => ({}) },
-    },
+    // One entry per catalog raid: the strict schema strips a raid it does not list.
+    assignedRaids: Object.fromEntries(
+      RAID_ORDER.map((raidKey) => [
+        raidKey,
+        { type: assignedRaidSchema, default: () => ({}) },
+      ])
+    ),
     // Legacy raid-clear counters from the LoaLogs port; nothing reads them.
     // Kept because roster saves $set the whole characters array, so dropping
     // the path would silently erase entries still stored on older users.
@@ -197,7 +199,7 @@ const userSchema = new mongoose.Schema(
     // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
     // a user can have at most one active sync source at a time. Local-sync
     // pulls raid clears from the user's local LOA Logs encounters.db via a
-    // browser-companion (File System Access API + sql.js); enable flow
+    // browser-companion (File System Access API + wa-sqlite); enable flow
     // lives in bot/services/local-sync/state.js so the mutex is enforced
     // at the data layer regardless of which UI surface flips the flag.
     localSyncEnabled: { type: Boolean, default: false },

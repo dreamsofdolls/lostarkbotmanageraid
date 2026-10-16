@@ -9,7 +9,7 @@
 
 "use strict";
 
-const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../domain/raid-catalog");
+const { RAID_ORDER, RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../domain/raid-catalog");
 const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../models/Class");
 const {
   CORE_MODE_ALIASES,
@@ -73,7 +73,7 @@ function buildLocalSyncCatalog() {
 
   return {
     version: 1,
-    raidOrder: Object.keys(RAID_REQUIREMENTS),
+    raidOrder: [...RAID_ORDER],
     modeOrder,
     raids,
     bossToRaidGate: [...BOSS_TO_RAID_GATE.entries()].map(([boss, target]) => [

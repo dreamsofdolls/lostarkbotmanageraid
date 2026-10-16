@@ -20,6 +20,7 @@ const {
 const { getRaidModeLabel, getRaidSpecificModeLabel } = require("./labels");
 const { t } = require("../../../services/i18n");
 const {
+  RAID_ORDER,
   RAID_REQUIREMENTS,
   areEquivalentRaidModes,
   getGatesForRaid,
@@ -28,7 +29,6 @@ const {
   isSoloModeKey,
 } = require("../../../domain/raid-catalog");
 const {
-  RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
   ensureAssignedRaids,
   getAssignedRaidModeKey,
@@ -54,7 +54,6 @@ const {
 } = require("./character/task-sanitizers");
 
 const GOLD_RAID_CAP_PER_CHARACTER = 3;
-const RAID_DISPLAY_ORDER = Object.freeze({ armoche: 0, kazeros: 1, serca: 2, horizon: 3 });
 
 function createCharacterId() {
   try {
@@ -116,7 +115,8 @@ function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
 }
 
 function raidDisplayRank(raid) {
-  return RAID_DISPLAY_ORDER[raid?.raidKey] ?? 99;
+  const catalogIndex = RAID_ORDER.indexOf(raid?.raidKey);
+  return catalogIndex === -1 ? 99 : catalogIndex;
 }
 
 function compareGoldSlotPriority(a, b) {
@@ -184,7 +184,7 @@ function getStatusRaidsForCharacter(character) {
   const assignedRaids = ensureAssignedRaids(character);
   const selected = [];
 
-  for (const raidKey of RAID_GROUP_KEYS) {
+  for (const raidKey of RAID_ORDER) {
     const assignedRaid = assignedRaids[raidKey];
     const modeKey = getAssignedRaidModeKey(assignedRaid, raidKey)
       || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");

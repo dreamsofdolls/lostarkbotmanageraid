@@ -235,7 +235,8 @@ function getGateGoldParts(raidKey, modeKey, gate) {
 // Canonical progression order: raid groups follow their catalog declaration
 // order (Act 4 -> Kazeros -> Serca -> Horizon), and modes follow theirs
 // (normal -> solo -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
-// and ordered by difficulty instead of shuffling by pending count.
+// and ordered by difficulty instead of shuffling by pending count, and as the raid
+// key list of the User schema, the reset seed and the per-character raid loops.
 const RAID_ORDER = Object.keys(RAID_REQUIREMENTS);
 const RAID_SORT_INDEX = new Map(
   RAID_ORDER.map((raidKey, raidIndex) => [raidKey, raidIndex])
@@ -269,6 +270,7 @@ function compareRaidModeOrder(a, b) {
 
 module.exports = {
   RAID_REQUIREMENTS,
+  RAID_ORDER,
   areEquivalentRaidModes,
   getRaidRequirementList,
   getRaidRequirementMap,

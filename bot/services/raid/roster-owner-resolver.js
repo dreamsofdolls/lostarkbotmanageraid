@@ -10,6 +10,7 @@
 
 "use strict";
 
+const { findSharedRosterEntry } = require("../../utils/share-match");
 const { findAccountByName } = require("../../utils/user-doc");
 
 function pickOwnerLabel(userDoc) {
@@ -137,13 +138,7 @@ function createRosterOwnerResolver({
       return null;
     }
     const accessible = accessibleResult.value || [];
-    const sharedMatches = accessible.filter(
-      (entry) => !entry.isOwn && normalizeName(entry.accountName) === target
-    );
-    // Two owners can share rosters with the same name. A view share would
-    // fail canEditAccount at apply time, so an edit share wins the tie.
-    const sharedMatch = sharedMatches.find((entry) => entry.accessLevel === "edit")
-      || sharedMatches[0];
+    const sharedMatch = findSharedRosterEntry(accessible, rosterName, normalizeName);
     if (!sharedMatch) return null;
 
     // access-control already loaded the owner document to build this entry.

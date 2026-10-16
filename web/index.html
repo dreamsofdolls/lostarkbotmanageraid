@@ -71,7 +71,7 @@
 
   <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is selected.
        We use the streaming VFS pattern so multi-GB encounters.db files work
-       (sql.js needed full-file ArrayBuffer; Chrome caps that at ~2GB). -->
+       (wa-sqlite streams pages instead of loading the whole file into memory). -->
   <script src="/sync/js/app.js" type="module"></script>
 </body>
 </html>

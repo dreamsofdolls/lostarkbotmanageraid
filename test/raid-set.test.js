@@ -33,7 +33,10 @@ const {
   getRaidRequirementList,
   getGatesForRaid,
 } = require("../bot/domain/raid-catalog");
-const { clearCharacterProgress } = require("../bot/services/raid/schedulers/weekly-reset");
+const {
+  clearCharacterProgress,
+  ensureFreshWeek,
+} = require("../bot/services/raid/schedulers/weekly-reset");
 const User = require("../bot/models/user");
 
 function makeUserModel() {
@@ -95,7 +98,7 @@ function makeFactory(overrides = {}) {
     UI,
     User,
     saveWithRetry: async (op) => op(),
-    ensureFreshWeek: () => false,
+    ensureFreshWeek: overrides.ensureFreshWeek || (() => false),
     normalizeName,
     getCharacterName,
     getCharacterClass,
@@ -622,6 +625,223 @@ test("applyRaidSetForDiscordId: noRoster when user has no accounts", async () =>
   assert.equal(result.noRoster, true);
   assert.equal(result.matched, false);
   assert.equal(result.updated, false);
+});
+
+// The two write facades share one fresh-load sequence, so each case runs
+// against both and gets the same answer.
+const RAID_SET_FACADES = [
+  ["applyRaidSetForDiscordId", (factory, params) => factory.applyRaidSetForDiscordId(params)],
+  [
+    "applyRaidSetBatchForDiscordId",
+    async (factory, { discordId, currentWeekStartMs, ...entry }) => {
+      const [result] = await factory.applyRaidSetBatchForDiscordId({
+        discordId,
+        currentWeekStartMs,
+        entries: [entry],
+      });
+      return result;
+    },
+  ],
+];
+
+const CYRANO_KAZEROS_G1 = {
+  discordId: "user-1",
+  characterName: "Cyrano",
+  rosterName: "Alpha",
+  raidMeta: KAZEROS_HARD,
+  effectiveGates: ["G1"],
+};
+
+for (const [facadeName, apply] of RAID_SET_FACADES) {
+  test(`${facadeName}: a missing user reports noRoster even when the week has moved`, async () => {
+    const { factory, docs } = makeFactory();
+
+    // Any positive floor below the current reset start counts as a moved week.
+    const result = await apply(factory, {
+      ...CYRANO_KAZEROS_G1,
+      statusType: "process",
+      currentWeekStartMs: 1,
+    });
+
+    assert.equal(result.noRoster, true);
+    assert.equal(result.outsideCurrentWeek, false);
+    assert.equal(docs.size, 0);
+  });
+
+  test(`${facadeName}: statusType defaults to process`, async () => {
+    const { factory, docs } = makeFactory();
+    seedUser(docs, [
+      { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] },
+    ]);
+
+    const result = await apply(factory, CYRANO_KAZEROS_G1);
+
+    assert.equal(result.updated, true);
+    const raid = getStoredRaid(docs, "kazeros");
+    assert.ok(Number(raid.G1.completedDate) > 0);
+    assert.equal(raid.G2.completedDate, undefined);
+  });
+
+  test(`${facadeName}: the save of a stored document carries the raid change`, async () => {
+    const doc = User.hydrate({
+      _id: "0123456789abcdef01234567",
+      discordId: "user-1",
+      accounts: [{
+        accountName: "Alpha",
+        characters: [{ id: "c1", name: "Cyrano", class: "Bard", itemLevel: 1730, assignedRaids: {} }],
+      }],
+    });
+    let delta = null;
+    doc.save = async () => { delta = doc.getChanges(); };
+    const { factory, User: FakeUser } = makeFactory();
+    FakeUser.findOne = async () => doc;
+
+    const result = await apply(factory, { ...CYRANO_KAZEROS_G1, statusType: "process" });
+
+    assert.equal(result.updated, true);
+    const written = delta.$set["accounts.0.characters.0.assignedRaids"];
+    assert.ok(written, "the save writes the changed character's raids");
+    assert.ok(Number(written.kazeros.G1.completedDate) > 0);
+  });
+}
+
+function batchEntry(characterName, raidMeta) {
+  return {
+    characterName,
+    rosterName: "Alpha",
+    raidMeta,
+    statusType: "process",
+    effectiveGates: ["G1"],
+  };
+}
+
+test("applyRaidSetBatchForDiscordId: every changed character reaches the save of a stored document", async () => {
+  const doc = User.hydrate({
+    _id: "0123456789abcdef01234567",
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Alpha",
+      characters: [
+        { id: "c1", name: "Cyrano", class: "Bard", itemLevel: 1730, assignedRaids: {} },
+        { id: "c2", name: "Lyra", class: "Bard", itemLevel: 1730, assignedRaids: {} },
+      ],
+    }],
+  });
+  let delta = null;
+  doc.save = async () => { delta = doc.getChanges(); };
+  const { factory, User: FakeUser } = makeFactory();
+  FakeUser.findOne = async () => doc;
+
+  const results = await factory.applyRaidSetBatchForDiscordId({
+    discordId: "user-1",
+    entries: [
+      batchEntry("Cyrano", KAZEROS_HARD),
+      batchEntry("Cyrano", RAID_REQUIREMENT_MAP.armoche_hard),
+      batchEntry("Lyra", RAID_REQUIREMENT_MAP.serca_hard),
+    ],
+  });
+
+  assert.deepEqual(results.map((result) => result.updated), [true, true, true]);
+  const cyrano = delta.$set["accounts.0.characters.0.assignedRaids"];
+  const lyra = delta.$set["accounts.0.characters.1.assignedRaids"];
+  assert.ok(Number(cyrano.kazeros.G1.completedDate) > 0);
+  assert.ok(Number(cyrano.armoche.G1.completedDate) > 0);
+  assert.ok(Number(lyra.serca.G1.completedDate) > 0);
+});
+
+// Replays the $set, $unset and $inc paths that doc.getChanges() emits for
+// these tests onto a plain copy of the stored document, so a test can compare
+// what a save writes with the in-memory document.
+function replayDelta(stored, delta) {
+  const operators = {
+    $set: (parent, key, value) => { parent[key] = JSON.parse(JSON.stringify(value)); },
+    $unset: (parent, key) => { delete parent[key]; },
+    $inc: (parent, key, by) => { parent[key] = (parent[key] || 0) + by; },
+  };
+  assert.deepEqual(
+    Object.keys(delta).filter((operator) => !operators[operator]),
+    [],
+    "the replay understands every operator in the delta"
+  );
+  const replayed = JSON.parse(JSON.stringify(stored));
+  for (const [operator, fields] of Object.entries(delta)) {
+    for (const [path, value] of Object.entries(fields)) {
+      const keys = path.split(".");
+      const last = keys.pop();
+      operators[operator](keys.reduce((node, key) => node[key], replayed), last, value);
+    }
+  }
+  return replayed;
+}
+
+test("applyRaidSetBatchForDiscordId: the save of a stored document carries the week reset beside the raid changes", async () => {
+  const staleTask = (id) => ({ id, completions: 3, completionDate: 7 });
+  const doc = User.hydrate({
+    _id: "0123456789abcdef01234567",
+    discordId: "user-1",
+    weeklyResetKey: "2000-W01",
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          {
+            id: "c1",
+            name: "Cyrano",
+            class: "Bard",
+            itemLevel: 1730,
+            assignedRaids: {
+              kazeros: {
+                modeKey: "normal",
+                G1: { difficulty: "Normal", completedDate: 5 },
+                G2: { difficulty: "Normal", completedDate: 6 },
+              },
+            },
+            tasks: [staleTask("t1")],
+          },
+          { id: "c2", name: "Lyra", class: "Bard", itemLevel: 1730, assignedRaids: {}, tasks: [staleTask("t2")] },
+        ],
+      },
+      {
+        accountName: "Beta",
+        characters: [
+          { id: "c3", name: "Mira", class: "Bard", itemLevel: 1730, assignedRaids: {}, tasks: [staleTask("t3")] },
+        ],
+      },
+    ],
+  });
+  // Unminimized, so an empty assignedRaids reads the same as the delta writes it.
+  const snapshot = () => JSON.parse(JSON.stringify(doc.toObject({ minimize: false })));
+  const stored = snapshot();
+  let delta = null;
+  doc.save = async () => { delta = doc.getChanges(); };
+  const { factory, User: FakeUser } = makeFactory({ ensureFreshWeek });
+  FakeUser.findOne = async () => doc;
+
+  const results = await factory.applyRaidSetBatchForDiscordId({
+    discordId: "user-1",
+    entries: [
+      batchEntry("Cyrano", RAID_REQUIREMENT_MAP.armoche_hard),
+      batchEntry("Lyra", RAID_REQUIREMENT_MAP.serca_hard),
+    ],
+  });
+
+  assert.deepEqual(results.map((result) => result.updated), [true, true]);
+  const inMemory = snapshot();
+  assert.notEqual(inMemory.weeklyResetKey, "2000-W01");
+  const characters = inMemory.accounts.flatMap((account) => account.characters);
+  for (const character of characters) {
+    const [task] = character.tasks;
+    assert.deepEqual([task.completions, task.completionDate], [0, null]);
+  }
+  assert.ok(!characters[0].assignedRaids.kazeros.G1.completedDate, "the stale raid clear is gone");
+  assert.ok(Number(characters[0].assignedRaids.armoche.G1.completedDate) > 0);
+  assert.ok(Number(characters[1].assignedRaids.serca.G1.completedDate) > 0);
+
+  // Nothing set in memory, by the reset or the raid changes, may be missing
+  // from what the save writes.
+  const replayed = replayDelta(stored, delta);
+  assert.deepEqual(replayed.accounts, inMemory.accounts);
+  assert.equal(replayed.weeklyResetKey, inMemory.weeklyResetKey);
 });
 
 test("applyRaidSetForDiscordId: local-sync guard blocks stale POST writes after reset", async () => {

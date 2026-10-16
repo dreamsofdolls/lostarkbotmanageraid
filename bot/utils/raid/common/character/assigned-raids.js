@@ -6,6 +6,7 @@ const {
   toModeLabel,
 } = require("../shared");
 const {
+  RAID_ORDER,
   RAID_REQUIREMENTS,
   getRaidRequirementList,
   getRaidRequirementMap,
@@ -14,7 +15,6 @@ const {
 const { getGoldOverride } = require("./gold-policy");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
-const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function getRequirementFor(raidKey, modeKey) {
   const value = `${raidKey}_${modeKey}`;
@@ -219,7 +219,7 @@ function ensureAssignedRaids(character) {
   const legacyRaids = Array.isArray(character?.raids) ? character.raids : [];
   const assigned = {};
 
-  for (const raidKey of RAID_GROUP_KEYS) {
+  for (const raidKey of RAID_ORDER) {
     const bestModeKey = getBestEligibleModeKey(raidKey, itemLevel) || "normal";
     const fallbackDifficulty = toModeLabel(bestModeKey);
     const sourceRaid = existing[raidKey] || {};
@@ -258,7 +258,6 @@ function getAssignedRaidCompletedAt(assignedRaid, gates = null) {
 }
 
 module.exports = {
-  RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
   ensureAssignedRaids,
   getAssignedRaidCompletedAt,
