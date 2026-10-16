@@ -995,7 +995,7 @@ test("a completed but broken image is never accepted as capture-ready", async ()
   } finally { dom.window.close(); }
 });
 
-function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit, log = silentLog } = {}) {
+function handlerFixture({ character = "Saturnxd", error, lookupError, rosterError, userDoc = null, lang = "vi", attachmentSizeLimit, log = silentLog } = {}) {
   const calls = [];
   let payload;
   let modal;
@@ -1006,8 +1006,8 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
   };
   const handler = createRaidLogCommand({
     EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log,
-    loadCaller: async () => { calls.push(["roster"]); return null; },
-    resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
+    loadCaller: async () => { calls.push(["roster"]); if (rosterError) throw rosterError; return userDoc; },
+    resolveStoredLanguage: async (id, snapshot) => { calls.push(["language", snapshot]); return lang; },
     logCatalog: { open: async name => {
       calls.push(["lookup", name]);
       if (lookupError) throw lookupError;
@@ -1022,7 +1022,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
         playerCount: 8, partyCount: 2, players: [], images: [{ filename: "log.png", buffer: Buffer.from("png") }] };
     },
   });
-  return { calls, interaction, run: async () => {
+  return { calls, interaction, handler, run: async () => {
     await handler.handleRaidLogCommand(interaction);
     const base = { ...interaction, message: { id: "message" },
       reply: async reply => calls.push(["error", reply]), followUp: async reply => calls.push(["error", reply]) };
@@ -1059,6 +1059,17 @@ test("handler acknowledges first, attaches a public image with source link in al
     assert.doesNotMatch(JSON.stringify(embed), /raid-log\./);
     assert.deepEqual(payload.allowedMentions, { parse: [] });
   }
+});
+
+test("a failed roster lookup gives the language lookup no snapshot, a read one passes the document", async () => {
+  const failed = handlerFixture({ rosterError: new Error("mongo down") });
+  await failed.handler.handleRaidLogCommand(failed.interaction);
+  const failedLanguage = failed.calls.find(call => call[0] === "language");
+  assert.equal(failedLanguage[1], undefined);
+  const userDoc = { accounts: [], language: "en" };
+  const loaded = handlerFixture({ userDoc });
+  await loaded.handler.handleRaidLogCommand(loaded.interaction);
+  assert.equal(loaded.calls.find(call => call[0] === "language")[1], userDoc);
 });
 
 test("handler warning names the failed stage and the first line of its cause", async () => {

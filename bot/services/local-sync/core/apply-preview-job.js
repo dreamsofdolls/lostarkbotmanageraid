@@ -36,10 +36,18 @@ function previewDeps(PreviewModel) {
   return PreviewModel ? { PreviewModel } : {};
 }
 
+function publishRefreshEvent(publish, event, label) {
+  try {
+    publish(event);
+  } catch (err) {
+    console.warn(`[local-sync/apply] ${label} refresh event failed:`, err?.message || err);
+  }
+}
+
 // Party writes land on other owners' rosters, and their open /raid-status
 // cards subscribe to those owners, so each owner gets one refresh event. It
 // carries no job id because the job belongs to the source owner, whose own
-// event the Reader endpoint publishes.
+// event comes from announceOwnerApplied.
 function announcePartyWrites(discordId, partyPropagation, publish = publishLocalSyncApplied) {
   const ownerIds = new Set();
   for (const entry of partyPropagation?.applied || []) {
@@ -47,12 +55,15 @@ function announcePartyWrites(discordId, partyPropagation, publish = publishLocal
     if (targetId && targetId !== discordId) ownerIds.add(targetId);
   }
   for (const ownerId of ownerIds) {
-    try {
-      publish({ discordId: ownerId, jobId: "" });
-    } catch (err) {
-      console.warn("[local-sync/apply] party refresh event failed:", err?.message || err);
-    }
+    publishRefreshEvent(publish, { discordId: ownerId, jobId: "" }, "party");
   }
+}
+
+// The job owner's open /raid-status cards, and the viewers of the owner's
+// shared roster, refresh once the job is applied. Only this event carries the
+// job id. A failure to publish must not turn an applied job into a failed one.
+function announceOwnerApplied(discordId, jobId, publish = publishLocalSyncApplied) {
+  publishRefreshEvent(publish, { discordId, jobId }, "owner");
 }
 
 async function loadApplyUser(discordId, UserModel) {
@@ -359,11 +370,14 @@ async function releaseApplySlotBestEffort(discordId, ownsSlot, deps) {
 }
 
 /**
- * Claim and apply one stored preview job for its owner.
+ * Claim and apply one stored preview job for its owner. The owner's refresh
+ * event, which carries the job id, goes out once the job is applied and for no
+ * other outcome; party owners' events go out as soon as their writes are saved.
  * @param {string} jobId
  * @param {string} discordId - job owner
  * @param {object} [deps] - models and raid writers; `shrinkSourceToken: false`
- *   keeps the Local Reader token at its full lifetime after a write
+ *   keeps the Local Reader token at its full lifetime after a write;
+ *   `publishLocalSyncApplied` replaces the refresh event publisher
  * @returns {Promise<{ok: boolean, state: string, job: object|null, result?: object, retryable?: boolean}>}
  */
 async function applyPreviewJob(jobId, discordId, deps = {}) {
@@ -439,7 +453,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
         summary,
       });
     // Awaited so a failure here reaches the catch below like every other step.
-    return await finishAppliedPreview({
+    const outcome = await finishAppliedPreview({
       jobId,
       discordId,
       summary,
@@ -447,6 +461,10 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
       leaseDeps,
       modelDeps,
     });
+    if (outcome.state === "applied") {
+      announceOwnerApplied(discordId, jobId, deps.publishLocalSyncApplied);
+    }
+    return outcome;
   } catch (error) {
     return recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error, summary });
   } finally {

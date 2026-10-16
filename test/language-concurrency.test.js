@@ -123,3 +123,28 @@ test('a supplied viewer snapshot supersedes an older user-locale read', async ()
   assert.equal(await pending, 'en');
   assert.equal(await getUserLanguage('seeded'), 'en');
 });
+
+test('an undefined viewer snapshot reads the stored language instead of caching the default', async () => {
+  clearUserLanguageCache();
+  let reads = 0;
+  const Model = { findOne: () => { reads++; return { lean: async () => ({ language: 'en' }) }; } };
+  assert.equal(await getUserLanguage('no-snapshot', { UserModel: Model, userDoc: undefined }), 'en');
+  assert.equal(await getUserLanguage('no-snapshot', { UserModel: Model }), 'en');
+  assert.equal(reads, 1);
+});
+
+test('a null viewer snapshot means no user document: it publishes the default language without a read', async () => {
+  clearUserLanguageCache();
+  let reads = 0;
+  const Model = { findOne: () => { reads++; throw new Error('unexpected read'); } };
+  assert.equal(await getUserLanguage('no-document', { UserModel: Model, userDoc: null }), 'vi');
+  assert.equal(await getUserLanguage('no-document', { UserModel: Model }), 'vi');
+  assert.equal(reads, 0);
+});
+
+test('a supplied viewer snapshot publishes its language without a database read', async () => {
+  clearUserLanguageCache();
+  const Model = { findOne: () => { throw new Error('unexpected read'); } };
+  assert.equal(await getUserLanguage('snapshot-only', { UserModel: Model, userDoc: { language: 'jp' } }), 'jp');
+  assert.equal(await getUserLanguage('snapshot-only', { UserModel: Model }), 'jp');
+});

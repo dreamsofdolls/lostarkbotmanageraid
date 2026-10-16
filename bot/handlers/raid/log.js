@@ -129,7 +129,8 @@ function createRaidLogCommand({
       rosterUnavailable = true;
       return null;
     });
-    const lang = await resolveStoredLanguage(interaction.user.id, userDoc).catch(() => "vi");
+    // undefined = no snapshot, so the stored language is read; null would mean "no user document" and give the default language.
+    const lang = await resolveStoredLanguage(interaction.user.id, rosterUnavailable ? undefined : userDoc).catch(() => "vi");
     let state;
     try {
       state = {

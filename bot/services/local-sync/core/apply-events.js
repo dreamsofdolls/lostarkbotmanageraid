@@ -14,12 +14,12 @@ function reportListenerError(error, event, onError) {
   try {
     onError(error, event);
   } catch {
-    // A logging failure must not escape into the Reader request.
+    // A logging failure must not escape into the apply that published the event.
   }
 }
 
 /**
- * Subscribe an active Discord view to confirmed Local Reader applies.
+ * Subscribe an active Discord view to confirmed Local Sync applies.
  * Listener sets are capped per owner and removed when the returned cleanup runs.
  * @param {string|string[]} discordIds - Roster owners visible in the active view.
  * @param {(event: object) => unknown} listener - Fast callback that schedules view work.

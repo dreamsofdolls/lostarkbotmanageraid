@@ -197,14 +197,21 @@ function publishLanguage(id, lang, cache, pending) {
 /**
  * Cache-first lookup that shares pending reads. Pass UserModel for DI; loading
  * the production model here would create a circular import, so
- * callers pass it in.
+ * callers pass it in. A `userDoc` of null means the caller found no user
+ * document and answers with the default language; leaving `userDoc` out or
+ * passing undefined means no snapshot, so the stored language is read.
+ * @param {string} discordId
+ * @param {object} [options]
+ * @param {object} [options.UserModel] - User model used for the stored-language read
+ * @param {object|null} [options.userDoc] - already loaded User document; null when the user has none
+ * @returns {Promise<string>} a supported language code
  */
 async function getUserLanguage(discordId, options = {}) {
-  const { UserModel } = options;
+  const { UserModel, userDoc } = options;
   if (!discordId) return DEFAULT_LANGUAGE;
   if (userLanguageCache.has(discordId)) return userLanguageCache.get(discordId);
-  if (Object.prototype.hasOwnProperty.call(options, "userDoc")) {
-    const lang = normalizeLanguage(options.userDoc?.language);
+  if (userDoc !== undefined) {
+    const lang = normalizeLanguage(userDoc?.language);
     publishLanguage(discordId, lang, userLanguageCache, userLanguageLoads);
     return lang;
   }

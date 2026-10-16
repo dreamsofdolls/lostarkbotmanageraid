@@ -26,7 +26,7 @@ function visibleRosterOwnerIds(viewerDiscordId, accounts) {
 }
 
 /**
- * Coordinate background raid-status redraws and Local Reader apply events.
+ * Coordinate background raid-status redraws and Local Sync apply events.
  * @param {object} deps
  * @param {string} deps.viewerDiscordId - Owner of the open status session.
  * @param {() => object[]} deps.getAccounts - Current own and shared roster pages.
@@ -103,7 +103,7 @@ function createRaidStatusLiveApplyRefresh({
     subscribedOwnerKey = ownerKey;
     unsubscribe = subscribe(ownerIds, onApplied, {
       onError: (error) => {
-        log.warn("[raid-status] Local Reader apply listener failed:", error?.message || error);
+        log.warn("[raid-status] Local Sync apply listener failed:", error?.message || error);
       },
     });
   }

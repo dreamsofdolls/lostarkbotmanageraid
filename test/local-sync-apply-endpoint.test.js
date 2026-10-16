@@ -4,7 +4,8 @@ const { PassThrough } = require("node:stream");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken } = require("../bot/services/local-sync");
+const { applyPreviewJob: applyStoredPreviewJob, mintToken } = require("../bot/services/local-sync");
+const { subscribeLocalSyncApplied } = require("../bot/services/local-sync/core/apply-events");
 const {
   createApplyEndpoint,
 } = require("../bot/services/local-sync/http/endpoints/apply-endpoint");
@@ -40,15 +41,24 @@ function makeUserModel(userDoc) {
     findOne() {
       return { select: () => ({ lean: async () => userDoc }) };
     },
+    async findOneAndUpdate() {
+      return userDoc;
+    },
   };
 }
 
+// findOneAndUpdate takes every claim and write, which one apply needs.
 function makePreviewModel(job) {
+  let current = job;
   return {
     findOne(filter) {
-      return job && job.jobId === filter.jobId && job.discordId === filter.discordId
-        ? { ...job }
+      return current && current.jobId === filter.jobId && current.discordId === filter.discordId
+        ? { ...current }
         : null;
+    },
+    async findOneAndUpdate(filter, update) {
+      current = { ...current, ...update.$set };
+      return { ...current };
     },
   };
 }
@@ -59,37 +69,33 @@ function setup({
   userOverrides = {},
   job = { jobId: JOB_ID, discordId: "u1", scope: "full", status: "pending" },
   applyPreviewJob = async () => ({ ok: true, state: "applied", result: { applied: [], rejected: [] } }),
-  notifyLocalSyncApplied = null,
-  log = { error() {}, warn() {} },
 } = {}) {
   const token = mintToken("u1", undefined, "en", null, scope);
   const applyCalls = [];
-  const notificationCalls = [];
+  const User = makeUserModel({
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: token,
+    lastLocalSyncTokenExpAt: 9_999_999_999,
+    ...userOverrides,
+  });
+  const PreviewModel = makePreviewModel(job);
   const handler = createApplyEndpoint({
-    User: makeUserModel({
-      discordId: "u1",
-      localSyncEnabled: true,
-      autoManageEnabled: false,
-      lastLocalSyncToken: token,
-      lastLocalSyncTokenExpAt: 9_999_999_999,
-      ...userOverrides,
-    }),
-    PreviewModel: makePreviewModel(job),
+    User,
+    PreviewModel,
     applyPreviewJob: async (...args) => {
       applyCalls.push(args);
       return applyPreviewJob(...args);
     },
-    notifyLocalSyncApplied: notifyLocalSyncApplied || ((event) => {
-      notificationCalls.push(event);
-    }),
-    log,
+    log: { error() {} },
   });
   async function post(body = { jobId: JOB_ID }, authToken = token) {
     const res = makeRes();
     await handler(makeReq(authToken, body), res);
     return res;
   }
-  return { post, applyCalls, notificationCalls };
+  return { post, applyCalls, models: { UserModel: User, PreviewModel } };
 }
 
 test("apply rejects a request without a valid link before touching the job", async () => {
@@ -145,7 +151,7 @@ test("apply cannot reach another owner's job or a job from the other scope", asy
 });
 
 test("an applied job reports only the caller's own writes", async () => {
-  const { post, applyCalls, notificationCalls } = setup({
+  const { post, applyCalls } = setup({
     applyPreviewJob: async () => ({
       ok: true,
       state: "applied",
@@ -169,7 +175,6 @@ test("an applied job reports only the caller's own writes", async () => {
 
   assert.equal(res.status, 200);
   assert.deepEqual(applyCalls, [[JOB_ID, "u1"]]);
-  assert.deepEqual(notificationCalls, [{ discordId: "u1", jobId: JOB_ID }]);
   assert.deepEqual(res.json(), {
     ok: true,
     state: "applied",
@@ -181,7 +186,7 @@ test("an applied job reports only the caller's own writes", async () => {
 });
 
 test("a job another request already applied still reads as done", async () => {
-  const { post, notificationCalls } = setup({
+  const { post } = setup({
     applyPreviewJob: async () => ({
       ok: false,
       state: "applied",
@@ -194,11 +199,10 @@ test("a job another request already applied still reads as done", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.json().ok, true);
   assert.deepEqual(res.json().written, { raids: 1, chars: 1 });
-  assert.deepEqual(notificationCalls, [{ discordId: "u1", jobId: JOB_ID }]);
 });
 
 test("a retryable write error keeps the job pending for the same jobId", async () => {
-  const { post, notificationCalls } = setup({
+  const { post } = setup({
     applyPreviewJob: async () => ({
       ok: false,
       state: "pending",
@@ -217,45 +221,43 @@ test("a retryable write error keeps the job pending for the same jobId", async (
   assert.equal(res.json().state, "pending");
   assert.equal(res.json().retryable, true);
   assert.equal(res.json().rejected, 0);
-  assert.deepEqual(notificationCalls, []);
 });
 
-test("an applied notification cannot hold the Reader HTTP response open", async () => {
-  let notified = 0;
-  const { post } = setup({
-    notifyLocalSyncApplied: () => {
-      notified += 1;
-      return new Promise(() => {});
+test("an applied job refreshes the owner's open cards through one event", async (t) => {
+  const events = [];
+  t.after(subscribeLocalSyncApplied("u1", (event) => { events.push(event); }));
+  const run = setup({
+    job: {
+      jobId: JOB_ID,
+      discordId: "u1",
+      scope: "full",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+      deltas: [{
+        boss: "Armoche, Sentinel of the Abyss",
+        difficulty: "Hard",
+        cleared: true,
+        charName: "Aki",
+        lastClearMs: Date.now(),
+      }],
     },
+    userOverrides: {
+      accounts: [{
+        accountName: "Roster",
+        characters: [{ name: "Aki", class: "Bard", itemLevel: 1750, isGoldEarner: true, assignedRaids: {} }],
+      }],
+    },
+    applyPreviewJob: (jobId, discordId) => applyStoredPreviewJob(jobId, discordId, {
+      ...run.models,
+      applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Aki" }),
+    }),
   });
 
-  const res = await post();
+  const res = await run.post();
 
-  assert.equal(notified, 1);
   assert.equal(res.status, 200);
   assert.equal(res.json().state, "applied");
-});
-
-test("an asynchronous applied notification failure is logged after the response", async () => {
-  const warnings = [];
-  const { post } = setup({
-    notifyLocalSyncApplied: async () => {
-      throw new Error("Discord edit unavailable");
-    },
-    log: {
-      error() {},
-      warn(...args) {
-        warnings.push(args);
-      },
-    },
-  });
-
-  const res = await post();
-  await Promise.resolve();
-
-  assert.equal(res.status, 200);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0].join(" "), /applied notification failed.*Discord edit unavailable/);
+  assert.deepEqual(events, [{ discordId: "u1", jobId: JOB_ID }]);
 });
 
 test("an apply that throws answers 500 without leaking the error", async () => {

@@ -13,6 +13,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A `/raid-task` change on a roster shared with you both as view and as edit under the same name now writes through the edit share instead of being refused as view-only.
 - `/raid-announce show` lists a retired private-log nudge as retired instead of showing a schedule for it.
 - The label for a roster without a name follows the user's language.
+- A Local Sync apply started from the Discord console or the Local Sync view of `/raid-status` now refreshes the owner's other open `/raid-status` cards and shared viewers' cards, as a Reader apply already did.
+- `/raid-log` no longer switches an English or Japanese user to Vietnamese when their roster lookup fails.
 
 ## 2026-10-11
 

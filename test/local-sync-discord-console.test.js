@@ -26,6 +26,8 @@ const {
   PREVIEW_APPLY_LEASE_MS,
 } = require("../bot/services/local-sync");
 const { fingerprintToken } = require("../bot/services/local-sync/core/preview-jobs");
+const { subscribeLocalSyncApplied } = require("../bot/services/local-sync/core/apply-events");
+const { runLocalSyncViewAction } = require("../bot/handlers/raid-status/sync/local-sync-view");
 
 function makeJob(overrides = {}) {
   return {
@@ -808,6 +810,174 @@ test("any Local Sync apply path refreshes the open /raid-status card of a party 
 
   assert.equal(outcome.result.partyPropagation.applied, 1);
   assert.equal(partyOwnerRedraws, 1);
+});
+
+// A Full owner holding one pending job over the Aki roster, with writers that
+// accept every write. `deps` overrides the models and writers.
+function makeOwnerApply(discordId, { userOverrides = {}, jobOverrides = {}, deps = {} } = {}) {
+  const userDoc = {
+    discordId,
+    language: "en",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    accounts: makeAkiRoster(),
+    ...userOverrides,
+  };
+  const job = makeJob({ discordId, ...jobOverrides });
+  const PreviewModel = makePreviewModel(job);
+  const UserModel = makeConsoleUserModel(userDoc);
+  return {
+    job,
+    PreviewModel,
+    UserModel,
+    deps: {
+      PreviewModel,
+      UserModel,
+      applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Aki" }),
+      ...deps,
+    },
+  };
+}
+
+function collectOwnerEvents(t, discordId) {
+  const events = [];
+  t.after(subscribeLocalSyncApplied(discordId, (event) => { events.push(event); }));
+  return events;
+}
+
+test("a Discord console apply refreshes the job owner's open cards once", async (t) => {
+  const discordId = "owner-console-apply";
+  const { job, PreviewModel, UserModel, deps } = makeOwnerApply(discordId);
+  const events = collectOwnerEvents(t, discordId);
+  const service = createLocalSyncDiscordConsole({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    MessageFlags: { Ephemeral: 64 },
+    UI,
+    User: UserModel,
+    PreviewModel,
+    applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
+    openRaidStatusSession: async () => {},
+  });
+
+  await service.handleLocalSyncButton({
+    customId: `local-sync:apply:${job.jobId}`,
+    user: { id: discordId, username: "Aki" },
+    async deferUpdate() {},
+    async editReply() {},
+  });
+
+  assert.equal(PreviewModel.value.status, "applied");
+  assert.deepEqual(events, [{ discordId, jobId: job.jobId }]);
+});
+
+test("an in-card Local Sync view apply refreshes the job owner's open cards once", async (t) => {
+  const discordId = "owner-view-apply";
+  const { job, PreviewModel, UserModel, deps } = makeOwnerApply(discordId);
+  const events = collectOwnerEvents(t, discordId);
+
+  await runLocalSyncViewAction({
+    action: "apply",
+    jobId: job.jobId,
+    discordId,
+    User: UserModel,
+    PreviewModel,
+    applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
+  });
+
+  assert.equal(PreviewModel.value.status, "applied");
+  assert.deepEqual(events, [{ discordId, jobId: job.jobId }]);
+});
+
+test("a repeated apply of an applied job does not refresh the owner again", async (t) => {
+  const discordId = "owner-repeat-apply";
+  const { job, deps } = makeOwnerApply(discordId);
+  const events = collectOwnerEvents(t, discordId);
+
+  const first = await applyPreviewJob(job.jobId, discordId, deps);
+  const second = await applyPreviewJob(job.jobId, discordId, deps);
+
+  assert.equal(first.state, "applied");
+  assert.equal(second.state, "applied");
+  assert.equal(events.length, 1);
+});
+
+for (const scenario of [
+  {
+    name: "a busy sync slot",
+    state: "busy",
+    deps: {
+      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
+      releaseAutoManageSyncSlot: () => {},
+    },
+  },
+  {
+    name: "a write error",
+    state: "pending",
+    deps: { applyRaidSetForDiscordId: async () => null },
+  },
+  {
+    name: "a disabled Local Sync mode",
+    state: "failed",
+    userOverrides: { localSyncEnabled: false },
+  },
+  {
+    name: "an expired job",
+    state: "expired",
+    jobOverrides: { expiresAt: new Date(Date.now() - 1000) },
+  },
+]) {
+  test(`${scenario.name} does not refresh the job owner's open cards`, async (t) => {
+    const discordId = "owner-not-applied";
+    const { job, deps } = makeOwnerApply(discordId, scenario);
+    const events = collectOwnerEvents(t, discordId);
+
+    const outcome = await applyPreviewJob(job.jobId, discordId, deps);
+
+    assert.equal(outcome.state, scenario.state);
+    assert.deepEqual(events, []);
+  });
+}
+
+test("an apply that lost its lease before finishing does not refresh the job owner", async (t) => {
+  const discordId = "owner-lost-lease";
+  const { job, PreviewModel, deps } = makeOwnerApply(discordId);
+  const events = collectOwnerEvents(t, discordId);
+  const lostFinish = {
+    findOne: (filter) => PreviewModel.findOne(filter),
+    findOneAndUpdate: async (filter, update) => (
+      update.$set.status === "applied" ? null : PreviewModel.findOneAndUpdate(filter, update)
+    ),
+  };
+
+  const outcome = await applyPreviewJob(job.jobId, discordId, { ...deps, PreviewModel: lostFinish });
+
+  assert.equal(outcome.state, "applying");
+  assert.deepEqual(events, []);
+});
+
+test("a failing owner refresh event leaves an applied job applied", async (t) => {
+  const discordId = "owner-event-throws";
+  const { job, PreviewModel, deps } = makeOwnerApply(discordId, {
+    deps: {
+      publishLocalSyncApplied: () => {
+        throw new Error("listener down");
+      },
+    },
+  });
+  const warnings = [];
+  t.mock.method(console, "warn", (...args) => { warnings.push(args.join(" ")); });
+
+  const outcome = await applyPreviewJob(job.jobId, discordId, deps);
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.state, "applied");
+  assert.equal(PreviewModel.value.status, "applied");
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /owner refresh event failed.*listener down/);
 });
 
 test("party write failures retain source authorization and retry only unfinished targets", async () => {
