@@ -1867,3 +1867,70 @@ test("raid-task remove through createRaidTaskCommand answers a share revoked dur
   assert.match(replies[0].title, /Share removed/);
   assert.match(replies[0].description, /no longer shares this roster with you/);
 });
+
+test("raid-task clear confirm through createRaidTaskCommand answers a share revoked before the save with the removed notice", async (t) => {
+  const { clearUserLanguageCache } = require("../bot/services/i18n");
+  const RosterShare = require("../bot/models/RosterShare");
+  const UserModel = require("../bot/models/user");
+  const { saveWithRetry } = UserModel;
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
+  clearUserLanguageCache();
+  t.after(clearUserLanguageCache);
+
+  const ownerId = "test-manager-1";
+  let shareListed = true;
+  t.mock.method(RosterShare, "find", () => ({
+    lean: async () => (shareListed ? [{ ownerDiscordId: ownerId, accessLevel: "edit" }] : []),
+  }));
+  t.mock.method(UserModel, "find", () => ({
+    lean: async () => [{ discordId: ownerId, accounts: [{ accountName: "Shared", characters: [] }] }],
+  }));
+
+  let saves = 0;
+  const ownerDoc = {
+    accounts: [{
+      accountName: "Shared",
+      characters: [{ name: "Alpha", sideTasks: [{ taskId: "task", name: "Una", reset: "daily" }] }],
+    }],
+    save: async () => { saves += 1; },
+  };
+  class NoticeEmbed {
+    setColor() { return this; }
+    setTitle(title) { this.title = title; return this; }
+    setDescription(description) { this.description = description; return this; }
+  }
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: NoticeEmbed,
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class {},
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    User: {
+      findOne: (query, projection) => {
+        if (projection) return { lean: async () => ({ language: "en" }) };
+        assert.equal(query.discordId, ownerId);
+        // The owner revokes the share after the confirm click resolved it and
+        // before the first save attempt revalidates it.
+        shareListed = false;
+        return Promise.resolve(ownerDoc);
+      },
+    },
+    saveWithRetry,
+    loadUserForAutocomplete: async () => ({ accounts: [] }),
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+  const edits = [];
+
+  await handlers.handleRaidTaskButton({
+    user: { id: "task-wiring-clear-viewer" },
+    customId: "raid-task:clear-confirm:Shared:Alpha",
+    deferUpdate: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  assert.equal(saves, 0, "a revoked share must not clear the owner's tasks");
+  assert.equal(edits.length, 1);
+  assert.deepEqual(edits[0].components, []);
+  assert.match(edits[0].embeds[0].title, /Share removed/);
+  assert.match(edits[0].embeds[0].description, /no longer shares this roster with you/);
+});
