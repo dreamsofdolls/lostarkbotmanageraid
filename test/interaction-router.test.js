@@ -62,7 +62,6 @@ function createTestRouter({ handleSlashCommand, log, UserModel }) {
     allowedCommands: ["raid-status"],
     handleSlashCommand,
     autocompleteHandlers: {},
-    selectHandlers: {},
     buttonRoutes: [],
     instanceIdentity:
       "service=raid-manage environment=production deployment=deploy-1 replica=replica-1 pid=42",

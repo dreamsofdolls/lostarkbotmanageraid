@@ -17,6 +17,8 @@ const {
   getCharacterName,
   getCharacterClass,
 } = require("./shared");
+const { getRaidModeLabel, getRaidSpecificModeLabel } = require("./labels");
+const { t } = require("../../../services/i18n");
 const {
   RAID_REQUIREMENTS,
   areEquivalentRaidModes,
@@ -307,10 +309,6 @@ function formatRaidStatusLine(raid, lang) {
   // signature).
   let label = raid.raidName;
   if (lang) {
-    // Lazy-require to avoid circular import: labels.js → domain/raid-catalog.js
-    // → (potentially) other utils. Pull at call time so the dependency
-    // graph stays clean at module load.
-    const { getRaidModeLabel } = require("./labels");
     label = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || raid.raidName;
   }
   // Trailing lock marks a raid that is NOT taking a gold slot this week - the
@@ -322,8 +320,6 @@ function formatRaidStatusLine(raid, lang) {
   const notReceivingMark = raid.goldReceives === false ? ` ${UI.icons.lock}` : "";
   let pendingMark = "";
   if (lang && raid.pendingModeKey && raid.pendingModeKey !== raid.modeKey) {
-    const { t } = require("../../../services/i18n");
-    const { getRaidSpecificModeLabel } = require("./labels");
     const modeLabel = getRaidSpecificModeLabel(raid.raidKey, raid.pendingModeKey, lang)
       || RAID_REQUIREMENTS[raid.raidKey]?.modes?.[raid.pendingModeKey]?.label
       || raid.pendingModeKey;

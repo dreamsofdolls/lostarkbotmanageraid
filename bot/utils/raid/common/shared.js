@@ -3,6 +3,7 @@ const {
   SHORTHAND_MODE_ALIASES,
   buildModeAliasMap,
 } = require("../../../domain/difficulty-aliases");
+const { t } = require("../../../services/i18n");
 
 const UI = {
   colors: {
@@ -252,9 +253,8 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
  * raid floor).
  */
 function formatProgressTotals(totals, UI, lang) {
-  // Lazy require to avoid circular import at module load. Default lang
-  // back-compat: omit `lang` and t() falls back to vi via the resolver.
-  const { t } = require("../../../services/i18n");
+  // Default lang back-compat: omit `lang` and t() falls back to vi via the
+  // resolver.
   const done = Number(totals?.done) || 0;
   const partial = Number(totals?.partial) || 0;
   const pending = Number(totals?.pending) || 0;
@@ -282,8 +282,6 @@ function formatProgressTotals(totals, UI, lang) {
  * @returns {string} the freshness line
  */
 function formatAutoManageFreshnessLine({ lastSyncAt, readyAt }, UI, lang) {
-  // Lazy require, as in formatProgressTotals, to avoid a circular import.
-  const { t } = require("../../../services/i18n");
   const lastSync = lastSyncAt > 0
     ? `${UI.icons.reset} ${t("raid-status.freshness.lastSynced", lang)} <t:${Math.floor(lastSyncAt / 1000)}:R>`
     : `${UI.icons.reset} ${t("raid-status.freshness.neverSynced", lang)}`;

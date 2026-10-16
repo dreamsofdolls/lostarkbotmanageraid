@@ -231,8 +231,8 @@ function addPreviewFields(embed, job, summary, lang, options = {}) {
   // Preferred body: the gold view's two columns, changed characters only.
   if (addChangedCharacterFields(embed, summary, lang, options)) return;
 
-  // Fallback for previews whose stored projection predates
-  // accountsAfterSync · delta list only, no per-raid context.
+  // Fallback for a summary without accountsAfterSync (the stored projection
+  // never carries it) · delta list only, no per-raid context.
   const grouped = [...groupPreviewBuckets(job, lang, summary).entries()];
   for (const [charName, raids] of grouped.slice(0, MAX_CHARACTER_FIELDS)) {
     const lines = raids.slice(0, MAX_RAIDS_PER_CHARACTER).map((raid) =>

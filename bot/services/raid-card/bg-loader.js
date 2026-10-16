@@ -187,6 +187,4 @@ module.exports = {
   bufferFromStored,
   getStoredImages,
   _cache: cache,
-  _CACHE_CAP: CACHE_CAP,
-  _selectImageIndex: selectImageIndex,
 };

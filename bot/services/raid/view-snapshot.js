@@ -1,8 +1,10 @@
 /**
  * services/raid/view-snapshot.js
  * View-snapshot service: returns a plain-object snapshot of a User
- * doc for read paths (/raid-status, /raid-check) without mutating the
- * Mongoose document. Centralises the toObject() unwrap + the
+ * doc for read paths (/raid-status, /raid-check). Runs ensureFreshWeek
+ * on the seed doc in place and persists a week advance, stale roster
+ * refresh or auto-manage piggyback through saveWithRetry before the
+ * snapshot is returned. Centralises the toObject() unwrap + the
  * ensureFreshWeek pass so callers don't accidentally render last
  * week's progress on a stale doc.
  */

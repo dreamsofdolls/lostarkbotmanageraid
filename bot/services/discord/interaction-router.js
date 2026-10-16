@@ -130,7 +130,6 @@ function createInteractionDeduper({
  * @property {string[]} allowedCommands - Slash command allowlist; non-matching commands are ignored.
  * @property {(interaction) => Promise<void>} handleSlashCommand - Dispatcher for any slash command in `allowedCommands`.
  * @property {Record<string, (interaction) => Promise<void>>} autocompleteHandlers - Per-command autocomplete handlers, keyed by commandName.
- * @property {Record<string, (interaction) => Promise<void>>} selectHandlers - String-select handlers, keyed by exact customId. Tried first.
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [selectRoutes] - Optional select handlers matched by customId prefix (first match wins). Used when the customId carries dynamic data (session IDs, etc.).
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} buttonRoutes - Button handlers matched by customId prefix (first match wins).
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [modalRoutes] - Modal submission handlers matched by customId prefix.
@@ -148,7 +147,6 @@ function createInteractionRouter({
   allowedCommands,
   handleSlashCommand,
   autocompleteHandlers,
-  selectHandlers,
   selectRoutes = [],
   buttonRoutes,
   modalRoutes = [],
@@ -197,15 +195,9 @@ function createInteractionRouter({
     // String Select - the add-member flow uses a native user picker. Optional
     // call so callers/mocks without the method (older tests) stay safe.
     if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu?.()) {
-      // Exact-match table first (covers static customIds like
-      // "raid-help:select"); then prefix-match routes (used when the
-      // customId carries dynamic data such as a session ID, the same shape
-      // as buttonRoutes below). First matching prefix wins.
-      const handler = selectHandlers[interaction.customId];
-      if (handler) {
-        await handler(interaction);
-        return;
-      }
+      // Prefix-match routes, the same shape as buttonRoutes below (the
+      // customId can carry dynamic data such as a session ID). First
+      // matching prefix wins.
       for (const route of selectRoutes) {
         if (interaction.customId.startsWith(route.prefix)) {
           await route.handle(interaction);

@@ -12,9 +12,10 @@ const User = require("../../../models/user");
 const { saveWithRetry } = require("../../../models/user");
 const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
-const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
 const { t, getGuildLanguage } = require("../../i18n");
 const {
+  RAID_GROUP_KEYS,
+  getGateKeys,
   getRequirementFor,
   normalizeRaidModeKey,
   setAssignedRaidMode,
@@ -36,8 +37,6 @@ const {
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
 let weeklyResetSchedulerStartedAtMs = null;
-
-const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 /**
  * ISO-week string for a given moment, computed in UTC.
@@ -83,8 +82,8 @@ function applyPendingModeAfterGateClear(character, assignedRaids, raidKey) {
   const plain = toPlainAssignedRaid(raid);
   const requirement = pendingModeKey ? getRequirementFor(raidKey, pendingModeKey) : null;
   const itemLevel = Number(character?.itemLevel) || 0;
-  const hasPreservedClear = Object.keys(plain).some((gate) => (
-    /^G\d+$/i.test(gate) && Number(plain[gate]?.completedDate) > 0
+  const hasPreservedClear = getGateKeys(plain).some((gate) => (
+    Number(plain[gate]?.completedDate) > 0
   ));
 
   if (!requirement || itemLevel < requirement.minItemLevel || hasPreservedClear) {
@@ -107,7 +106,7 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
     delete raid.goldOverride;
     delete raid.goldDisabled;
     delete raid.goldForced;
-    const gateKeys = Object.keys(raid).filter((gate) => /^G\d+$/i.test(gate));
+    const gateKeys = getGateKeys(raid);
     for (const gate of gateKeys) {
       if (!raid[gate]) continue;
       if (shouldPreserveCurrentWeekCompletion(raid[gate].completedDate, preserveSinceMs)) {
@@ -138,7 +137,8 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
  * current week are skipped, and the announcement marker self-deletes
  * after WEEKLY_ANNOUNCEMENT_TTL_MS so a missed tick doesn't double-post.
  * @param {Date} [now=new Date()] - timestamp override for tests
- * @returns {Promise<void>}
+ * @returns {Promise<{skipped: boolean, resetKey: string, matchedCount: number, modifiedCount: number}>}
+ *   the target week key, how many stale users were found and how many were saved
  */
 async function resetWeekly(now = new Date()) {
   const targetKey = getTargetResetKey(now);

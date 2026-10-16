@@ -420,5 +420,4 @@ function createRosterRefreshService(deps) {
 module.exports = {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
-  ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 };

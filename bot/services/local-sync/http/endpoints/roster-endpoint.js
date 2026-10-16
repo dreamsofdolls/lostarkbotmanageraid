@@ -30,6 +30,7 @@ const {
  *   {
  *     ok: true,
  *     discordId,
+ *     scope,
  *     accounts: [{
  *       accountName,
  *       characters: [{

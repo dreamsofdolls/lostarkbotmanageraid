@@ -668,11 +668,9 @@ window.addEventListener("beforeunload", () => {
 
 // ----- 3. wa-sqlite query (streaming VFS) -----
 //
-// Replaces the previous sql.js full-file load. wa-sqlite + FileBackedVFS
-// only reads the SQLite B-tree pages touched by the query (~tens
-// of MB on a 4 GB DB), so file size is no longer a wall. Trade-off: more
-// async coordination + asyncify-built WASM is ~700 KB vs sql.js 1.5 MB,
-// roughly even.
+// wa-sqlite + FileBackedVFS only reads the SQLite B-tree pages touched by
+// the query (~tens of MB on a 4 GB DB), so file size is no limit. Trade-off:
+// more async coordination, and the asyncify-built WASM is ~700 KB.
 
 const WA_SQLITE_BASE = "/sync/vendor/wa-sqlite";
 

@@ -34,13 +34,9 @@ function createRaidStatusTaskUi(deps) {
   });
 
   return {
-    ALL_CHARS_SENTINEL: filterState.ALL_CHARS_SENTINEL,
     buildTaskViewEmbed: createTaskViewEmbedBuilder(context),
     buildViewToggleRow: createViewToggleRow(context),
     buildSharedTaskToggleRow: createSharedTaskToggleRow(context),
-    charsWithTasksOnPage: filterState.charsWithTasksOnPage,
-    resolveTaskCharFilter: filterState.resolveTaskCharFilter,
-    aggregateTasksOnPage: filterState.aggregateTasksOnPage,
     buildTaskCharFilterRow,
     buildTaskToggleRow,
   };

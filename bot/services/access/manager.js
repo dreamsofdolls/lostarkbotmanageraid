@@ -13,6 +13,7 @@ const {
   parseEnvAllowlistIds,
   createEnvAllowlistChecker,
 } = require("./env-allowlist");
+const { ROSTER_REFRESH_COOLDOWN_MS } = require("../roster/refresh");
 
 const DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
 const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 1000;
@@ -24,7 +25,6 @@ const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 1000;
 // trigger a fresh scrape during operational decisions (rolling raids,
 // verifying iLvl just before invites) without waiting hours. Mirrors the
 // existing manager privilege on /raid-auto-manage sync (15s vs 10m).
-const DEFAULT_ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const MANAGER_ROSTER_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 
 function parseManagerIds(rawEnvValue) {
@@ -47,7 +47,7 @@ function getAutoManageCooldownMs(discordId) {
 function getRosterRefreshCooldownMs(discordId) {
   return isManagerId(discordId)
     ? MANAGER_ROSTER_REFRESH_COOLDOWN_MS
-    : DEFAULT_ROSTER_REFRESH_COOLDOWN_MS;
+    : ROSTER_REFRESH_COOLDOWN_MS;
 }
 
 // First entry in the allowlist - used as the "primary admin to ping"
@@ -67,5 +67,4 @@ module.exports = {
   getPrimaryManagerId,
   parseManagerIds,
   DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
-  MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
 };

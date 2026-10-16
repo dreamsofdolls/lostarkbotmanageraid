@@ -3,9 +3,10 @@
  * HMAC-SHA256 mini-JWT for the local-sync web companion. Short-lived
  * (30-minute default), constant-time verify, secret-rotation by env bump.
  * Stored token + expAt fields on User allow hard-revocation: minting a
- * new token (rotateLocalSyncToken) kills all older URLs, and a
- * completed sync shrinks the stored expiry so a leaked link is only
- * useful for ~60s after raid-clear data lands.
+ * new token (rotateLocalSyncToken) kills all older URLs. A sync applied
+ * from Discord shrinks the stored expiry so a leaked link is only useful
+ * for ~60s after raid-clear data lands; the Local Reader apply keeps the
+ * token at its full lifetime.
  */
 
 "use strict";
@@ -34,7 +35,7 @@ const {
  */
 
 const DEFAULT_TTL_SEC = 30 * 60; // 30 minutes - enough for file pick/preview while keeping a bounded replay window
-const POST_SYNC_TTL_SEC = 60; // After a write lands, keep the URL useful for only ~1 minute.
+const POST_SYNC_TTL_SEC = 60; // Expiry set after a Discord-side apply; the Local Reader apply skips it.
 const pendingResumeTokens = new WeakMap();
 
 function getSecret() {
@@ -70,7 +71,7 @@ function sign(payloadB64) {
  * window, generous enough for "user opens DM, opens link, drops a large
  * file, hits sync" without racing the clock.
  *
- * Optional `lang` (Phase i18n): when present, encoded in the payload so
+ * Optional `lang`: when present, encoded in the payload so
  * the web companion can render in the user's preferred language without
  * a separate round-trip. Stale at most 30 minutes (token TTL) - if user
  * runs /raid-language after mint and reuses the URL, the page renders

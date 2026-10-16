@@ -46,11 +46,21 @@ function flattenRegisteredAccounts(userDocs, executorId) {
 
 /**
  * Build the roster-owner resolver service.
- * @param {object} deps - injected dependencies (Mongoose User +
- *   RosterShare models, normalizeName helper · see destructure).
- * @returns {{resolveRosterOwner: Function}} a single helper that
- *   returns `{ownerDoc, ownerLabel, viaShared, sharePermission}` for
- *   a (callerDiscordId, accountName) pair.
+ * @param {object} deps - injected dependencies
+ * @param {object} deps.User - Mongoose User model
+ * @param {Function} deps.normalizeName - name normalizer
+ * @param {Function} deps.loadUserForAutocomplete - loads the executor's own user doc
+ * @param {Function} [deps.loadAccountsRegisteredBy] - loads user docs holding accounts registered by the executor
+ * @param {Function} deps.getAccessibleAccounts - lists accounts shared with the executor
+ * @param {{warn: Function}} [deps.log] - logger
+ * @returns {{
+ *   flattenRegisteredAccounts: Function,
+ *   resolveRosterOwner: Function,
+ * }} `resolveRosterOwner(executorId, rosterName, context)` resolves to `null`
+ *   when no roster matches, `{ambiguous: true, matches}` when several helper
+ *   registrations match, and otherwise
+ *   `{ownerDiscordId, ownerLabel, ownerDoc, account, actingForOther}`, plus
+ *   `viaShare: true` and `shareLevel` when the roster comes from a share
  */
 function createRosterOwnerResolver({
   User,

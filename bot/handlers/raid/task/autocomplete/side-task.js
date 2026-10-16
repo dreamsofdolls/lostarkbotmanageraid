@@ -1,6 +1,9 @@
 "use strict";
 
 const {
+  truncateChoice,
+} = require("../../../../utils/raid/common/autocomplete");
+const {
   normalizeName,
   findCharacterInUser,
 } = require("../../../../utils/raid/tasks/side-tasks");
@@ -41,13 +44,9 @@ function createSideTaskAutocompleteHandlers({
       }
     }
     candidates.sort((a, b) => b.createdAt - a.createdAt);
-    const choices = candidates.slice(0, 25).map((c) => {
-      const label = `${c.name} \u00b7 ${c.reset}`;
-      return {
-        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-        value: c.name.length > 100 ? c.name.slice(0, 100) : c.name,
-      };
-    });
+    const choices = candidates.slice(0, 25).map((c) =>
+      truncateChoice(`${c.name} \u00b7 ${c.reset}`, c.name)
+    );
     await interaction.respond(choices).catch(() => {});
   }
 
@@ -81,10 +80,7 @@ function createSideTaskAutocompleteHandlers({
       .map((task) => {
         const icon = task.reset === "daily" ? "\ud83c\udf12" : "\ud83d\udcc5";
         const label = `${icon} ${task.name} \u00b7 ${task.reset}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value: task.taskId,
-        };
+        return truncateChoice(label, task.taskId);
       });
     await interaction.respond(choices).catch(() => {});
   }

@@ -15,7 +15,7 @@ const {
 } = require("discord.js");
 const GuildConfig = require("./models/guildConfig");
 const User = require("./models/user");
-const { saveWithRetry } = require("./models/user");
+const { saveWithRetry } = User;
 const {
   ensureFreshWeek,
   getTargetResetKey,
@@ -32,7 +32,6 @@ const {
   getCharacterName,
   getCharacterClass,
   truncateText,
-  formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
   buildDiscordIdentityFields,
@@ -234,11 +233,6 @@ const commands = createRaidCommandDefinitions({
   announcementTypeKeys,
   announcementTypeEntry,
 });
-
-// Composite key separator (Unit Separator \x1f) for maps keyed by
-// discordId + accountName. Shared between rosterBuckets, rosterStats,
-// and rosterRefreshMap so lookups line up across the three structures.
-const ROSTER_KEY_SEP = "\x1f";
 
 // Generic Prev/Next pagination row builder. Each command passes its own
 // customId prefix so its collector matches only its own buttons:
@@ -454,7 +448,6 @@ const {
   applyRaidSetBatchForDiscordId,
 } = createRaidSetCommand({
   EmbedBuilder,
-  MessageFlags,
   UI,
   User,
   saveWithRetry,
@@ -484,7 +477,6 @@ const {
   buildStatusFooterText,
 } = createRaidStatusCommand({
   EmbedBuilder,
-  ComponentType,
   StringSelectMenuBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -496,7 +488,6 @@ const {
   ensureFreshWeek,
   getCharacterName,
   truncateText,
-  formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
   summarizeRaidProgress,
@@ -522,7 +513,6 @@ const {
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getAutoManageCooldownMs,
   getRosterRefreshCooldownMs,
-  isManagerId,
   // Local Sync view (`status-local:` buttons).
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
@@ -537,19 +527,12 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ComponentType,
   MessageFlags,
   UI,
   User,
-  saveWithRetry,
   ensureFreshWeek,
-  normalizeName,
-  toModeLabel,
   getCharacterName,
   truncateText,
-  getGatesForRaid,
-  ensureAssignedRaids,
-  getGateKeys,
   buildAccountPageEmbed,
   buildStatusFooterText,
   summarizeRaidProgress,
@@ -567,10 +550,7 @@ const {
   stampAutoManageAttempt,
   weekResetStartMs,
   isRaidLeader,
-  isManagerId,
-  RAID_REQUIREMENT_MAP,
   RAID_CHECK_USER_QUERY_FIELDS,
-  ROSTER_KEY_SEP,
   raidCheckRefreshLimiter,
   raidCheckSyncLimiter,
   discordUserLimiter,
@@ -782,7 +762,6 @@ const {
 
 const { handleRaidShareCommand } = createRaidShareCommand({
   EmbedBuilder,
-  MessageFlags,
   UI,
 });
 
@@ -810,10 +789,8 @@ const {
 const { handleRaidBgCommand } = createRaidBgCommand({
   User,
   getAccessibleAccounts,
-  saveWithRetry,
   AttachmentBuilder,
   EmbedBuilder,
-  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -825,15 +802,11 @@ const {
   handleRemoveRosterCommand,
 } = createRemoveRosterCommand({
   EmbedBuilder,
-  MessageFlags,
   UI,
   User,
   saveWithRetry,
-  ensureFreshWeek,
   normalizeName,
   getCharacterName,
-  getCharacterClass,
-  createCharacterId,
   loadUserForAutocomplete,
 });
 
@@ -842,7 +815,6 @@ const {
   handleRaidAnnounceAutocomplete,
 } = createRaidAnnounceCommand({
   EmbedBuilder,
-  MessageFlags,
   PermissionFlagsBits,
   UI,
   User,
@@ -867,7 +839,6 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  MessageFlags,
   UI,
   User,
   saveWithRetry,
@@ -911,7 +882,6 @@ const {
   handleRaidChannelAutocomplete,
 } = createRaidChannelCommand({
   EmbedBuilder,
-  MessageFlags,
   PermissionFlagsBits,
   UI,
   User,

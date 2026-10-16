@@ -3,11 +3,11 @@
 /**
  * services/discord/resolve-guild-channel.js
  * Shared "resolve a guild channel by ID" helper for the announcement
- * schedulers (auto-cleanup, maintenance, world-event, weekly-reset, stuck-nudge). Each
- * site previously inlined the same cache-then-fetch dance; centralising it
- * keeps the cache-miss fetch fallback + swallow-on-failure behaviour
- * identical across every scheduler, so a future change to the lookup rules
- * only has to happen in one place.
+ * schedulers (auto-cleanup, maintenance, world-event, weekly-reset,
+ * daily-roster-announcement). Keeps the cache-then-fetch lookup, the
+ * cache-miss fetch fallback and the swallow-on-failure behaviour identical
+ * across every scheduler, so a change to the lookup rules only has to
+ * happen in one place.
  */
 
 /**

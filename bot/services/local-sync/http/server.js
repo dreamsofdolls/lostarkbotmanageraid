@@ -1,7 +1,7 @@
 /**
  * services/local-sync/http/server.js
  * Node-builtin HTTP server hosting the local-sync web companion +
- * JSON API. Stays Express-free (under 200 LOC) by exposing
+ * JSON API. Stays Express-free by exposing
  * `apiHandlers` as a `<METHOD> <pathname>` lookup so callers can wire
  * additional endpoints without a router. Sandboxed to `webDir` (path
  * traversal rejected before disk read) and bound to 0.0.0.0 so the
@@ -71,9 +71,8 @@ async function tryReadStaticFile(webDir, requestPath) {
   // to index.html so the user can land on bare /sync without a 404.
   let rel = requestPath.replace(/^\/sync\/?/, "");
   if (rel === "" || rel === "index") rel = "index.html";
-  // Reject decoded traversal attempts up front. resolve() collapses
-  // ../ but a request for `/sync/..%2F..%2Fbot.js` still tries to
-  // escape webDir; the join + startsWith check below catches that.
+  // The pathname is not percent-decoded, so `..%2F` stays a literal file name
+  // under webDir. tryReadFileFromRoot rejects any resolved path outside webDir.
   return tryReadFileFromRoot(webDir, rel);
 }
 

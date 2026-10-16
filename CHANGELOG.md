@@ -16,6 +16,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A Local Sync apply started from the Discord console or the Local Sync view of `/raid-status` now refreshes the owner's other open `/raid-status` cards and shared viewers' cards, as a Reader apply already did.
 - `/raid-log` no longer switches an English or Japanese user to Vietnamese when their roster lookup fails.
 
+### Changed (internal)
+- `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.
+
 ## 2026-10-11
 
 ### Fixed

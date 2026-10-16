@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
-const { readPartyMetrics, readSupportShare } = require("../bot/services/raid-log/metrics");
+const { readPartyMetrics } = require("../bot/services/raid-log/metrics");
 
 const fixture = name => fs.readFileSync(path.join(__dirname, "fixtures", "raid-log", name), "utf8");
 // page.evaluate hands back plain JSON; doing the same keeps the page's objects
@@ -48,12 +48,4 @@ test("a column Bible stops printing reads as null and the rest still parse", () 
   });
   assert.ok(rows.every(row => row.counters === null));
   assert.equal(rows[0].damageShare, 24.6);
-});
-
-test("support bD% is the first row's figure on the detail view, null elsewhere", () => {
-  assert.equal(run(fixture("zEn59i4-support-canameo.html"), readSupportShare), 31.8);
-  assert.equal(run(fixture("zEn59i4-overview-bracketed.html"), readSupportShare), null);
-  assert.equal(run(fixture("zEn59i4-support-canameo.html"), readSupportShare, document => {
-    for (const cell of document.querySelectorAll("thead th")) if (cell.textContent.trim() === "bD%") cell.textContent = "";
-  }), null);
 });

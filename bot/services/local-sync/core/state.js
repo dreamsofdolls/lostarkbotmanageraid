@@ -20,7 +20,7 @@ const {
  * sources at a time:
  *   - bible auto-sync (autoManageEnabled, existing) - bot pulls clears
  *     from lostark.bible periodically. Requires Public Log on.
- *   - local sync (localSyncEnabled, new in 2026-05-09) - user grants the
+ *   - local sync (localSyncEnabled) - user grants the
  *     web companion FSA access to encounters.db; companion POSTs deltas.
  *
  * Mutex is enforced at the Mongo write layer via conditional

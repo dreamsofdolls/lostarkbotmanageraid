@@ -2,8 +2,9 @@
 
 /**
  * bot/services/raid-log/metrics.js
- * In-page readers for the figures the /raid-log card shows. Both run inside
- * Bible's page through page.evaluate, so each function is self-contained.
+ * readPartyMetrics: in-page reader for the party figures the /raid-log card
+ * shows. It runs inside Bible's page through page.evaluate, so the function
+ * is self-contained.
  * Bible's header row has one more cell than its data rows (the name cell
  * spans two columns), so a column is located by colSpan position.
  */
@@ -59,29 +60,4 @@ function readPartyMetrics() {
   });
 }
 
-// Runs in the page, on a player's detail view. The first row is the
-// player's own total; returns its bD% or null.
-function readSupportShare() {
-  const text = node => (node?.textContent || "").trim();
-  const table = document.querySelector('[aria-label="Return to Overview"]')?.closest("table");
-  if (!table?.tHead || !table.tBodies[0]?.rows[0]) return null;
-  let position = 0;
-  let target = -1;
-  for (const cell of table.tHead.rows[0].cells) {
-    if (text(cell) === "bD%") target = position;
-    position += cell.colSpan || 1;
-  }
-  if (target < 0) return null;
-  let start = 0;
-  for (const cell of table.tBodies[0].rows[0].cells) {
-    const span = cell.colSpan || 1;
-    if (target >= start && target < start + span) {
-      const match = /^([\d.]+)%$/.exec(text(cell));
-      return match ? Number(match[1]) : null;
-    }
-    start += span;
-  }
-  return null;
-}
-
-module.exports = { readPartyMetrics, readSupportShare };
+module.exports = { readPartyMetrics };

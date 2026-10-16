@@ -8,8 +8,6 @@ const { foldName: defaultFoldName } = require("../../../utils/raid/common/shared
  * Build the seed-and-retry Bible roster fetcher.
  *
  * The three fallback messages are read from `raid-edit-roster.fallback.*`.
- * They were previously hardcoded Vietnamese here even though all three
- * locales already carried the translation, so en/jp users saw Vietnamese.
  *
  * @param {Object} deps
  * @param {Function} deps.fetchRosterCharacters

@@ -46,7 +46,5 @@ function assertPartyTargetFanout(partyDeltas) {
 }
 
 module.exports = {
-  MAX_ENCOUNTER_PARTICIPANTS,
-  MAX_PARTY_TARGETS_PER_SOURCE,
   assertPartyTargetFanout,
 };

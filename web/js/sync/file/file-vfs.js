@@ -2,17 +2,17 @@
 // object via file.slice() instead of materializing the whole DB into a
 // single ArrayBuffer.
 //
-// Why this exists: sql.js (the previous library) requires the entire DB
-// passed as a Uint8Array to its constructor. For LOA Logs encounters.db
-// files in the multi-GB range, that single buffer blows past Chrome's
-// ArrayBuffer cap (~2 GB practical limit) and the read fails with
-// NotReadableError. wa-sqlite supports async VFS with asyncify; SQLite
-// only fetches the B-tree pages it needs for a query (typically a few
-// MB even for a 4 GB DB), so file.slice() reads work fine.
+// Why this exists: loading the entire DB into one Uint8Array fails for LOA
+// Logs encounters.db files in the multi-GB range, because that single
+// buffer blows past Chrome's ArrayBuffer cap (~2 GB practical limit) and the
+// read fails with NotReadableError. wa-sqlite supports async VFS with
+// asyncify; SQLite only fetches the B-tree pages it needs for a query
+// (typically a few MB even for a 4 GB DB), so file.slice() reads work fine.
 //
 // Read-only by design: the user's encounters.db file is never modified.
-// jWrite / jTruncate / jSync return SQLITE_READONLY so any accidental
-// write attempt returns SQLITE_READONLY instead of modifying the file.
+// jWrite, jTruncate and jDelete return SQLITE_READONLY so an accidental
+// write attempt fails instead of modifying the file. jSync is a no-op that
+// returns SQLITE_OK because nothing is ever dirty.
 
 import { FacadeVFS } from "/sync/vendor/wa-sqlite/src/FacadeVFS.js";
 import * as VFS from "/sync/vendor/wa-sqlite/src/VFS.js";
@@ -96,8 +96,8 @@ export class FileBackedVFS extends FacadeVFS {
   }
 
   // Write paths refuse - this VFS is for reading user-supplied files
-  // ONLY. If SQLite somehow tries to write, surface a hard error so the
-  // failure is visible in the console rather than silently no-op'd.
+  // ONLY. A write attempt gets SQLITE_READONLY, which SQLite reports to
+  // its caller as an error.
   async jWrite(_fileId, _pData, _iOffset) {
     return VFS.SQLITE_READONLY;
   }

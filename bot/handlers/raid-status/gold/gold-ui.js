@@ -27,8 +27,6 @@ function createRaidStatusGoldUi(deps) {
     buildGoldCharFilterRow,
     buildGoldModeRow,
     buildGoldToggleRow,
-    goldCharactersOnPage: filterState.goldCharactersOnPage,
-    resolveGoldCharFilter: filterState.resolveGoldCharFilter,
   };
 }
 

@@ -66,7 +66,6 @@ function createRaidInteractionRouter({
       "raid-task": handlers.handleRaidTaskAutocomplete,
       "raid-gold-earner": handlers.handleRaidGoldEarnerAutocomplete,
     },
-    selectHandlers: {},
     modalRoutes: [
       { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },
     ],

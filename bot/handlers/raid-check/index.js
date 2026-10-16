@@ -2,7 +2,7 @@
  * handlers/raid-check/index.js
  * Compose root for /raid-check (Manager-only cross-raid overview).
  * Wires the sync flow + all-mode + auto-manage UI into one handler bag
- * dispatched from commands.js. Owns the per-session pagination timer.
+ * dispatched from commands.js.
  */
 
 const { createAllModeHandler } = require("./all-mode/all-mode");

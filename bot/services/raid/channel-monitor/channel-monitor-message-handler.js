@@ -239,14 +239,7 @@ function createRaidChannelMessageHandler({
       return;
     }
 
-    const updates = Array.isArray(resolvedUpdate.updates)
-      ? resolvedUpdate.updates
-      : [{
-        raidMeta: resolvedUpdate.raidMeta,
-        statusType: resolvedUpdate.statusType,
-        effectiveGates: resolvedUpdate.effectiveGates,
-      }];
-    const { charNames } = resolvedUpdate;
+    const { updates, charNames } = resolvedUpdate;
     const writeBatch = await resolveRaidChannelWriteBatch({
       authorId: message.author.id,
       charNames,

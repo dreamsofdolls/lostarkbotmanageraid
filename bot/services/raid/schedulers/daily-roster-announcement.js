@@ -339,10 +339,7 @@ function createDailyRosterAnnouncementService({
 }
 
 module.exports = {
-  ANNOUNCEMENT_SUBDOC_KEY,
   DEDUP_FIELD,
-  MESSAGE_KEY,
-  buildDailyRosterGuildQuery,
   buildDailyRosterSummaryPipeline,
   buildUnfinishedRosterQuery,
   createDailyRosterAnnouncementService,

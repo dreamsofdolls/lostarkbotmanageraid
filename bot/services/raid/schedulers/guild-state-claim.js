@@ -57,6 +57,5 @@ async function releaseGuildClaim(options, onError) {
 
 module.exports = {
   claimGuildState,
-  rollbackGuildState,
   releaseGuildClaim,
 };

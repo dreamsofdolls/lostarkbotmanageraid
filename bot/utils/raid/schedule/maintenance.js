@@ -40,7 +40,7 @@ const MAINTENANCE_COUNTDOWN_SLOTS = [
 
 function lookupMaintenanceVariants(slotKey, lang) {
   if (slotKey?.startsWith("T-") && /^T-\d+(?:h|m)$/.test(slotKey)) {
-    const isEarly = ["T-3h", "T-2h", "T-1h"].includes(slotKey);
+    const isEarly = MAINTENANCE_EARLY_SLOTS.some((slot) => slot.key === slotKey);
     const ns = isEarly ? "maintenance-early" : "maintenance-countdown";
     return lookupArray(lang, `announcements.${ns}.${slotKey}`);
   }

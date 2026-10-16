@@ -2,9 +2,7 @@
  * handlers/raid-status/index.js
  * Compose root for /raid-status. Wires the view layer + task UI +
  * sync (auto-manage piggyback + fresh-roster refresh) + filter into
- * one handler bag dispatched from commands.js. Owns the timer that
- * keeps the per-session sync slot from leaking when a user closes
- * the embed.
+ * one handler bag dispatched from commands.js.
  */
 
 const { createRaidStatusView } = require("./view/view");

@@ -4,6 +4,7 @@ const {
   buildPickedCharacterRecord,
   summarizeSavedCharacter,
 } = require("../picker/character-state");
+const { findDuplicateByBibleNames } = require("./session");
 
 function getSessionBibleNameSet(session) {
   return session.bibleNames instanceof Set ? session.bibleNames : new Set();
@@ -18,21 +19,6 @@ function findSeedOrSelectionAccount({ accounts, normalizedSeed, rosterNameSet, n
     }
     return chars.some((character) =>
       rosterNameSet.has(normalizeName(getCharacterName(character)))
-    );
-  });
-}
-
-function findCollidingBibleRosterAccount({
-  accounts,
-  bibleNameSet,
-  normalizeName,
-  getCharacterName,
-}) {
-  if (bibleNameSet.size === 0) return null;
-  return (accounts || []).find((item) => {
-    const chars = Array.isArray(item.characters) ? item.characters : [];
-    return chars.some((character) =>
-      bibleNameSet.has(normalizeName(getCharacterName(character)))
     );
   });
 }
@@ -108,7 +94,7 @@ function createAddRosterPersistence({
         rosterNameSet,
         normalizeName,
         getCharacterName,
-      }) || findCollidingBibleRosterAccount({
+      }) || findDuplicateByBibleNames({
         accounts: userDoc.accounts,
         bibleNameSet,
         normalizeName,

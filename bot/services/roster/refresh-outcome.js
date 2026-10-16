@@ -35,6 +35,5 @@ function buildRosterRefreshNotice(result, lang, notices, vars) {
 }
 
 module.exports = {
-  rosterRefreshOutcome,
   buildRosterRefreshNotice,
 };

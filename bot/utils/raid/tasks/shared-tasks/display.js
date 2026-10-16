@@ -11,6 +11,7 @@ const {
   formatVietnamSourceScheduleLabel,
   resolveScheduledSharedTaskState,
 } = require("./schedule");
+const { t } = require("../../../../services/i18n");
 
 const SHARED_RESET_LABEL_KEY_BY_TYPE = new Map([
   ["daily", "shared-task.reset.daily"],
@@ -19,14 +20,12 @@ const SHARED_RESET_LABEL_KEY_BY_TYPE = new Map([
 ]);
 
 function formatSharedResetLabel(reset, lang) {
-  const { t } = require("../../../../services/i18n");
   const labelKey = SHARED_RESET_LABEL_KEY_BY_TYPE.get(reset)
     || "shared-task.reset.weekly";
   return t(labelKey, lang);
 }
 
 function formatScheduledStatus(state, nextScheduleLabel, fallback, lang) {
-  const { t } = require("../../../../services/i18n");
   const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
   if (state.active && activeEndsAtMs) {
     return t("shared-task.status.nowOpenWithCloses", lang, {
@@ -47,7 +46,6 @@ function formatScheduledStatus(state, nextScheduleLabel, fallback, lang) {
 }
 
 function formatScheduledOptionStatus(state, nextScheduleLabel, fallback, lang) {
-  const { t } = require("../../../../services/i18n");
   if (state.active) return t("shared-task.status.nowOpen", lang);
   const label = state.nextAtMs
     ? formatVietnamScheduleLabel(state.nextAtMs)
@@ -58,7 +56,6 @@ function formatScheduledOptionStatus(state, nextScheduleLabel, fallback, lang) {
 }
 
 function getSharedTaskDisplay(task, now = new Date(), lang) {
-  const { t } = require("../../../../services/i18n");
   const preset = getSharedTaskPreset(task?.preset);
   const name = String(task?.name || preset.defaultName).trim();
   if (task?.reset === SCHEDULED_RESET) {

@@ -1,6 +1,6 @@
 /**
  * services/local-sync/http/endpoints/catalog-endpoint.js
- * GET /api/catalog handler. No auth - the catalog is public (just
+ * GET /api/local-sync/catalog handler. No auth - the catalog is public (just
  * raid/class metadata) and is shipped with a 5-min Cache-Control so
  * web companion page loads stay light.
  */
@@ -20,7 +20,7 @@ const send = createJsonSender({
 });
 
 /**
- * Build the GET /api/catalog handler. Factory shape kept for parity
+ * Build the GET /api/local-sync/catalog handler. Factory shape kept for parity
  * with the other endpoints even though this one takes no deps.
  * @returns {Function} async (req, res) handler
  */
