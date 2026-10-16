@@ -242,13 +242,15 @@ async function runLocalSyncViewAction({
       releaseAutoManageSyncSlot,
     });
     const job = outcome?.job || await getPreviewJob(jobId, jobDeps).catch(() => null) || existing;
-    // A write error lists the gates written in its result, those an earlier
-    // attempt stored included. A thrown apply has no result, so the stored result
-    // of its retryable job is read, which may also come from an earlier attempt.
+    // A write error, a write refused for a disabled scope, and a throw after the
+    // deltas were applied list the gates written in their result, those an
+    // earlier attempt stored included. A throw before that has no result, so the
+    // stored result of its retryable job is read, which may also come from an
+    // earlier attempt.
     // `applied` can therefore be true when this click wrote nothing; the cost is
-    // one reload of unchanged rosters. A busy, claim-lost or scope-disabled
-    // outcome has no result and is not retryable: it wrote nothing, whatever an
-    // earlier attempt stored.
+    // one reload of unchanged rosters. A busy or claim-lost outcome, or a scope
+    // found disabled before any write, has no result and is not retryable: it
+    // wrote nothing, whatever an earlier attempt stored.
     const written = outcome?.result || (outcome?.retryable ? job.result : null);
     return settle(job, outcome?.ok === true || written?.applied?.length > 0);
   }

@@ -928,6 +928,12 @@ for (const scenario of [
     failFinish: true,
   },
   {
+    name: "an apply that threw after its writes and could not release its job",
+    applied: true,
+    failFinish: true,
+    failRelease: true,
+  },
+  {
     name: "an apply whose only write failed",
     applied: false,
     deps: { applyRaidSetForDiscordId: async () => null },
@@ -948,12 +954,16 @@ for (const scenario of [
 ]) {
   test(`an in-card Local Sync view reports ${scenario.name} as applied: ${scenario.applied}`, async () => {
     const { job, PreviewModel: storedModel, UserModel, deps } = makeOwnerApply("owner-view-result", scenario);
-    // Storing the applied state fails, which sends the job back to pending.
+    // Storing the applied state fails, which sends the job back to pending;
+    // with failRelease the release fails too and the job stays applying.
     const PreviewModel = scenario.failFinish
       ? {
         findOne: (filter) => storedModel.findOne(filter),
         findOneAndUpdate: async (filter, update) => {
           if (update?.$set?.status === "applied") throw new Error("mongo unavailable");
+          if (scenario.failRelease && update?.$set?.failureReason === "apply_failed") {
+            throw new Error("mongo unavailable");
+          }
           return storedModel.findOneAndUpdate(filter, update);
         },
       }
@@ -1361,6 +1371,37 @@ test("an apply whose final write throws stays retryable and keeps what it wrote"
   assert.equal(second.state, "applied");
   assert.equal(PreviewModel.value.result.applied.length, 1);
   assert.equal(PreviewModel.value.result.skipped.length, 0);
+});
+
+test("an apply that throws and cannot release its job still reports the gates it wrote", async () => {
+  const job = makeJob();
+  const PreviewModel = makePreviewModel(job);
+  const persist = PreviewModel.findOneAndUpdate.bind(PreviewModel);
+  PreviewModel.findOneAndUpdate = async (filter, update) => {
+    if (update?.$set?.status === "applied" || update?.$set?.failureReason === "apply_failed") {
+      throw new Error("mongo unavailable");
+    }
+    return persist(filter, update);
+  };
+  const userDoc = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    accounts: makeAkiRoster(),
+  };
+  const deps = {
+    PreviewModel,
+    UserModel: makeConsoleUserModel(userDoc),
+    applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Aki" }),
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+
+  assert.equal(first.ok, false);
+  assert.equal(first.state, "applying");
+  assert.equal(first.retryable, false);
+  assert.equal(first.result.applied.length, 1);
 });
 
 test("a stale applying lease can be reclaimed after a bot restart", async () => {

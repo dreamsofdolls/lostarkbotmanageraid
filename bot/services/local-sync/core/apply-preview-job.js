@@ -357,6 +357,7 @@ async function recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, err
     state: released ? "pending" : "applying",
     retryable: Boolean(released),
     job: released || job,
+    ...(summary ? { result: summary } : {}),
   };
 }
 
