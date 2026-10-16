@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-17
+
+### Fixed
+- A roster read from lostark.bible now includes every character on it, not only those with a card on the page. Bible renders a card only for characters it updated recently, so an alt not refreshed for a few weeks was missing when a roster was added or edited and kept its old item level and class on a refresh. Such characters are read from the page's roster data and placed by item level.
+
 ## 2026-10-16
 
 ### Fixed

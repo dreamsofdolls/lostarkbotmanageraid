@@ -47,6 +47,48 @@ function createRosterFetchService({ bibleLimiter }) {
     return rosterClassMap;
   }
 
+  // One character of the page's `roster:[...]` data payload, in the key order
+  // lostark.bible serialises it. If that order changes, nothing matches and
+  // the fetch falls back to the rendered cards alone.
+  const ROSTER_PAYLOAD_ENTRY = /\{id:\d+,name:"((?:[^"\\]|\\.)*)",class:"((?:[^"\\]|\\.)*)",ilvl:([\d.]+),combatPower:(?:null|\{id:\d+,score:([\d.]+)\}),combatPowerIsEstimate:(true|false)/g;
+
+  // The cards print item level and CP rounded to two decimals, trailing
+  // zeros dropped ("1722.5"); payload records are read the same way.
+  function roundPayloadNumber(value) {
+    return Number(Number(value).toFixed(2));
+  }
+
+  function extractRosterPayloadFromHtml(html) {
+    const start = html.indexOf("roster:[");
+    if (start < 0) return [];
+    // Entries hold objects but no arrays, so the first ']' closes the list.
+    const end = html.indexOf("]", start);
+    const payload = html.slice(start, end < 0 ? html.length : end);
+    return [...payload.matchAll(ROSTER_PAYLOAD_ENTRY)].map(([, name, classId, ilvl, score, estimate]) => ({
+      charName: unescapeJsonLike(name),
+      className: getClassName(unescapeJsonLike(classId)),
+      itemLevel: roundPayloadNumber(ilvl),
+      combatScore: score ? `${estimate === "true" ? "≈" : ""}${roundPayloadNumber(score)}` : "?",
+    }));
+  }
+
+  // lostark.bible renders a card only for characters it updated recently, so
+  // an alt not refreshed for a few weeks is in the payload alone. It is
+  // inserted by item level, where its card would have been. A page with no
+  // cards (a hidden or missing roster) stays empty.
+  function addPayloadOnlyCharacters(characters, html) {
+    if (characters.length === 0) return characters;
+    const listed = new Set(characters.map((character) => character.charName.toLowerCase()));
+    for (const record of extractRosterPayloadFromHtml(html)) {
+      const key = record.charName.toLowerCase();
+      if (!record.charName || listed.has(key) || !(record.itemLevel > 0)) continue;
+      listed.add(key);
+      const at = characters.findIndex((character) => character.itemLevel < record.itemLevel);
+      characters.splice(at < 0 ? characters.length : at, 0, record);
+    }
+    return characters;
+  }
+
   async function fetchRosterCharacters(seedCharacterName) {
     return bibleLimiter.run(() => fetchRosterCharactersRaw(seedCharacterName));
   }
@@ -98,7 +140,7 @@ function createRosterFetchService({ bibleLimiter }) {
       });
     }
 
-    return characters;
+    return addPayloadOnlyCharacters(characters, html);
   }
 
   return {
