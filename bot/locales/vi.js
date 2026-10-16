@@ -1145,6 +1145,7 @@ module.exports = {
       modeIneligibleDescription: "**{raidLabel} {mode}** chưa mở cho char này đâu, lên thêm ilvl rồi quay lại nha~",
       modeFailedTitle: "Chưa lưu được",
       modeFailedDescription: "Artist chưa lưu được lựa chọn này. Session có thể đã cũ; mở lại `/raid-status` rồi thử lại giúp tớ nhé.",
+      shareViewOnlyDescription: "Manager **{owner}** đã share roster cho cậu nhưng ở mức `view` (chỉ xem, read-only) - cậu không đổi được cài đặt gold của roster này. Nhờ Manager đổi sang `/raid-share grant target:@cậu permission:edit` rồi thử lại nha~",
       footerGold: "Gold {earned}/{total}",
       footerBound: "Khóa {bound}",
     },

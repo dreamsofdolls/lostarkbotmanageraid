@@ -95,7 +95,7 @@ function createGoldViewEmbedBuilder({
   }
 
   return function buildGoldViewEmbed(account) {
-    const accountName = String(account?.accountName || "(unnamed roster)");
+    const accountName = String(account?.accountName || t("raid-status.filter.unnamedRoster", lang));
     const accountGold = summarizeAccountGold(account, getRaidsFor);
     const globalGold = summarizeGlobalGold(getAccounts(), getRaidsFor);
     const goldChars = goldCharactersOnPage();

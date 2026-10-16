@@ -81,7 +81,7 @@ function createSchedulingHelpers({
     announcementSubdocKeys,
     announcementSubdocDefaultEnabled,
   });
-  
+
   /**
    * Next scheduler wake-up time for an interval job that started at
    * `startedAtMs` and runs every `intervalMs`. This is derived
@@ -99,7 +99,7 @@ function createSchedulingHelpers({
     const ticksElapsed = Math.floor(elapsed / intervalMs) + 1;
     return startedAtMs + (ticksElapsed * intervalMs);
   }
-  
+
   function nextWeeklyResetBoundaryMs(now) {
     return weeklyResetStartMs(now) + 7 * 24 * 60 * 60 * 1000;
   }
@@ -202,17 +202,7 @@ function createSchedulingHelpers({
       disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled",
       note: "The notice posts only after this guild's cleanup run completes.",
     },
-    "stuck-nudge": {
-      eligibleBoundary: nextHalfHourBoundaryMs,
-      schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(
-        schedulerState.autoManageStartedAtMs,
-        resolveAutoManageDailyTickMs(),
-        now
-      ),
-      disabledWhen: ({ autoManageDisabled }) => autoManageDisabled,
-      disabledText: "Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)",
-      note: "The nudge posts only if that tick finds a user whose logs are private.",
-    },
+    "stuck-nudge": { retired: true },
     "artist-bedtime": {
       eligibleBoundary: (now, lang) => nextLocalHourBoundaryMs(now, ARTIST_QUIET_START_HOUR_VN, lang),
       schedulerCheck: cleanupSchedulerCheck,
@@ -260,7 +250,7 @@ function createSchedulingHelpers({
   function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date(), lang) {
     return announcementScheduleRules[typeKey]?.eligibleBoundary?.(now, lang) ?? null;
   }
-  
+
   /**
    * Next time the scheduler actually wakes up to consider firing this
    * announcement type. Differs from `nextAnnouncementEligibleBoundaryMs`
@@ -291,18 +281,19 @@ function createSchedulingHelpers({
       },
     });
   }
-  
+
   function formatDiscordTimestampPair(ms) {
     const unixSec = Math.floor(ms / 1000);
     return `<t:${unixSec}:R> (<t:${unixSec}:F>)`;
   }
-  
+
   /**
    * Build the multi-line "when does this fire" body for /raid-announce
    * show. Returns markdown text combining trigger/dedup/TTL (static from
    * registry) with next eligible boundary + next scheduler check
    * (dynamic from scheduler state). Handles disabled/missing-channel
-   * fall-throughs so the embed always shows something actionable.
+   * fall-throughs so the embed always shows something actionable. A retired
+   * type reports itself as retired before any of those checks.
    * @param {string} typeKey
    * @param {object} entry - registry entry for typeKey
    * @param {{enabled?: boolean, channelId?: string}} current - guild's current cfg for this type
@@ -321,11 +312,16 @@ function createSchedulingHelpers({
     const effectiveDestinationId = current?.channelId || guildCfg?.raidChannelId || null;
     // Every variant opens with the trigger and ends with the dedup and TTL lines.
     const finish = (...body) => [triggerLine, ...body, dedupLine, ttlLine].join("\n");
-  
+
+    const scheduleRule = announcementScheduleRules[typeKey];
+    if (scheduleRule?.retired) {
+      return finish("**Next check:** Retired (no notification is sent; saved settings are kept)");
+    }
+
     if (current?.enabled === false) {
       return finish("**Next check:** Disabled (`/raid-announce action:on` to re-enable)");
     }
-  
+
     if (!effectiveDestinationId) {
       return finish(
         entry?.channelOverridable
@@ -333,8 +329,7 @@ function createSchedulingHelpers({
           : "**Next check:** Waiting for `/raid-channel config action:set` (monitor channel not configured)"
       );
     }
-  
-    const scheduleRule = announcementScheduleRules[typeKey];
+
     if (scheduleRule?.onDemand) {
       return finish("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
     }
@@ -342,7 +337,7 @@ function createSchedulingHelpers({
     if (scheduleRule?.disabledWhen?.({ guildCfg, autoManageDisabled })) {
       return finish(`**Next check:** ${scheduleRule.disabledText}`);
     }
-  
+
     const lines = [];
     const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(
       typeKey,
@@ -352,18 +347,18 @@ function createSchedulingHelpers({
     if (eligibleBoundaryMs) {
       lines.push(`**Next eligible boundary:** ${formatDiscordTimestampPair(eligibleBoundaryMs)}`);
     }
-  
+
     const nextCheckMs = nextAnnouncementSchedulerCheckMs(typeKey, now, schedulerState);
     if (nextCheckMs) {
       lines.push(`**Next scheduler check:** ${formatDiscordTimestampPair(nextCheckMs)}`);
     } else {
       lines.push("**Next scheduler check:** After bot startup");
     }
-  
+
     if (scheduleRule?.note) {
       lines.push(`**Note:** ${scheduleRule.note}`);
     }
-  
+
     return finish(...lines);
   }
 

@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-16
+
+### Fixed
+- Joining or picking a character on a locked `/raid-schedule` board now says the board is locked, not closed.
+- A non-manager who presses delete confirm on a `/raid-schedule` event now gets the manager-only notice instead of an error.
+- Changing gold mode or a gold toggle on `/raid-status` for a roster whose share was revoked or turned view-only now says the share is view-only and its gold settings can't be changed, instead of nothing or a request to try again.
+- A `/raid-task` change on a roster shared with you both as view and as edit under the same name now writes through the edit share instead of being refused as view-only.
+- `/raid-announce show` lists a retired private-log nudge as retired instead of showing a schedule for it.
+- The label for a roster without a name follows the user's language.
+
 ## 2026-10-11
 
 ### Fixed

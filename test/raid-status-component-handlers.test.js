@@ -580,13 +580,21 @@ test("raid-status component handlers reject gold mode writes on view-only shares
     },
   });
 
+  const followUps = [];
+
   const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode]({
     values: ["Goldie::armoche::hard"],
+    async followUp(payload) {
+      followUps.push(payload);
+    },
   });
 
   assert.deepEqual(result, { redraw: false });
   assert.equal(queried, false);
   assert.equal(harness.reloadCount, 0);
+  assert.equal(followUps.length, 1);
+  assert.match(followUps[0].embeds[0].title, /Share view-only$/);
+  assert.match(followUps[0].embeds[0].description, /cài đặt gold/);
 });
 
 // The card still says "edit" because _sharedFrom was read when /raid-status

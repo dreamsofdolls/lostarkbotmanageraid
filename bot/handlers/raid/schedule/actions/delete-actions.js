@@ -8,7 +8,6 @@ const { pingCancelledSignups, signupDiscordIds } = require("./cancel-ping");
 function createScheduleDeleteActions({
   boardLang,
   rejectUnlessLead,
-  editNotice,
   deleteConfirmPayload,
   noticeEmbed,
 }) {
@@ -18,7 +17,7 @@ function createScheduleDeleteActions({
   }
 
   async function handleDeleteConfirm(interaction, event, lang) {
-    if (await rejectUnlessLead(interaction, lang, editNotice)) return;
+    if (await rejectUnlessLead(interaction, lang)) return;
     await interaction.deferUpdate();
 
     const wasActive = event.status === "open" || event.status === "locked";

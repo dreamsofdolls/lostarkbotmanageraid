@@ -93,3 +93,43 @@ test("a waitlister promoted by an absent RSVP is pinged in a public follow-up", 
   assert.equal(followUps[0].flags, undefined);
   assert.match(followUps[0].content, /<@waiter>/);
 });
+
+for (const [status, titleKey, descriptionKey] of [
+  ["locked", "lockedTitle", "lockedDescription"],
+  ["cancelled", "eventClosedTitle", "eventClosedDescription"],
+]) {
+  test(`join on a ${status} board shows ${titleKey} without opening the picker`, async () => {
+    const notices = [];
+    const actions = createScheduleParticipantActions({
+      replyNotice: async (_interaction, _lang, severity, title, description) => {
+        notices.push({ severity, title, description });
+      },
+    });
+    const interaction = {
+      user: { id: "member" },
+      deferReply: async () => assert.fail("a non-open board must not open the picker"),
+    };
+
+    await actions.handleJoin(interaction, { status }, "en");
+
+    assert.deepEqual(notices, [{ severity: "warn", title: titleKey, description: descriptionKey }]);
+  });
+
+  test(`pick on a ${status} board shows ${titleKey} and saves nothing`, async () => {
+    const notices = [];
+    const event = {
+      status,
+      signups: [],
+      save: async () => assert.fail("a non-open board must not save a signup"),
+    };
+    const actions = createScheduleParticipantActions({
+      editNotice: async (_interaction, _lang, severity, title, description) => {
+        notices.push({ severity, title, description });
+      },
+    });
+
+    await actions.handlePick({ user: { id: "member" }, values: ["beta"] }, event, "en");
+
+    assert.deepEqual(notices, [{ severity: "warn", title: titleKey, description: descriptionKey }]);
+  });
+}

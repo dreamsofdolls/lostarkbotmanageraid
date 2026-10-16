@@ -1943,3 +1943,36 @@ test("buildAccountPageEmbed: a roster with every character flagged shows gold fo
   assert.equal(withGold.length, 6);
   assert.match(json.description, /102,000G/);
 });
+
+test("raid-status task and gold embeds label a roster without an accountName from the locale", () => {
+  const labels = { en: "Unnamed roster", vi: "Roster chưa đặt tên" };
+  for (const [lang, label] of Object.entries(labels)) {
+    const accounts = [{ accountName: "", characters: [makeChar("Nameless", 1700)], lastRefreshedAt: 0 }];
+    const deps = {
+      EmbedBuilder,
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
+      UI,
+      getCharacterName,
+      truncateText,
+      getAccounts: () => accounts,
+      getCurrentPage: () => 0,
+      lang,
+    };
+    const taskUi = createRaidStatusTaskUi({
+      ...deps,
+      getCurrentView: () => "task",
+      getTaskCharFilter: () => undefined,
+    });
+    const goldUi = createRaidStatusGoldUi({
+      ...deps,
+      formatGold,
+      getGoldCharFilter: () => undefined,
+      getRaidsFor: getStatusRaidsForCharacter,
+    });
+
+    const titleSuffix = new RegExp(` · ${label}$`);
+    assert.match(taskUi.buildTaskViewEmbed(accounts[0]).toJSON().title, titleSuffix, `task embed (${lang})`);
+    assert.match(goldUi.buildGoldViewEmbed(accounts[0]).toJSON().title, titleSuffix, `gold embed (${lang})`);
+  }
+});

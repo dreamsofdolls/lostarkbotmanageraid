@@ -154,7 +154,6 @@ function createRaidScheduleCommand({
   } = createScheduleDeleteActions({
     boardLang,
     rejectUnlessLead,
-    editNotice,
     deleteConfirmPayload,
     noticeEmbed,
   });

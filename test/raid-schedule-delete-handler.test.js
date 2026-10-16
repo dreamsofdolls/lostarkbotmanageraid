@@ -131,3 +131,43 @@ test("manual delete leaves the board intact when RaidEvent doc deletion fails", 
   assert.deepEqual(order, ["defer", "doc", "edit"]);
   assert.equal(interaction.getEdited().embeds[0].data.title, "Couldn't delete the event");
 });
+
+test("a non-manager delete confirm gets the manager-only reply and deletes nothing", async () => {
+  const replies = [];
+  let deleted = false;
+  const event = {
+    _id: "ev3",
+    guildId: "g1",
+    channelId: "c1",
+    messageId: "m1",
+    status: "open",
+    title: "Tonight",
+    signups: [],
+    async deleteOne() {
+      deleted = true;
+    },
+  };
+  const command = makeCommand(event);
+  const interaction = {
+    customId: "rse:delyes:ev3",
+    user: { id: "member" },
+    guildId: "g1",
+    channelId: "c1",
+    async reply(payload) {
+      replies.push(payload);
+    },
+    async deferUpdate() {
+      assert.fail("a rejected click must not be acknowledged by deferUpdate");
+    },
+    async editReply() {
+      throw new Error("editReply on an unacknowledged interaction");
+    },
+  };
+
+  await command.handleRaidScheduleButton(interaction);
+
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].embeds[0].data.title, "That's a lead button");
+  assert.equal(replies[0].flags, MessageFlags.Ephemeral);
+  assert.equal(deleted, false);
+});

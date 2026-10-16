@@ -128,3 +128,41 @@ test("raid-task write target falls back to executor when access lookup fails", a
   assert.equal(warnings[0][0], "[raid-task] getAccessibleAccounts failed:");
   assert.equal(warnings[0][1], "network down");
 });
+
+for (const [label, order] of [
+  ["view before edit", ["view", "edit"]],
+  ["edit before view", ["edit", "view"]],
+]) {
+  test(`raid-task write target prefers the edit share over a same-named view share (${label})`, async () => {
+    const shares = {
+      view: {
+        isOwn: false,
+        accountName: "Shared",
+        ownerDiscordId: "owner-view",
+        ownerLabel: "Owner View",
+        accessLevel: "view",
+      },
+      edit: {
+        isOwn: false,
+        accountName: "Shared",
+        ownerDiscordId: "owner-edit",
+        ownerLabel: "Owner Edit",
+        accessLevel: "edit",
+      },
+    };
+    const resolveTaskWriteTarget = createRaidTaskWriteTargetResolver({
+      loadUserForAutocomplete: async () => ({ accounts: [] }),
+      getAccessibleAccounts: async () => order.map((level) => shares[level]),
+    });
+
+    const result = await resolveTaskWriteTarget("viewer-1", "shared");
+
+    assert.deepEqual(result, {
+      discordId: "owner-edit",
+      viaShare: true,
+      ownerLabel: "Owner Edit",
+      accessLevel: "edit",
+      canEdit: true,
+    });
+  });
+}

@@ -139,3 +139,116 @@ test("raid-status gold writes retried after the share was revoked commit nothing
     assert.equal(result.ok, false, label);
   }
 });
+
+function makeGoldSelectHandlers({ model, canEditAccountFn, shared = true, accountName = "Roster" }) {
+  return createStatusComponentRouteHandlers({
+    ...discord,
+    UI,
+    User: model,
+    saveWithRetry,
+    session: {
+      accounts: [{
+        accountName,
+        ...(shared && { _sharedFrom: { ownerDiscordId: "owner", accessLevel: "edit", ownerLabel: "Owner" } }),
+        characters: [{ name: "Aki" }],
+      }],
+      currentPage: 0,
+    },
+    discordId: "viewer",
+    lang: "en",
+    interaction: { editReply: async () => {} },
+    reloadViewerAccounts: async () => {},
+    buildEmbedAndCanvas: async () => ({}),
+    buildComponents: () => [],
+    canEditAccountFn,
+    formatGold,
+    truncateText,
+  });
+}
+
+const GOLD_SELECTS = {
+  toggle: {
+    action: STATUS_COMPONENT_ACTION.goldToggle,
+    value: "Aki::kazeros",
+    failedNotice: /Couldn't update received gold/,
+  },
+  mode: {
+    action: STATUS_COMPONENT_ACTION.goldMode,
+    value: "Aki::armoche::hard",
+    failedNotice: /Couldn't save/,
+  },
+};
+
+const GOLD_VIEW_ONLY_DESCRIPTION = /change its gold settings/;
+
+for (const [label, select] of Object.entries(GOLD_SELECTS)) {
+  test(`raid-status gold ${label} on a share revoked before the click says the share is view-only`, async () => {
+    const notices = [];
+    const handlers = makeGoldSelectHandlers({
+      model: { findOne: async () => assert.fail("a refused share must not load the owner document") },
+      canEditAccountFn: async () => false,
+    });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.match(JSON.stringify(notices), /Share is view-only/);
+    assert.match(JSON.stringify(notices), GOLD_VIEW_ONLY_DESCRIPTION);
+  });
+
+  test(`raid-status gold ${label} retried after the share was revoked says the share is view-only`, async () => {
+    const { stats, model, canWrite } = revokedDuringRetry();
+    const notices = [];
+    const handlers = makeGoldSelectHandlers({ model, canEditAccountFn: () => canWrite() });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.equal(stats.saves, 1);
+    assert.equal(stats.committedAfterRevocation, 0);
+    assert.match(JSON.stringify(notices), /Share is view-only/);
+    assert.match(JSON.stringify(notices), GOLD_VIEW_ONLY_DESCRIPTION);
+    assert.doesNotMatch(JSON.stringify(notices), select.failedNotice);
+  });
+
+  test(`raid-status gold ${label} keeps the save-failed notice for a real save failure`, async () => {
+    const notices = [];
+    const model = {
+      async findOne() {
+        const doc = makeOwnerDoc();
+        doc.save = async () => { throw new Error("disk full"); };
+        return doc;
+      },
+    };
+    const handlers = makeGoldSelectHandlers({ model, canEditAccountFn: async () => true });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.match(JSON.stringify(notices), select.failedNotice);
+    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+  });
+
+  test(`raid-status gold ${label} stays silent when the card has no roster to write`, async () => {
+    const notices = [];
+    const handlers = makeGoldSelectHandlers({
+      model: { findOne: async () => assert.fail("no roster means no write") },
+      canEditAccountFn: async () => false,
+      shared: false,
+      accountName: "",
+    });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.deepEqual(notices, []);
+  });
+}

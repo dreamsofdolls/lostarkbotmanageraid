@@ -1122,6 +1122,7 @@ module.exports = {
       modeIneligibleDescription: "{raidLabel} {mode} is not available for this character yet.",
       modeFailedTitle: "Couldn't save",
       modeFailedDescription: "Try again after reopening `/raid-status`.",
+      shareViewOnlyDescription: "Manager **{owner}** shared this roster with you, but at `view` permission (read-only) - you can't change its gold settings. Ask them to upgrade via `/raid-share grant target:@you permission:edit` and try again.",
       footerGold: "Gold {earned}/{total}",
       footerBound: "Bound {bound}",
     },

@@ -15,7 +15,7 @@ function createTaskViewEmbedBuilder({
   t,
 }) {
   return function buildTaskViewEmbed(account) {
-    const accountName = String(account?.accountName || "(unnamed roster)");
+    const accountName = String(account?.accountName || t("raid-status.filter.unnamedRoster", lang));
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
       .setTitle(t("raid-status.taskView.embedTitle", lang, { accountName }));

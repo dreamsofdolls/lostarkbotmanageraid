@@ -153,8 +153,8 @@ async function updateGoldWriteTarget(options, applyUpdate) {
  * @param {object} options - User, saveWithRetry, discordId (roster owner),
  *   targetAccountName, targetCharName, raidKey, and optionally canWrite
  *   (asked before every save attempt)
- * @returns {Promise<{ok: boolean, override: string|null, disabled: boolean, needsReplacement: boolean, replacement: object|null, targetRaid: object|null}>}
- *   ok is false when nothing was saved, including a refused canWrite
+ * @returns {Promise<{ok: boolean, denied: boolean, override: string|null, disabled: boolean, needsReplacement: boolean, replacement: object|null, targetRaid: object|null}>}
+ *   ok is false when nothing was saved; denied is true when canWrite refused
  */
 async function toggleRaidGoldDisabled(options) {
   const {
@@ -177,6 +177,7 @@ async function toggleRaidGoldDisabled(options) {
   });
   return {
     ok: update.saved,
+    denied: update.denied,
     override: nextOverride,
     disabled: nextOverride === "exclude",
     needsReplacement: !!replacement?.required,

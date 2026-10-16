@@ -14,6 +14,18 @@ const {
   characterSelectOptions,
 } = require("../view/select-options");
 
+const LOCKED_NOTICE_KEYS = Object.freeze(["lockedTitle", "lockedDescription"]);
+const CLOSED_NOTICE_KEYS = Object.freeze(["eventClosedTitle", "eventClosedDescription"]);
+
+/**
+ * Notice keys for a join or pick attempt on a board that is not open.
+ * @param {{status: string}} event - board event
+ * @returns {readonly string[]} title and description locale keys
+ */
+function notOpenNoticeKeys(event) {
+  return event.status === "locked" ? LOCKED_NOTICE_KEYS : CLOSED_NOTICE_KEYS;
+}
+
 function createScheduleParticipantActions({
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -41,7 +53,7 @@ function createScheduleParticipantActions({
 
   async function handleJoin(interaction, event, lang) {
     if (event.status !== "open") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      await replyNotice(interaction, lang, "warn", ...notOpenNoticeKeys(event));
       return;
     }
     await interaction.deferReply({ flags: ephemeralFlag });
@@ -84,7 +96,7 @@ function createScheduleParticipantActions({
 
   async function handlePick(interaction, event, lang) {
     if (event.status !== "open") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      await editNotice(interaction, lang, "warn", ...notOpenNoticeKeys(event));
       return;
     }
 

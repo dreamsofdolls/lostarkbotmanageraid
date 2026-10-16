@@ -170,9 +170,12 @@ function resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible
   if (ownMatch) {
     return { discordId: executorId, viaShare: false };
   }
-  const sharedMatch = entries.find(
+  const sharedMatches = entries.filter(
     (entry) => !entry?.isOwn && normalizeName(entry.accountName) === target
   );
+  // Two owners can share rosters with the same name; an edit share wins the tie.
+  const sharedMatch = sharedMatches.find((entry) => entry.accessLevel === "edit")
+    || sharedMatches[0];
   if (!sharedMatch) {
     return { discordId: executorId, viaShare: false };
   }

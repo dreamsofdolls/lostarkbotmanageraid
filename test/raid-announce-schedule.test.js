@@ -136,7 +136,7 @@ test("announcement schedule rules keep on-demand and disabled guard copy per typ
       typeKey: "stuck-nudge",
       guildCfg: { raidChannelId: "123" },
       schedulerState: { autoManageDisabled: true },
-      expected: /AUTO_MANAGE_DAILY_DISABLED=true/,
+      expected: /\*\*Next check:\*\* Retired/,
     },
   ];
 
@@ -150,6 +150,27 @@ test("announcement schedule rules keep on-demand and disabled guard copy per typ
       testCase.schedulerState
     );
     assert.match(text, testCase.expected);
+  }
+});
+
+test("retired stuck-nudge shows no boundary, scheduler check or posting note", () => {
+  const entry = {
+    trigger: "Disabled.",
+    dedup: "Not scheduled",
+    messageTtl: "Not sent",
+    channelOverridable: true,
+  };
+  const now = new Date(Date.UTC(2026, 3, 24, 12, 10, 0, 0));
+  const states = [
+    { current: { enabled: true, channelId: null }, guildCfg: { raidChannelId: "123" } },
+    { current: { enabled: false, channelId: null }, guildCfg: { raidChannelId: "123" } },
+    { current: { enabled: true, channelId: null }, guildCfg: {} },
+  ];
+
+  for (const { current, guildCfg } of states) {
+    const text = __test.buildAnnouncementWhenItFiresText("stuck-nudge", entry, current, guildCfg, now, {});
+    assert.match(text, /\*\*Next check:\*\* Retired/);
+    assert.doesNotMatch(text, /Next eligible boundary|Next scheduler check|\*\*Note:\*\*|logs are private/);
   }
 });
 

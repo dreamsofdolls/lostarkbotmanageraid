@@ -1123,6 +1123,7 @@ module.exports = {
       modeIneligibleDescription: "{raidLabel} {mode} はこのキャラではまだ選べません。",
       modeFailedTitle: "保存できませんでした",
       modeFailedDescription: "`/raid-status` を開き直してもう一度試してください。",
+      shareViewOnlyDescription: "マネージャー **{owner}** さんがロスターを共有してくれましたが `view` (閲覧のみ) の権限ですわ - ゴールドの設定は変更できないの。マネージャーさんに `/raid-share grant target:@あなた permission:edit` でアップグレードしてもらってからもう一度試してね～",
       footerGold: "Gold {earned}/{total}",
       footerBound: "拘束 {bound}",
     },

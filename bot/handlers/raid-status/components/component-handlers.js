@@ -176,14 +176,27 @@ function createStatusComponentRouteHandlers(ctx) {
     };
   }
 
-  function shareViewOnlyNotice(sharedFrom) {
+  function shareViewOnlyNotice(sharedFrom, descriptionKey = "raid-task.shareViewOnly.description") {
     return {
       type: "lock",
       title: t("raid-task.shareViewOnly.title", lang),
-      description: t("raid-task.shareViewOnly.description", lang, {
+      description: t(descriptionKey, lang, {
         owner: sharedFrom?.ownerLabel || "(unknown)",
       }),
     };
+  }
+
+  function goldShareViewOnlyNotice(sharedFrom) {
+    return shareViewOnlyNotice(sharedFrom, "raid-status.goldView.shareViewOnlyDescription");
+  }
+
+  // A null write context is either a share the owner revoked or downgraded
+  // since the card was drawn, or a card page with no roster; only the share
+  // case has a reason to show.
+  async function followUpGoldShareRefusal(component) {
+    const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
+    if (!sharedFrom) return;
+    await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(sharedFrom)).catch(() => {});
   }
 
   return {
@@ -645,8 +658,11 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status gold mode",
         detail: `raid=${parsed.raidKey}`,
       });
-      if (!writeContext) return noRedraw();
-      const { targetAccountName, writeDiscordId, canWrite } = writeContext;
+      if (!writeContext) {
+        await followUpGoldShareRefusal(component);
+        return noRedraw();
+      }
+      const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
 
       let result;
       try {
@@ -679,6 +695,10 @@ function createStatusComponentRouteHandlers(ctx) {
             raidLabel: result.raidLabel,
           }),
         }).catch(() => {});
+        return noRedraw();
+      }
+      if (result.outcome === "denied") {
+        await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
         return noRedraw();
       }
       if (result.outcome === "noop") return noRedraw();
@@ -720,8 +740,11 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status gold toggle",
         detail: `raid=${parsed.raidKey}`,
       });
-      if (!writeContext) return noRedraw();
-      const { targetAccountName, writeDiscordId, canWrite } = writeContext;
+      if (!writeContext) {
+        await followUpGoldShareRefusal(component);
+        return noRedraw();
+      }
+      const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
 
       const toggleResult = await toggleParsedGoldRaid({
         User,
@@ -738,6 +761,10 @@ function createStatusComponentRouteHandlers(ctx) {
           writeDiscordId,
           targetAccountName,
         });
+      }
+      if (toggleResult.denied) {
+        await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
+        return noRedraw();
       }
       if (!toggleResult.ok) {
         await followUpNotice(component, EmbedBuilder, {
