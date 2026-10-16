@@ -62,7 +62,6 @@ function createRaidInteractionRouter({
       "raid-remove-roster": handlers.handleRemoveRosterAutocomplete,
       "raid-channel": handlers.handleRaidChannelAutocomplete,
       "raid-auto-manage": handlers.handleRaidAutoManageAutocomplete,
-      "raid-announce": handlers.handleRaidAnnounceAutocomplete,
       "raid-task": handlers.handleRaidTaskAutocomplete,
       "raid-gold-earner": handlers.handleRaidGoldEarnerAutocomplete,
     },

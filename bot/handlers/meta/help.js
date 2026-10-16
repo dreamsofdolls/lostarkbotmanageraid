@@ -82,23 +82,26 @@ const SECTION_META = {
       { name: "raid", required: true },
       { name: "mode", required: true },
       { name: "when", required: true },
+      { name: "skip_notify", required: true },
       { name: "auto_lock", required: false },
       { name: "title", required: false },
+      { name: "show", required: false },
+      { name: "action", required: false },
     ],
   },
   "raid-task": {
     icon: "📝",
     options: [
       { name: "subcommand", required: true },
-      { name: "action", required: false },
+      { name: "action", required: true },
       { name: "roster", required: true },
       { name: "character", required: false },
       { name: "name", required: false },
       { name: "reset", required: false },
-      { name: "preset", required: false },
+      { name: "preset", required: true },
       { name: "expires_at", required: false },
       { name: "all_rosters", required: false },
-      { name: "task", required: false },
+      { name: "task", required: true },
     ],
   },
   "raid-set": {
@@ -133,6 +136,7 @@ const SECTION_META = {
     options: [
       { name: "config action:<x>", required: true },
       { name: "channel", required: false },
+      { name: "language", required: false },
     ],
   },
   "raid-auto-manage": {
@@ -159,7 +163,7 @@ const SECTION_META = {
   "raid-bg": {
     icon: "🖼️",
     options: [
-      { name: "set image:<file> action:<overwrite|extend>", required: false },
+      { name: "set image:<file> image_2:<file> image_3:<file> image_4:<file> mode:<even|random> action:<overwrite|extend>", required: false },
       { name: "view", required: false },
       { name: "edit image:<file>", required: false },
     ],
@@ -321,5 +325,6 @@ function createRaidHelpCommand(deps) {
 }
 
 module.exports = {
+  SECTION_META,
   createRaidHelpCommand,
 };

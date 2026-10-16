@@ -1874,15 +1874,6 @@ module.exports = {
       successLineImpact: "**Effect:** Next fire, Artist posts to the monitor channel.",
       successLineRevert: "To override to a different channel, use action `set-channel channel:#abc`.",
     },
-    autocomplete: {
-      show: "Show current config",
-      turnOffWithState: "Turn off · currently ON",
-      turnOnWithState: "Turn on · currently OFF",
-      turnOnGeneric: "Turn on",
-      turnOffGeneric: "Turn off",
-      setChannel: "Set channel override",
-      clearChannel: "Clear channel override",
-    },
   },
   "raid-help": {
     overview: {
@@ -2041,6 +2032,7 @@ module.exports = {
           raid: "Raid to schedule",
           mode: "Difficulty",
           when: "Start time: `20:00`, `8pm`, `+2h`; or a weekday `wed 20:00` / `thứ 4 20:00` / `cn 8pm`; or a date `5/6 20:00` / `5/6/2026 8pm` (weekday/date needs a time)",
+          skip_notify: "Silent mode: on = no @mention pings for add/promote/cancel/delete",
           auto_lock: "Auto-lock when start time arrives (default on)",
           title: "Optional board title",
         },
@@ -2168,8 +2160,9 @@ module.exports = {
           "**Admin-only**: requires `Manage Server` permission.",
         ],
         optionDescriptions: {
-          "config action:<x>": "Action: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off`",
+          "config action:<x>": "Action: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off` / `set-language`",
           channel: "Text channel - required when action:set",
+          language: "Broadcast language `vi` / `jp` / `en` - for action:set-language, omit to see the current one",
         },
       },
       "raid-auto-manage": {
@@ -2258,7 +2251,7 @@ module.exports = {
           "**Sharp + clean**: each upload is normalized to a 16:9 (1600x900 JPEG) frame before storage · a cover-fit backplate fills the canvas while the source stays whole (contain-fit) in the center. Portrait or odd-ratio art still spans the embed's full width without being cropped.",
         ],
         optionDescriptions: {
-          "set image:<file> action:<overwrite|extend>": "Upload 1-4 images; `overwrite` replaces the library, `extend` appends up to 6 scenes",
+          "set image:<file> image_2:<file> image_3:<file> image_4:<file> mode:<even|random> action:<overwrite|extend>": "Upload 1-4 images; `mode` (`even` / `random`) sets how images are assigned to rosters; `overwrite` replaces the library, `extend` appends up to 6 scenes",
           view: "Open the scene browser with the roster map",
           "edit image:<file>": "Replace the selected scene with the attached image; leave `image` empty to delete scenes",
         },

@@ -1897,15 +1897,6 @@ module.exports = {
       successLineImpact: "**Tác động:** Lần fire kế tiếp Artist post vào monitor channel.",
       successLineRevert: "Muốn override sang kênh khác thì action `set-channel channel:#abc` nha.",
     },
-    autocomplete: {
-      show: "Show current config",
-      turnOffWithState: "Turn off · currently ON",
-      turnOnWithState: "Turn on · currently OFF",
-      turnOnGeneric: "Turn on",
-      turnOffGeneric: "Turn off",
-      setChannel: "Set channel override",
-      clearChannel: "Clear channel override",
-    },
   },
   "raid-help": {
     overview: {
@@ -2064,6 +2055,7 @@ module.exports = {
           raid: "Raid cần lập lịch",
           mode: "Độ khó",
           when: "Giờ bắt đầu: `20:00`, `8pm`, `+2h`; hoặc thứ `thứ 4 20:00` / `t4 20h` / `cn 8pm`; hoặc ngày `5/6 20:00` / `5/6/2026 8pm` (thứ/ngày phải kèm giờ)",
+          skip_notify: "Chế độ im lặng: bật = không ping ai khi add/kéo chờ/hủy/xóa",
           auto_lock: "Tự khóa khi tới giờ bắt đầu (mặc định bật)",
           title: "Tiêu đề board tuỳ chọn",
         },
@@ -2191,8 +2183,9 @@ module.exports = {
           "**Admin-only**: cần permission `Manage Server`.",
         ],
         optionDescriptions: {
-          "config action:<x>": "Action: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off`",
+          "config action:<x>": "Action: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off` / `set-language`",
           channel: "Text channel - cần khi action:set",
+          language: "Ngôn ngữ broadcast `vi` / `jp` / `en` - cho action:set-language, bỏ trống để xem ngôn ngữ hiện tại",
         },
       },
       "raid-auto-manage": {
@@ -2281,7 +2274,7 @@ module.exports = {
           "**Đẹp + căng**: ảnh được normalize về frame 16:9 (1600x900 JPEG) trước khi lưu, với backplate cover-fit phủ nền + source giữ nguyên (contain-fit) ở giữa. Portrait hay tỉ lệ lạ đều render full chiều rộng embed Discord, không bị crop.",
         ],
         optionDescriptions: {
-          "set image:<file> action:<overwrite|extend>": "Upload 1-4 ảnh; `overwrite` thay cả thư viện, `extend` nối thêm tới 6 cảnh",
+          "set image:<file> image_2:<file> image_3:<file> image_4:<file> mode:<even|random> action:<overwrite|extend>": "Upload 1-4 ảnh; `mode:even` hoặc `mode:random` để chia ảnh cho các roster; `overwrite` thay cả thư viện, `extend` nối thêm tới 6 cảnh",
           view: "Mở browser xem từng cảnh và map roster",
           "edit image:<file>": "Thay cảnh đang chọn bằng ảnh đính kèm; bỏ trống `image` để xoá cảnh",
         },

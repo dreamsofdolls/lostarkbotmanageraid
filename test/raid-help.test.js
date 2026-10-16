@@ -13,15 +13,22 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  ApplicationCommandOptionType,
   EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
   MessageFlags,
 } = require("discord.js");
 
-const { createRaidHelpCommand } = require("../bot/handlers/meta/help");
+const { createRaidCommandDefinitions } = require("../bot/handlers/commands/command-definitions");
+const { SECTION_META, createRaidHelpCommand } = require("../bot/handlers/meta/help");
 const { RAID_COMMAND_NAMES } = require("../bot/app/interaction-router-registry");
 const { UI } = require("../bot/utils/raid/common/shared");
+const {
+  announcementTypeEntry,
+  announcementTypeKeys,
+} = require("../bot/utils/raid/schedule/announcements");
+const { TRANSLATIONS } = require("../bot/locales");
 
 function makeFactory() {
   return createRaidHelpCommand({
@@ -360,4 +367,95 @@ test("dropdown options carry section icons as emoji + truncated descriptions ≤
     assert.ok(opt.description.length <= 100, `option "${opt.value}" description over 100 chars`);
     assert.ok(opt.emoji, `option "${opt.value}" should carry an emoji`);
   }
+});
+
+/**
+ * Flatten a command definition into its subcommand names and, per leaf
+ * option name, the required flag of every occurrence.
+ * @param {{options?: object[]}} definition - command definition JSON
+ * @returns {{subcommands: string[], leaves: Map<string, boolean[]>}} subcommand names and leaf required flags
+ */
+function describeDefinition(definition) {
+  const subcommands = [];
+  const leaves = new Map();
+  const walk = (options = []) => {
+    for (const option of options) {
+      if (
+        option.type === ApplicationCommandOptionType.Subcommand ||
+        option.type === ApplicationCommandOptionType.SubcommandGroup
+      ) {
+        subcommands.push(option.name);
+        walk(option.options);
+      } else {
+        leaves.set(option.name, [...(leaves.get(option.name) || []), Boolean(option.required)]);
+      }
+    }
+  };
+  walk(definition.options);
+  return { subcommands, leaves };
+}
+
+test("every option of a command definition is listed in its raid-help section with the same required flag", () => {
+  const definitions = new Map(
+    createRaidCommandDefinitions({ announcementTypeKeys, announcementTypeEntry })
+      .map((definition) => definition.toJSON())
+      .map((definition) => [definition.name, definition])
+  );
+  const problems = [];
+  for (const [key, meta] of Object.entries(SECTION_META)) {
+    if (key === "getting-started") continue;
+    const definition = definitions.get(key);
+    assert.ok(definition, `section "${key}" has no command definition`);
+    const { subcommands, leaves } = describeDefinition(definition);
+
+    // A composite entry such as "grant target:<user>" documents a subcommand
+    // and its options in one line, so each whitespace-separated token names
+    // one of them. Only a plain entry carries a flag of its own; a composite
+    // entry's flag describes its subcommand line (whether the line is
+    // optional), not the option. So an option named only inside a composite
+    // entry ("action" in "config action:<x>", "target" in "revoke
+    // target:<user>") is checked for being listed but not for its required
+    // flag, and a "subcommand" entry accepts any subcommand name of its section.
+    const listed = new Set();
+    const plainFlags = new Map();
+    for (const entry of meta.options) {
+      for (const token of entry.name.split(/\s+/)) listed.add(token.split(":")[0]);
+      if (/^[\w-]+$/.test(entry.name)) plainFlags.set(entry.name, entry.required);
+    }
+
+    // The subcommand names of a flat section may collapse into one "subcommand" entry.
+    for (const name of subcommands) {
+      if (!listed.has(name) && !listed.has("subcommand")) {
+        problems.push(`${key}: subcommand "${name}" is not listed`);
+      }
+    }
+    for (const [name, flags] of leaves) {
+      if (!listed.has(name)) {
+        problems.push(`${key}: option "${name}" is not listed`);
+        continue;
+      }
+      // An option shared by several subcommands is required only when every
+      // subcommand that carries it requires it.
+      const required = flags.every(Boolean);
+      if (plainFlags.has(name) && plainFlags.get(name) !== required) {
+        problems.push(`${key}: option "${name}" is required=${required} in the definition but listed required=${plainFlags.get(name)}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
+});
+
+test("every raid-help option has a description in en, vi and jp", () => {
+  const missing = [];
+  for (const [key, meta] of Object.entries(SECTION_META)) {
+    for (const [lang, pack] of Object.entries(TRANSLATIONS)) {
+      const descriptions = pack["raid-help"].sections[key].optionDescriptions || {};
+      for (const { name } of meta.options) {
+        if (typeof descriptions[name] !== "string" || descriptions[name].trim() === "") {
+          missing.push(`${lang}/${key}: ${name}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
 });

@@ -9,9 +9,6 @@
 const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
-  createRaidAnnounceAutocompleteHandler,
-} = require("./announce/autocomplete");
-const {
   getRaidAnnounceActionHandler,
   isValidRaidAnnounceAction,
 } = require("./announce/actions");
@@ -33,6 +30,19 @@ function buildCurrentEntry({ type, entry }) {
   };
 }
 
+/**
+ * Build the /raid-announce command handler.
+ * @param {object} deps - injected dependencies; every key is also forwarded
+ *   to the show, toggle and channel action handlers
+ * @param {Function} deps.EmbedBuilder - discord.js EmbedBuilder
+ * @param {object} deps.PermissionFlagsBits - discord.js permission flags (ManageGuild gates the command)
+ * @param {object} deps.User - Mongoose User model, read for the caller's language
+ * @param {object} deps.GuildConfig - Mongoose GuildConfig model
+ * @param {Function} deps.announcementTypeEntry - resolves an announcement type key to its catalog entry
+ * @param {Function} deps.getAnnouncementsConfig - reads the per-type announcement config from a guild document
+ * @returns {{handleRaidAnnounceCommand: Function}} handler wired into
+ *   commands.js dispatch
+ */
 function createRaidAnnounceCommand(deps) {
   const {
     EmbedBuilder,
@@ -110,7 +120,6 @@ function createRaidAnnounceCommand(deps) {
 
   return {
     handleRaidAnnounceCommand,
-    handleRaidAnnounceAutocomplete: createRaidAnnounceAutocompleteHandler(deps),
   };
 }
 

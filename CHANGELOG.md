@@ -20,11 +20,15 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A side or shared daily or weekly task completed last cycle shows as not done right after the reset, on the card and in the task dropdowns (filter counts, bulk and per-character toggles, shared rows).
 - The Local Sync view of `/raid-status` acting on a superseded or expired preview moves to the newer pending one, like the DM console, and reloads rosters only when the apply wrote something, including a sync that stopped on a write error after writing some gates.
 - Gold settings, side-task toggles, roster refresh and `/raid-task` changes on a shared roster say the share was removed when the owner revoked it or is no longer a manager, and keep the view-only notice when the share was only turned view-only (earlier today both showed the view-only notice; `/raid-task` did so when the share was revoked while a change was being saved).
+- `/raid-help` lists every option of `/raid-schedule-preview` (`skip_notify`, `show` and `action`), `/raid-channel` (`language`, and `set-language` among the `config` actions) and `/raid-bg` (`image_2` to `image_4`, `mode`), marks `action`, `preset` and `task` of `/raid-task` as required, and its English `/raid-bg` entry says `mode` sets how images are assigned to rosters.
 
 ### Changed (internal)
 - `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.
 - `/raid-check` refreshes recompute only the refreshed user's raids; `/raid-status` reloads read the viewer's own roster as a lean render-only snapshot; `/raid-remove-roster` autocomplete and `/raid-gold-earner` read the caller's profile once for roster and language; `/raid-channel action` autocomplete reads language and config together.
 - `/raid-set` and Local Sync raid writes share one load, check and save sequence; a missing roster reports no-roster before outside-current-week; batch saves write only the changed characters' raids and the week reset. The schema's raid keys, the reset seed, the display order and the weekly reset loop come from one catalog list, and the edit-share tie rule lives in one helper.
+
+### Removed
+- The no-database autocomplete fallback for `/raid-announce action`, which the 2026-08-07 entry kept for clients holding the old command schema during a redeploy; the option has been a static dropdown since then, and an old client now gets an empty list.
 
 ## 2026-10-11
 

@@ -1875,15 +1875,6 @@ module.exports = {
       successLineImpact: "**影響:** 次回の発火時、アーティストは監視チャンネルに投稿しますわ。",
       successLineRevert: "別のチャンネルにオーバーライドしたい時はアクション `set-channel channel:#abc` を使ってね♪",
     },
-    autocomplete: {
-      show: "現在の設定を表示",
-      turnOffWithState: "オフにする · 現在オン",
-      turnOnWithState: "オンにする · 現在オフ",
-      turnOnGeneric: "オンにする",
-      turnOffGeneric: "オフにする",
-      setChannel: "チャンネルオーバーライドを設定",
-      clearChannel: "チャンネルオーバーライドをクリア",
-    },
   },
   "raid-help": {
     overview: {
@@ -2042,6 +2033,7 @@ module.exports = {
           raid: "予定を組むレイド",
           mode: "難易度",
           when: "開始時刻: `20:00`、`8pm`、`+2h`；または曜日 `wed 20:00` / `thứ 4 20:00` / `cn 8pm`；または日付 `5/6 20:00` / `5/6/2026 8pm`（曜日・日付は時刻が必要）",
+          skip_notify: "サイレントモード: オン = 追加/繰上/中止/削除で @メンション通知なし",
           auto_lock: "開始時刻に自動ロック（デフォルトON）",
           title: "ボードのタイトル（任意）",
         },
@@ -2169,8 +2161,9 @@ module.exports = {
           "**管理者限定**: `サーバー管理` 権限が必要ですわ。",
         ],
         optionDescriptions: {
-          "config action:<x>": "アクション: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off`",
+          "config action:<x>": "アクション: `show` / `set` / `clear` / `cleanup` / `repin` / `schedule-on` / `schedule-off` / `set-language`",
           channel: "テキストチャンネル - action:set の時に必要",
+          language: "配信言語 `vi` / `jp` / `en` - action:set-language 用、省略すると現在の設定を表示",
         },
       },
       "raid-auto-manage": {
@@ -2259,7 +2252,7 @@ module.exports = {
           "**クッキリ + キレイ**: 保存前に 16:9 (1600x900 JPEG) フレームに正規化しますわ · 自身の cover-fit バックプレートが背景を埋めて、source 画像は contain-fit で中央に丸ごと配置されますの。縦長や変則比率でも Discord embed の横幅いっぱいに表示されて、クロップされませんわ～",
         ],
         optionDescriptions: {
-          "set image:<file> action:<overwrite|extend>": "1-4 枚アップロード。`overwrite` はライブラリを置き換え、`extend` は 6 シーンまで追加",
+          "set image:<file> image_2:<file> image_3:<file> image_4:<file> mode:<even|random> action:<overwrite|extend>": "1-4 枚アップロード。`mode:even` / `mode:random` でロスターへの割り当て方を選択、`overwrite` はライブラリを置き換え、`extend` は 6 シーンまで追加",
           view: "シーンブラウザとロスター割り当てを表示",
           "edit image:<file>": "選択中のシーンを添付画像で差し替え。`image` なしならシーンを削除",
         },

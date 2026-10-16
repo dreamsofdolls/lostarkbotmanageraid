@@ -7,11 +7,14 @@ const {
   createRaidAnnounceCommandDefinition,
 } = require("../bot/handlers/commands/command-definitions/admin");
 const {
-  createRaidAnnounceAutocompleteHandler,
-} = require("../bot/handlers/raid/announce/autocomplete");
+  createRaidAnnounceCommand,
+} = require("../bot/handlers/raid/announce");
 const {
   handleToggleAnnouncement,
 } = require("../bot/handlers/raid/announce/toggle");
+const {
+  createRaidInteractionRouter,
+} = require("../bot/app/interaction-router-registry");
 const {
   announcementTypeEntry,
   announcementTypeKeys,
@@ -42,42 +45,42 @@ test("raid-announce action is a static Discord dropdown with working on/off valu
   );
 });
 
-test("legacy raid-announce autocomplete answers without touching Mongo", async () => {
-  let response = null;
-  const handler = createRaidAnnounceAutocompleteHandler({
-    normalizeName: (value) => String(value || "").trim().toLowerCase(),
-    announcementTypeEntry,
-    User: {
-      findOne() {
-        throw new Error("User DB must not be read by action autocomplete");
-      },
+test("autocomplete on raid-announce from a stale client answers with an empty list", async () => {
+  const noop = async () => {};
+  const logged = [];
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers: {
+      handleRaidManagementCommand: noop,
+      ...createRaidAnnounceCommand({ announcementTypeEntry }),
     },
-    GuildConfig: {
-      findOne() {
-        throw new Error("GuildConfig must not be read by action autocomplete");
-      },
+    log: {
+      warn: (...args) => logged.push(args),
+      error: (...args) => logged.push(args),
     },
   });
-  const interaction = {
-    locale: "vi",
+  const responses = [];
+  const autocomplete = (id, respond) => ({
+    id,
+    commandName: "raid-announce",
+    isChatInputCommand: () => false,
+    isAutocomplete: () => true,
     options: {
       getFocused: () => ({ name: "action", value: "" }),
-      getString: (name) => name === "type" ? "world-event-reminder" : null,
+      getString: () => null,
     },
-    async respond(choices) {
-      response = choices;
-    },
-  };
+    respond,
+  });
 
-  await handler(interaction);
+  await router.handle(autocomplete("stale-ok", async (choices) => {
+    responses.push(choices);
+  }));
+  await router.handle(autocomplete("stale-rejected", async () => {
+    throw new Error("Unknown interaction");
+  }));
 
-  assert.deepEqual(response.map((choice) => choice.value), [
-    "show",
-    "on",
-    "off",
-    "set-channel",
-    "clear-channel",
-  ]);
+  assert.deepEqual(responses, [[]]);
+  assert.deepEqual(logged, [], "a rejected respond is swallowed, not routed to the error handler");
 });
 
 test("world-event reminder toggle writes the exact nested enabled field", async () => {

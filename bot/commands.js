@@ -812,14 +812,12 @@ const {
 
 const {
   handleRaidAnnounceCommand,
-  handleRaidAnnounceAutocomplete,
 } = createRaidAnnounceCommand({
   EmbedBuilder,
   PermissionFlagsBits,
   UI,
   User,
   GuildConfig,
-  normalizeName,
   truncateText,
   announcementTypeEntry,
   announcementOverridableTypeKeys,
@@ -944,7 +942,6 @@ module.exports = {
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
-  handleRaidAnnounceAutocomplete,
   handleRaidTaskAutocomplete,
   handleRaidTaskButton,
   handleRaidScheduleButton,
