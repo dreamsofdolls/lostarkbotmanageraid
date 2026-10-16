@@ -892,6 +892,119 @@ test("an in-card Local Sync view apply refreshes the job owner's open cards once
   assert.deepEqual(events, [{ discordId, jobId: job.jobId }]);
 });
 
+// A preview with one clear for Aki and one for Ceri, on a roster holding both.
+const AKI_AND_CERI = {
+  jobOverrides: {
+    deltas: [makeJob().deltas[0], { ...makeJob().deltas[0], charName: "Ceri" }],
+  },
+  userOverrides: {
+    accounts: [{
+      accountName: "Roster",
+      characters: [
+        ...makeAkiRoster()[0].characters,
+        { name: "Ceri", class: "Bard", itemLevel: 1750, isGoldEarner: true, assignedRaids: {} },
+      ],
+    }],
+  },
+};
+
+for (const scenario of [
+  { name: "an apply that wrote", applied: true },
+  {
+    name: "an apply whose write error came after some gates were written",
+    applied: true,
+    ...AKI_AND_CERI,
+    deps: {
+      applyRaidSetForDiscordId: async (args) => (
+        args.characterName === "Ceri"
+          ? null
+          : { matched: true, updated: true, displayName: args.characterName }
+      ),
+    },
+  },
+  {
+    name: "an apply that threw after its writes",
+    applied: true,
+    failFinish: true,
+  },
+  {
+    name: "an apply whose only write failed",
+    applied: false,
+    deps: { applyRaidSetForDiscordId: async () => null },
+  },
+  {
+    name: "an apply that found the sync slot busy",
+    applied: false,
+    deps: {
+      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
+      releaseAutoManageSyncSlot: () => {},
+    },
+  },
+  {
+    name: "an apply refused for a disabled sync mode",
+    applied: false,
+    userOverrides: { localSyncEnabled: false },
+  },
+]) {
+  test(`an in-card Local Sync view reports ${scenario.name} as applied: ${scenario.applied}`, async () => {
+    const { job, PreviewModel: storedModel, UserModel, deps } = makeOwnerApply("owner-view-result", scenario);
+    // Storing the applied state fails, which sends the job back to pending.
+    const PreviewModel = scenario.failFinish
+      ? {
+        findOne: (filter) => storedModel.findOne(filter),
+        findOneAndUpdate: async (filter, update) => {
+          if (update?.$set?.status === "applied") throw new Error("mongo unavailable");
+          return storedModel.findOneAndUpdate(filter, update);
+        },
+      }
+      : storedModel;
+
+    const result = await runLocalSyncViewAction({
+      action: "apply",
+      jobId: job.jobId,
+      discordId: "owner-view-result",
+      User: UserModel,
+      PreviewModel,
+      applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
+      acquireAutoManageSyncSlot: deps.acquireAutoManageSyncSlot,
+      releaseAutoManageSyncSlot: deps.releaseAutoManageSyncSlot,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.applied, scenario.applied);
+  });
+}
+
+// Two jobs of one owner: the older was superseded when the newer was created.
+// Every action ends on the newer card, as the DM console does.
+for (const action of ["apply", "cancel", "refresh"]) {
+  test(`an in-card Local Sync view ${action} on a superseded job ends on the newer pending job`, async () => {
+    const discordId = "owner-view-superseded";
+    const oldJob = makeJob({
+      discordId,
+      jobId: "aaaaaaaa-2222-4333-8444-555555555555",
+      status: "superseded",
+    });
+    const newJob = makeJob({ discordId, jobId: "bbbbbbbb-2222-4333-8444-555555555555" });
+    const PreviewModel = {
+      findOne: (filter) => [newJob, oldJob].find((job) => matchesFilter(job, filter)) || null,
+      findOneAndUpdate: async () => null,
+    };
+
+    const result = await runLocalSyncViewAction({
+      action,
+      jobId: oldJob.jobId,
+      discordId,
+      User: makeConsoleUserModel({ discordId, language: "en", localSyncEnabled: true }),
+      PreviewModel,
+      applyRaidSetForDiscordId: async () => assert.fail("a superseded job must not write"),
+    });
+
+    assert.equal(result.job.jobId, newJob.jobId);
+    assert.equal(result.applied, false);
+  });
+}
+
 test("a repeated apply of an applied job does not refresh the owner again", async (t) => {
   const discordId = "owner-repeat-apply";
   const { job, deps } = makeOwnerApply(discordId);

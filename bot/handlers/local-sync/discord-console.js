@@ -40,6 +40,23 @@ function shouldOpenRaidStatusSurface(job, activeScope) {
   return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(job));
 }
 
+/**
+ * Pick the job a Local Sync action ends on. A superseded or expired job gives
+ * way to the owner's newest job unless that one is closed as well.
+ * @param {object|null} job - the job the action resolved to
+ * @param {string} discordId - job owner
+ * @param {{PreviewModel?: object}} [jobDeps] - injected preview model for tests
+ * @returns {Promise<object|null>} the newer actionable job, otherwise `job`
+ */
+async function preferLatestActionableJob(job, discordId, jobDeps = {}) {
+  if (!LATEST_PREVIEW_FALLBACK_STATES.has(resolvePreviewJobState(job))) return job;
+  const latestJob = await getLatestPreviewJob(discordId, jobDeps);
+  if (!latestJob || latestJob.jobId === job?.jobId) return job;
+  return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(latestJob))
+    ? job
+    : latestJob;
+}
+
 async function loadConsoleUser(UserModel, discordId) {
   return UserModel.findOne({ discordId })
     .select(
@@ -210,15 +227,6 @@ function createLocalSyncDiscordConsole({
     }
   }
 
-  async function preferLatestActionableJob(job, discordId) {
-    if (!LATEST_PREVIEW_FALLBACK_STATES.has(resolvePreviewJobState(job))) return job;
-    const latestJob = await getLatestPreviewJob(discordId, jobDeps);
-    if (!latestJob || latestJob.jobId === job?.jobId) return job;
-    return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(latestJob))
-      ? job
-      : latestJob;
-  }
-
   async function loadInteractionPreviewContext(interaction, jobId) {
     const [job, userDoc] = await Promise.all([
       getPreviewJob(jobId, jobDeps),
@@ -316,7 +324,7 @@ function createLocalSyncDiscordConsole({
     // independent latest-job check.
     let userDoc;
     [nextJob, userDoc] = await Promise.all([
-      preferLatestActionableJob(nextJob, interaction.user.id),
+      preferLatestActionableJob(nextJob, interaction.user.id, jobDeps),
       action === "apply"
         ? loadConsoleUser(User, interaction.user.id)
         : Promise.resolve(initialUserDoc),
@@ -343,6 +351,7 @@ function createLocalSyncDiscordConsole({
 
 module.exports = {
   activeScopeForUser,
+  preferLatestActionableJob,
   shouldOpenRaidStatusSurface,
   previewSummaryForJob,
   createLocalSyncDiscordConsole,

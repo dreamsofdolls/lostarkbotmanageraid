@@ -79,8 +79,7 @@ async function resolveClearConfirmAccess({
   executorId,
   lang,
   resolveTaskWriteTarget,
-  editTaskNotice,
-  viewOnlyShareNotice,
+  editViewOnlyShareNotice,
 }) {
   if (!route.hasRoster) return { ok: true, discordId: executorId };
   return resolveEditableTaskWriteAccess({
@@ -88,8 +87,7 @@ async function resolveClearConfirmAccess({
     rosterName: route.rosterName,
     commandName: "clear-confirm",
     resolveTaskWriteTarget,
-    denyViewOnly: (writeTarget) =>
-      editTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang)),
+    denyViewOnly: (writeTarget) => editViewOnlyShareNotice(interaction, writeTarget, lang),
   });
 }
 
@@ -98,7 +96,8 @@ function createClearConfirmHandler({
   saveWithRetry,
   resolveTaskWriteTarget,
   editTaskNotice,
-  viewOnlyShareNotice,
+  editViewOnlyShareNotice,
+  editShareRefusalNotice,
 }) {
   return async function handleClearConfirmButton(interaction, route) {
     const executorId = interaction.user.id;
@@ -110,8 +109,7 @@ function createClearConfirmHandler({
       executorId,
       lang,
       resolveTaskWriteTarget,
-      editTaskNotice,
-      viewOnlyShareNotice,
+      editViewOnlyShareNotice,
     });
     if (!access.ok) return;
 
@@ -121,7 +119,7 @@ function createClearConfirmHandler({
         const userDoc = await User.findOne({ discordId: access.discordId });
         if (!await revalidateTaskWriteAccess({
           access, executorId, rosterName: route.rosterName, resolveTaskWriteTarget,
-          denyViewOnly: (target) => editTaskNotice(interaction, viewOnlyShareNotice(target, lang)),
+          denyShareRefusal: (target) => editShareRefusalNotice(interaction, target, lang),
         })) {
           result.outcome = "auth-lost";
           return;

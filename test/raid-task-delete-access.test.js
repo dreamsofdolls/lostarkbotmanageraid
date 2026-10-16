@@ -3,10 +3,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { saveWithRetry } = require("../bot/models/user");
-const { clearUserLanguageCache } = require("../bot/services/i18n");
+const { clearUserLanguageCache, t } = require("../bot/services/i18n");
+const { createRaidTaskNoticeHelpers } = require("../bot/handlers/raid/task/notices");
 const { createRaidTaskRemoveActionHandlers } = require("../bot/handlers/raid/task/remove-actions");
 const { createRaidTaskSharedActionHandlers } = require("../bot/handlers/raid/task/shared-actions");
 const { createClearConfirmHandler } = require("../bot/handlers/raid/task/clear/confirm");
+const { createClearPreviewHandler } = require("../bot/handlers/raid/task/clear/preview");
 
 for (const kind of ["single", "shared"]) {
   for (const scenario of ["success", "missing target", "missing task", "save retry", "removed during retry"]) {
@@ -41,6 +43,7 @@ for (const kind of ["single", "shared"]) {
         saveWithRetry,
         resolveTaskWriteTarget: async () => ({ discordId: "owner", viaShare: true, canEdit: true }),
         replyViewOnlyShareNotice: () => assert.fail("The granted share must stay editable"),
+        replyShareRefusalNotice: () => assert.fail("The granted share must stay editable"),
         replyTaskNotice: async (_interaction, notice) => notices.push(notice),
       };
       const handler = kind === "shared"
@@ -90,8 +93,8 @@ for (const kind of ["single", "shared", "clear"]) {
       resolveTaskWriteTarget: async () => saves
         ? { discordId: "viewer", viaShare: false }
         : { discordId: "owner", viaShare: true, canEdit: true, ownerLabel: "Owner" },
-      replyViewOnlyShareNotice: async () => { denied += 1; },
-      viewOnlyShareNotice: () => { denied += 1; return { type: "error" }; },
+      replyShareRefusalNotice: async () => { denied += 1; },
+      editShareRefusalNotice: async () => { denied += 1; },
       replyTaskNotice: async (_interaction, notice) => notices.push(notice),
       editTaskNotice: async (_interaction, notice) => notices.push(notice),
     };
@@ -109,6 +112,127 @@ for (const kind of ["single", "shared", "clear"]) {
     assert.equal(saves, 1);
     assert.equal(denied, 1);
     assert.ok(notices.every(notice => notice.type !== "success"));
+    clearUserLanguageCache();
+  });
+}
+
+class NoticeEmbed {
+  setColor() { return this; }
+  setTitle(title) { this.title = title; return this; }
+  setDescription(description) { this.description = description; return this; }
+}
+
+for (const kind of ["single", "shared", "clear"]) {
+  for (const [scenario, current, listedShares, noticeKeys] of [
+    ["revoked", { discordId: "viewer", viaShare: false }, [], "raid-task.shareRevoked"],
+    [
+      "downgraded to view",
+      { discordId: "owner", viaShare: true, canEdit: false, ownerLabel: "Owner" },
+      [{ ownerDiscordId: "owner" }],
+      "raid-task.shareViewOnly",
+    ],
+  ]) {
+    test(`${kind} task deletion tells a share that is ${scenario} during a save retry from the other refusal`, async () => {
+      clearUserLanguageCache();
+      const sent = [];
+      const lookups = [];
+      let saves = 0;
+      const helpers = createRaidTaskNoticeHelpers({
+        EmbedBuilder: NoticeEmbed,
+        getAccessibleAccounts: async (viewerId, options) => {
+          lookups.push([viewerId, options]);
+          return listedShares;
+        },
+      });
+      const deps = {
+        User: {
+          findOne(_query, projection) {
+            if (projection) return { lean: async () => ({ language: "en" }) };
+            return Promise.resolve({
+              accounts: [{ accountName: "Main", characters: [{ name: "Alpha", sideTasks: [{ taskId: "task", name: "Daily", reset: "daily" }] }], sharedTasks: [{ taskId: "task", name: "Daily" }] }],
+              async save() {
+                saves += 1;
+                if (saves === 1) throw Object.assign(new Error("conflict"), { name: "VersionError" });
+              },
+            });
+          },
+        },
+        saveWithRetry,
+        resolveTaskWriteTarget: async () => saves
+          ? current
+          : { discordId: "owner", viaShare: true, canEdit: true, ownerLabel: "Owner" },
+        ...helpers,
+      };
+      const interaction = {
+        user: { id: "viewer" },
+        deferUpdate: async () => {},
+        reply: async payload => { sent.push(payload.embeds[0]); },
+        editReply: async payload => { sent.push(payload.embeds[0]); },
+        options: { getString: key => ({ roster: "Main", character: "Alpha", task: "task" })[key] },
+      };
+      if (kind === "clear") {
+        await createClearConfirmHandler(deps)(interaction, { hasRoster: true, rosterName: "Main", characterName: "Alpha" });
+      } else if (kind === "shared") {
+        await createRaidTaskSharedActionHandlers(deps).handleSharedRemove(interaction);
+      } else {
+        await createRaidTaskRemoveActionHandlers(deps).handleRemove(interaction);
+      }
+
+      assert.equal(saves, 1);
+      assert.deepEqual(lookups, [["viewer", { includeOwn: false }]]);
+      assert.equal(sent.length, 1);
+      assert.ok(sent[0].title.includes(t(`${noticeKeys}.title`, "en")), sent[0].title);
+      assert.equal(sent[0].description, t(`${noticeKeys}.description`, "en", { owner: "Owner" }));
+      clearUserLanguageCache();
+    });
+  }
+}
+
+for (const kind of ["single", "shared", "clear", "clear preview"]) {
+  test(`${kind} task command answers a view-only share at the first resolve without the share lookup`, async () => {
+    clearUserLanguageCache();
+    const sent = [];
+    let lookups = 0;
+    const helpers = createRaidTaskNoticeHelpers({
+      EmbedBuilder: NoticeEmbed,
+      getAccessibleAccounts: async () => {
+        lookups += 1;
+        return [];
+      },
+    });
+    const deps = {
+      User: {
+        findOne(_query, projection) {
+          if (projection) return { lean: async () => ({ language: "en" }) };
+          return assert.fail("A view-only share must not load the owner's document");
+        },
+      },
+      saveWithRetry,
+      resolveTaskWriteTarget: async () => ({ discordId: "owner", viaShare: true, canEdit: false, ownerLabel: "Owner" }),
+      ...helpers,
+    };
+    const interaction = {
+      user: { id: "viewer" },
+      deferReply: async () => {},
+      deferUpdate: async () => {},
+      reply: async payload => { sent.push(payload.embeds[0]); },
+      editReply: async payload => { sent.push(payload.embeds[0]); },
+      options: { getString: key => ({ roster: "Main", character: "Alpha", task: "task" })[key] },
+    };
+    if (kind === "clear") {
+      await createClearConfirmHandler(deps)(interaction, { hasRoster: true, rosterName: "Main", characterName: "Alpha" });
+    } else if (kind === "clear preview") {
+      await createClearPreviewHandler(deps)(interaction);
+    } else if (kind === "shared") {
+      await createRaidTaskSharedActionHandlers(deps).handleSharedRemove(interaction);
+    } else {
+      await createRaidTaskRemoveActionHandlers(deps).handleRemove(interaction);
+    }
+
+    assert.equal(lookups, 0);
+    assert.equal(sent.length, 1);
+    assert.ok(sent[0].title.includes(t("raid-task.shareViewOnly.title", "en")), sent[0].title);
+    assert.equal(sent[0].description, t("raid-task.shareViewOnly.description", "en", { owner: "Owner" }));
     clearUserLanguageCache();
   });
 }

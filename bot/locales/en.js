@@ -1001,6 +1001,8 @@ module.exports = {
       rosterRefreshMissingDescription: "Artist could not find **{accountName}** in the DB anymore. Reopen `/raid-status` for a fresh session.",
       rosterRefreshSharedLockedTitle: "Shared roster is view-only",
       rosterRefreshSharedLockedDescription: "This shared roster is view-only, so Artist cannot write a refresh back to the owner. Ask the owner to grant edit access if you need direct updates.",
+      rosterRefreshShareRevokedTitle: "Shared roster removed",
+      rosterRefreshShareRevokedDescription: "This roster is no longer shared with you, so Artist cannot refresh it. Reopen `/raid-status` to update your roster list.",
       rosterRefreshFailedTitle: "Roster refresh failed",
       rosterRefreshFailedDescription: "Artist hit an error while refreshing the roster: `{error}`. Try again in a few minutes.",
       localNewLinkUnavailableTitle: "Local Reader is unavailable",
@@ -1123,6 +1125,7 @@ module.exports = {
       modeFailedTitle: "Couldn't save",
       modeFailedDescription: "Try again after reopening `/raid-status`.",
       shareViewOnlyDescription: "Manager **{owner}** shared this roster with you, but at `view` permission (read-only) - you can't change its gold settings. Ask them to upgrade via `/raid-share grant target:@you permission:edit` and try again.",
+      shareRevokedDescription: "Manager **{owner}** no longer shares this roster with you, so you can't change its gold settings. Reopen `/raid-status` to refresh your rosters. If you need access again, ask them to share it with `/raid-share grant target:@you permission:edit`.",
       footerGold: "Gold {earned}/{total}",
       footerBound: "Bound {bound}",
     },
@@ -1578,6 +1581,10 @@ module.exports = {
     shareViewOnly: {
       title: "Share is view-only",
       description: "Manager **{owner}** shared this roster with you, but at `view` permission (read-only) - you can't update side tasks. Ask them to upgrade via `/raid-share grant target:@you permission:edit` and try again.",
+    },
+    shareRevoked: {
+      title: "Share removed",
+      description: "Manager **{owner}** no longer shares this roster with you, so you can't update side tasks. Reopen `/raid-status` to refresh your rosters. If you need access again, ask them to share it with `/raid-share grant target:@you permission:edit`.",
     },
     save: {
       addFailedTitle: "Save failed",

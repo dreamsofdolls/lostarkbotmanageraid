@@ -12,7 +12,11 @@ const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require(".
  * @param {Function} deps.weekResetStartMs - weekly reset boundary helper.
  * @param {Function} deps.resolveTaskWriteTarget - shared-roster access resolver.
  * @param {Function} deps.replyTaskNotice - sends the command's notice reply.
- * @param {Function} deps.replyViewOnlyShareNotice - sends the view-only denial.
+ * @param {Function} deps.replyViewOnlyShareNotice - sends the view-only notice
+ *   when the first resolve denies a share.
+ * @param {Function} deps.replyShareRefusalNotice - sends the share denial when a
+ *   save attempt loses the grant: the view-only notice for a downgraded share,
+ *   the removed notice for a revoked one.
  * @param {object} spec - per-command behavior.
  * @param {string} spec.commandName - command label for share and save-failure logs.
  * @param {Function} spec.readRequest - extracts the request (rosterName, ...)
@@ -28,7 +32,7 @@ const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require(".
  */
 function createTaskMutationHandler({
   User, saveWithRetry, dailyResetStartMs, weekResetStartMs,
-  resolveTaskWriteTarget, replyTaskNotice, replyViewOnlyShareNotice,
+  resolveTaskWriteTarget, replyTaskNotice, replyViewOnlyShareNotice, replyShareRefusalNotice,
 }, {
   commandName, readRequest, buildValidationNotice = () => null, createResult,
   applyToUserDoc, buildNotice, saveFailedDescriptionKey,
@@ -66,7 +70,7 @@ function createTaskMutationHandler({
         const userDoc = await User.findOne({ discordId });
         if (!await revalidateTaskWriteAccess({
           access, executorId, rosterName: request.rosterName, resolveTaskWriteTarget,
-          denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
+          denyShareRefusal: (target) => replyShareRefusalNotice(interaction, target, lang),
         })) return null;
         if (applyToUserDoc(userDoc, request, attemptResult, { dailyResetStartMs, weekResetStartMs }, now)) {
           await userDoc.save();

@@ -54,7 +54,11 @@ const {
   tPick,
 } = require("../../../services/i18n");
 const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
-const { canEditAccount } = require("../../../services/access/access-control");
+const {
+  canEditAccount,
+  getAccessibleAccounts,
+  isShareStillListed,
+} = require("../../../services/access/access-control");
 
 function noRedraw() {
   return { redraw: false };
@@ -82,12 +86,54 @@ const ROSTER_REFRESH_NOTICES = Object.freeze({
   },
 });
 
+// Notice keys per refused action. The view-only pair shows while the owner
+// still shares a roster with the viewer; the revoked pair once nothing is shared.
+const SHARE_REFUSAL_NOTICES = Object.freeze({
+  task: {
+    viewOnly: {
+      title: "raid-task.shareViewOnly.title",
+      description: "raid-task.shareViewOnly.description",
+    },
+    revoked: {
+      title: "raid-task.shareRevoked.title",
+      description: "raid-task.shareRevoked.description",
+    },
+  },
+  gold: {
+    viewOnly: {
+      title: "raid-task.shareViewOnly.title",
+      description: "raid-status.goldView.shareViewOnlyDescription",
+    },
+    revoked: {
+      title: "raid-task.shareRevoked.title",
+      description: "raid-status.goldView.shareRevokedDescription",
+    },
+  },
+  rosterRefresh: {
+    viewOnly: {
+      title: "raid-status.sync.rosterRefreshSharedLockedTitle",
+      description: "raid-status.sync.rosterRefreshSharedLockedDescription",
+    },
+    revoked: {
+      title: "raid-status.sync.rosterRefreshShareRevokedTitle",
+      description: "raid-status.sync.rosterRefreshShareRevokedDescription",
+    },
+  },
+});
+
 function buildRosterRefreshFollowupPayload(result, lang) {
   return buildRosterRefreshNotice(result, lang, ROSTER_REFRESH_NOTICES, {
     accountName: result?.accountName || "?",
   });
 }
 
+/**
+ * Build the /raid-status component handlers, keyed by STATUS_COMPONENT_ACTION.
+ * @param {object} ctx - session, builders, models and callbacks of one status
+ *   session; canEditAccountFn and getAccessibleAccountsFn default to the
+ *   access-control lookups and are injectable for tests
+ * @returns {Object<string, Function>} handlers that resolve to { redraw }
+ */
 function createStatusComponentRouteHandlers(ctx) {
   const {
     session,
@@ -115,6 +161,7 @@ function createStatusComponentRouteHandlers(ctx) {
     isReplyPrivate,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
     canEditAccountFn = canEditAccount,
+    getAccessibleAccountsFn = getAccessibleAccounts,
     refreshLocalSyncSnapshot = async () => null,
     runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
     // The session's shared redraw (view/redraw.js); built here when not given.
@@ -138,6 +185,7 @@ function createStatusComponentRouteHandlers(ctx) {
     formatGold,
     truncateText,
     canEditAccountFn,
+    followUpShareRefusal: (component, sharedFrom) => followUpShareRefusal(component, "gold", sharedFrom),
     showPrompt: redrawMessage.show,
   });
   let latestViewTicket = 0;
@@ -176,18 +224,25 @@ function createStatusComponentRouteHandlers(ctx) {
     };
   }
 
-  function shareViewOnlyNotice(sharedFrom, descriptionKey = "raid-task.shareViewOnly.description") {
+  // A refused write only says the viewer cannot edit. The owner's shares to the
+  // viewer tell a downgraded share, which is still listed, from a revoked one;
+  // a failed lookup counts as downgraded.
+  async function shareRefusalNotice(kind, sharedFrom) {
+    const stillShared = await isShareStillListed(discordId, sharedFrom?.ownerDiscordId, {
+      getAccessibleAccounts: getAccessibleAccountsFn,
+    });
+    const keys = SHARE_REFUSAL_NOTICES[kind][stillShared ? "viewOnly" : "revoked"];
     return {
       type: "lock",
-      title: t("raid-task.shareViewOnly.title", lang),
-      description: t(descriptionKey, lang, {
+      title: t(keys.title, lang),
+      description: t(keys.description, lang, {
         owner: sharedFrom?.ownerLabel || "(unknown)",
       }),
     };
   }
 
-  function goldShareViewOnlyNotice(sharedFrom) {
-    return shareViewOnlyNotice(sharedFrom, "raid-status.goldView.shareViewOnlyDescription");
+  async function followUpShareRefusal(component, kind, sharedFrom) {
+    await followUpNotice(component, EmbedBuilder, await shareRefusalNotice(kind, sharedFrom)).catch(() => {});
   }
 
   // A null write context is either a share the owner revoked or downgraded
@@ -196,7 +251,7 @@ function createStatusComponentRouteHandlers(ctx) {
   async function followUpGoldShareRefusal(component) {
     const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
     if (!sharedFrom) return;
-    await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(sharedFrom)).catch(() => {});
+    await followUpShareRefusal(component, "gold", sharedFrom);
   }
 
   return {
@@ -379,15 +434,10 @@ function createStatusComponentRouteHandlers(ctx) {
       });
       if (!deferred) return noRedraw();
 
-      const sharedLockedNotice = {
-        type: "lock",
-        title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
-        description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
-      };
       // Checked after the defer so the RosterShare read cannot use up
       // Discord's three-second reply window.
       if (sharedFrom && !(await canEditAccountFn(discordId, sharedFrom.ownerDiscordId))) {
-        await followUpNotice(component, EmbedBuilder, sharedLockedNotice).catch(() => {});
+        await followUpShareRefusal(component, "rosterRefresh", sharedFrom);
         return noRedraw();
       }
 
@@ -397,7 +447,7 @@ function createStatusComponentRouteHandlers(ctx) {
           canWrite: sharedFrom ? () => canEditAccountFn(discordId, sharedFrom.ownerDiscordId) : null,
         });
         if (result.status === "denied") {
-          await followUpNotice(component, EmbedBuilder, sharedLockedNotice).catch(() => {});
+          await followUpShareRefusal(component, "rosterRefresh", sharedFrom);
           return noRedraw();
         }
         await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
@@ -600,7 +650,7 @@ function createStatusComponentRouteHandlers(ctx) {
         // lands here from a card drawn before the share or roster changed.
         const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
         await followUpNotice(component, EmbedBuilder, sharedFrom
-          ? shareViewOnlyNotice(sharedFrom)
+          ? await shareRefusalNotice("task", sharedFrom)
           : {
             type: "warn",
             title: t("raid-status.taskView.toggleFailedTitle", lang),
@@ -619,7 +669,7 @@ function createStatusComponentRouteHandlers(ctx) {
         parsed,
       });
       if (toggleResult.denied) {
-        await followUpNotice(component, EmbedBuilder, shareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
+        await followUpShareRefusal(component, "task", targetAccount._sharedFrom);
         return noRedraw();
       }
       if (!toggleResult.ok) {
@@ -698,7 +748,7 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
       if (result.outcome === "denied") {
-        await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
+        await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
         return noRedraw();
       }
       if (result.outcome === "noop") return noRedraw();
@@ -760,10 +810,11 @@ function createStatusComponentRouteHandlers(ctx) {
           replacement: toggleResult.replacement,
           writeDiscordId,
           targetAccountName,
+          sharedFrom: targetAccount._sharedFrom,
         });
       }
       if (toggleResult.denied) {
-        await followUpNotice(component, EmbedBuilder, goldShareViewOnlyNotice(targetAccount._sharedFrom)).catch(() => {});
+        await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
         return noRedraw();
       }
       if (!toggleResult.ok) {

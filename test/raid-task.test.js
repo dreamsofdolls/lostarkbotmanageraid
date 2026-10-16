@@ -1798,3 +1798,72 @@ test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches 
   assert.equal(report.dailyModified, 4);
   assert.equal(report.weeklyModified, 2);
 });
+
+test("raid-task remove through createRaidTaskCommand answers a share revoked during the save retry with the removed notice", async (t) => {
+  const { clearUserLanguageCache } = require("../bot/services/i18n");
+  const RosterShare = require("../bot/models/RosterShare");
+  const UserModel = require("../bot/models/user");
+  const { saveWithRetry } = UserModel;
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
+  clearUserLanguageCache();
+  t.after(clearUserLanguageCache);
+
+  const ownerId = "test-manager-1";
+  let shareListed = true;
+  t.mock.method(RosterShare, "find", () => ({
+    lean: async () => (shareListed ? [{ ownerDiscordId: ownerId, accessLevel: "edit" }] : []),
+  }));
+  t.mock.method(UserModel, "find", () => ({
+    lean: async () => [{ discordId: ownerId, accounts: [{ accountName: "Shared", characters: [] }] }],
+  }));
+
+  let saves = 0;
+  const ownerDoc = {
+    accounts: [{
+      accountName: "Shared",
+      characters: [{ name: "Alpha", sideTasks: [{ taskId: "task", name: "Una", reset: "daily" }] }],
+    }],
+    save: async () => {
+      saves += 1;
+      shareListed = false;
+      throw Object.assign(new Error("conflict"), { name: "VersionError" });
+    },
+  };
+  class NoticeEmbed {
+    setColor() { return this; }
+    setTitle(title) { this.title = title; return this; }
+    setDescription(description) { this.description = description; return this; }
+  }
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: NoticeEmbed,
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class {},
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    User: {
+      findOne: (query, projection) => {
+        if (projection) return { lean: async () => ({ language: "en" }) };
+        assert.equal(query.discordId, ownerId);
+        return Promise.resolve(ownerDoc);
+      },
+    },
+    saveWithRetry,
+    loadUserForAutocomplete: async () => ({ accounts: [] }),
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+  const replies = [];
+
+  await handlers.handleRaidTaskCommand({
+    user: { id: "task-wiring-viewer" },
+    options: {
+      getSubcommand: () => "remove",
+      getString: (name) => ({ roster: "Shared", character: "Alpha", task: "task" })[name],
+    },
+    reply: async (payload) => { replies.push(payload.embeds[0]); },
+  });
+
+  assert.equal(saves, 1, "the grant is lost on the first save, so the retry must not save again");
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].title, /Share removed/);
+  assert.match(replies[0].description, /no longer shares this roster with you/);
+});

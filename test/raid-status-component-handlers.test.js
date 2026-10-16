@@ -27,6 +27,9 @@ const {
   truncateText,
 } = require("../bot/utils/raid/common/shared");
 const {
+  getAccessibleAccounts,
+} = require("../bot/services/access/access-control");
+const {
   getTargetResetKey,
 } = require("../bot/services/raid/schedulers/weekly-reset");
 const { subdocAssignedRaid } = require("./helpers/assigned-raid-subdoc");
@@ -57,6 +60,13 @@ function getSelectCustomId(row) {
   const select = row?.components?.[0];
   return select?.data?.custom_id || select?.data?.customId || select?.customId || "";
 }
+
+// The shares owner-1 still has with the viewer, as getAccessibleAccounts
+// returns them: none once revoked, one view entry once downgraded.
+const NO_SHARES = async () => [];
+const VIEW_SHARE_OF_OWNER_1 = async () => [
+  { ownerDiscordId: "owner-1", accessLevel: "view", isOwn: false },
+];
 
 function createHandlerHarness(overrides = {}) {
   const taskFilters = new Map();
@@ -116,6 +126,7 @@ function createHandlerHarness(overrides = {}) {
     runManualStatusSync: async () => ({ outcome: null }),
     runManualRosterRefresh: overrides.runManualRosterRefresh || (async () => ({})),
     canEditAccountFn: overrides.canEditAccountFn || (async (viewerId, ownerId) => viewerId === ownerId),
+    getAccessibleAccountsFn: overrides.getAccessibleAccountsFn || VIEW_SHARE_OF_OWNER_1,
     formatNextCooldownRemaining: () => "",
     formatGold,
     truncateText,
@@ -642,7 +653,71 @@ for (const [action, value] of [
   });
 }
 
-test("raid-status gold replacement re-checks a share revoked while the prompt was open", async () => {
+test("raid-status gold toggle shows the view-only notice and warns once when the share lookup fails", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  let noticePayload = null;
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => false,
+    async getAccessibleAccountsFn() {
+      throw new Error("share lookup down");
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  assert.ok(noticePayload.embeds[0].title.includes(TRANSLATIONS.vi["raid-task"].shareViewOnly.title));
+  assert.equal(
+    noticePayload.embeds[0].description,
+    TRANSLATIONS.vi["raid-status"].goldView.shareViewOnlyDescription.replace("{owner}", "Mira"),
+  );
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments.join(" "), /share lookup failed.*share lookup down/);
+});
+
+// The real share lookup: the share document stays when the owner leaves the
+// manager list, but the lookup no longer returns an entry for that owner.
+test("raid-status gold toggle says the share was removed when its owner is no longer a manager", async () => {
+  let noticePayload = null;
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => false,
+    getAccessibleAccountsFn: (viewerId, options) => getAccessibleAccounts(viewerId, {
+      ...options,
+      models: {
+        RosterShare: {
+          find: async () => [{ ownerDiscordId: "owner-1", granteeDiscordId: viewerId, accessLevel: "view" }],
+        },
+        User: {
+          find: async () => [{ discordId: "owner-1", accounts: [{ accountName: "Roster B" }] }],
+        },
+      },
+      helpers: { isManagerId: () => false },
+    }),
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  const { shareRevokedDescription } = TRANSLATIONS.vi["raid-status"].goldView;
+  assert.deepEqual(result, { redraw: false });
+  assert.ok(noticePayload.embeds[0].title.includes(TRANSLATIONS.vi["raid-task"].shareRevoked.title));
+  assert.equal(noticePayload.embeds[0].description, shareRevokedDescription.replace("{owner}", "Mira"));
+});
+
+// Opens the replace prompt on a live share, then the owner cuts the share
+// before the pick arrives; getAccessibleAccountsFn says how.
+async function pickReplacementAfterShareIsCut(getAccessibleAccountsFn) {
   let saved = 0;
   let shareIsLive = true;
   const doc = {
@@ -674,6 +749,7 @@ test("raid-status gold replacement re-checks a share revoked while the prompt wa
   const harness = createHandlerHarness({
     session: staleEditShareSession(),
     canEditAccountFn: async () => shareIsLive,
+    getAccessibleAccountsFn,
     User: {
       async findOne(query) {
         assert.deepEqual(query, { discordId: "owner-1" });
@@ -706,13 +782,161 @@ test("raid-status gold replacement re-checks a share revoked while the prompt wa
   assert.deepEqual(result, { redraw: true });
   assert.equal(saved, 0);
   assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, undefined);
+  return noticePayload.embeds[0];
+}
+
+test("raid-status gold replacement says the share was removed when it is revoked while the prompt was open", async () => {
+  const notice = await pickReplacementAfterShareIsCut(NO_SHARES);
+
+  const { shareRevokedDescription } = TRANSLATIONS.vi["raid-status"].goldView;
+  assert.ok(notice.title.includes(TRANSLATIONS.vi["raid-task"].shareRevoked.title));
+  assert.equal(notice.description, shareRevokedDescription.replace("{owner}", "Mira"));
+});
+
+test("raid-status gold replacement says the share is view-only when it is downgraded while the prompt was open", async () => {
+  const notice = await pickReplacementAfterShareIsCut(VIEW_SHARE_OF_OWNER_1);
+
+  assert.equal(
+    notice.description,
+    TRANSLATIONS.vi["raid-status"].goldView.shareViewOnlyDescription.replace("{owner}", "Mira"),
+  );
+});
+
+test("raid-status gold replacement says the share was removed when the save is refused", async () => {
+  let promptPayload = null;
+  let noticePayload = null;
+  let saved = 0;
+  // Live until the pick arrives; then the click-time check passes and the
+  // writer's check fails.
+  let pickChecks = null;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: subdocAssignedRaid({
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              }),
+            },
+          },
+        ],
+      },
+    ],
+    markModified() {},
+    async save() {
+      saved += 1;
+    },
+  };
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => pickChecks === null || ++pickChecks === 1,
+    getAccessibleAccountsFn: NO_SHARES,
+    User: {
+      async findOne() {
+        return doc;
+      },
+    },
+    interaction: {
+      async editReply(payload) {
+        promptPayload = payload;
+      },
+    },
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    user: { id: "viewer" },
+  });
+  pickChecks = 0;
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
+    customId: getSelectCustomId(promptPayload.components[0]),
+    user: { id: "viewer" },
+    values: ["armoche"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(saved, 0);
+  // The click-time check and the writer's; the writer's refusal needs no third.
+  assert.equal(pickChecks, 2);
+  assert.equal(
+    noticePayload.embeds[0].description,
+    TRANSLATIONS.vi["raid-status"].goldView.shareRevokedDescription.replace("{owner}", "Mira"),
+  );
+});
+
+test("raid-status gold replacement keeps the generic warning when the save itself fails", async () => {
+  let promptPayload = null;
+  let noticePayload = null;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: subdocAssignedRaid({
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              }),
+            },
+          },
+        ],
+      },
+    ],
+    markModified() {},
+    async save() {
+      throw new Error("disk full");
+    },
+  };
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => true,
+    getAccessibleAccountsFn: async () => assert.fail("a live share needs no share lookup"),
+    User: {
+      async findOne() {
+        return doc;
+      },
+    },
+    interaction: {
+      async editReply(payload) {
+        promptPayload = payload;
+      },
+    },
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    user: { id: "viewer" },
+  });
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
+    customId: getSelectCustomId(promptPayload.components[0]),
+    user: { id: "viewer" },
+    values: ["armoche"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: true });
   assert.equal(
     noticePayload.embeds[0].description,
     TRANSLATIONS.vi["raid-status"].goldView.toggleFailedDescription,
   );
 });
 
-test("raid-status roster refresh re-checks a share revoked after the card opened", async () => {
+test("raid-status roster refresh re-checks a share downgraded after the card opened", async () => {
   let refreshed = false;
   let noticePayload = null;
   const harness = createHandlerHarness({
@@ -739,6 +963,34 @@ test("raid-status roster refresh re-checks a share revoked after the card opened
     ),
   );
 });
+
+for (const [name, canEditAccountFn, runManualRosterRefresh] of [
+  ["before the refresh runs", async () => false, async () => assert.fail("a refused share must not refresh")],
+  ["while the refresh runs", async () => true, async () => ({ status: "denied" })],
+]) {
+  test(`raid-status roster refresh says the share was removed when it is revoked ${name}`, async () => {
+    let noticePayload = null;
+    const harness = createHandlerHarness({
+      session: staleEditShareSession(),
+      canEditAccountFn,
+      getAccessibleAccountsFn: NO_SHARES,
+      runManualRosterRefresh,
+    });
+
+    const result = await harness.handlers[STATUS_COMPONENT_ACTION.rosterRefresh]({
+      async deferUpdate() {},
+      async followUp(payload) {
+        noticePayload = payload;
+      },
+    });
+
+    const { rosterRefreshShareRevokedTitle, rosterRefreshShareRevokedDescription } =
+      TRANSLATIONS.vi["raid-status"].sync;
+    assert.deepEqual(result, { redraw: false });
+    assert.ok(noticePayload.embeds[0].title.includes(rosterRefreshShareRevokedTitle));
+    assert.equal(noticePayload.embeds[0].description, rosterRefreshShareRevokedDescription);
+  });
+}
 
 test("raid-status component handlers prompt for a gold replacement when locked raid would exceed 3/3", async () => {
   let saved = 0;
@@ -953,6 +1205,36 @@ test("raid-status component handlers show the view-only lock when a task is togg
   assert.equal(followUpPayload.flags, 64);
   assert.match(followUpPayload.embeds[0].title, /Share view-only$/);
   assert.match(followUpPayload.embeds[0].description, /\*\*Mira\*\*/);
+});
+
+test("raid-status component handlers say the share was removed when a task is toggled after the owner revoked it", async () => {
+  let queried = false;
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    session: staleEditShareSession(),
+    canEditAccountFn: async () => false,
+    getAccessibleAccountsFn: NO_SHARES,
+    User: {
+      async findOne() {
+        queried = true;
+        return null;
+      },
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.taskToggle]({
+    values: ["Aki::side-1"],
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  const { title, description } = TRANSLATIONS.vi["raid-task"].shareRevoked;
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(queried, false);
+  assert.equal(followUpPayload.flags, 64);
+  assert.ok(followUpPayload.embeds[0].title.includes(title));
+  assert.equal(followUpPayload.embeds[0].description, description.replace("{owner}", "Mira"));
 });
 
 test("raid-status component handlers warn when a task toggle cannot be saved", async () => {

@@ -31,6 +31,14 @@ function goldReplaceTokenFromId(customId) {
   return id.startsWith(prefix) ? id.slice(prefix.length) : "";
 }
 
+/**
+ * Build the replace prompt of the gold view and the handler of its pick.
+ * @param {object} ctx - builders, models and session callbacks of the status
+ *   handlers; followUpShareRefusal(component, sharedFrom) sends the notice for
+ *   a write the share no longer allows
+ * @returns {{prompt: Function, complete: Function}} prompt shows the picker,
+ *   complete handles the picked raid and resolves to { redraw }
+ */
 function createGoldReplacementFlow(ctx) {
   const {
     EmbedBuilder,
@@ -45,6 +53,7 @@ function createGoldReplacementFlow(ctx) {
     formatGold,
     truncateText,
     canEditAccountFn,
+    followUpShareRefusal,
     showPrompt,
   } = ctx;
   const sessions = new Map();
@@ -96,6 +105,7 @@ function createGoldReplacementFlow(ctx) {
     replacement,
     writeDiscordId,
     targetAccountName,
+    sharedFrom,
   }) {
     const selectId = makeGoldReplaceSelectId();
     const token = goldReplaceTokenFromId(selectId);
@@ -104,6 +114,7 @@ function createGoldReplacementFlow(ctx) {
       replacement,
       writeDiscordId,
       targetAccountName,
+      sharedFrom,
     });
 
     const edited = await showPrompt({
@@ -137,14 +148,14 @@ function createGoldReplacementFlow(ctx) {
     }
 
     sessions.delete(token);
-    const { replacement, writeDiscordId, targetAccountName } = pending;
-    // The owner can revoke the share while the prompt is open.
+    const { replacement, writeDiscordId, targetAccountName, sharedFrom } = pending;
+    // The owner can revoke or downgrade the share while the prompt is open.
     if (!(await canEditAccountFn(discordId, writeDiscordId))) {
       console.log(
         `[raid-status gold replace] share without edit rejected ` +
         `executor=${discordId} owner=${writeDiscordId}`,
       );
-      await warn(component);
+      await followUpShareRefusal(component, sharedFrom);
       return redraw();
     }
     const targetRaid = localizedRaidLabel(replacement.targetRaid, lang);
@@ -167,7 +178,11 @@ function createGoldReplacementFlow(ctx) {
     }
 
     if (!replaceResult.ok) {
-      await warn(component);
+      if (replaceResult.denied) {
+        await followUpShareRefusal(component, sharedFrom);
+      } else {
+        await warn(component);
+      }
       return redraw();
     }
 

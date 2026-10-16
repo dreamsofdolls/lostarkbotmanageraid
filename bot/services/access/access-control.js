@@ -121,6 +121,32 @@ async function canEditAccount(viewerDiscordId, ownerDiscordId, { models = {}, he
   return !!share;
 }
 
+/**
+ * Tell a share that was downgraded from one that was revoked after a refused
+ * write: a downgraded share still lists the owner among the viewer's shared
+ * rosters. An owner outside the manager list is filtered out of that list, so a
+ * suspended share counts as revoked; a failed lookup counts as still listed.
+ * @param {string} viewerDiscordId - viewer whose write was refused
+ * @param {string} ownerDiscordId - owner of the roster the viewer tried to write
+ * @param {object} options
+ * @param {Function} options.getAccessibleAccounts - share lookup, called as
+ *   (viewerDiscordId, { includeOwn: false })
+ * @returns {Promise<boolean>} true while the owner still shares a roster with the viewer
+ */
+async function isShareStillListed(
+  viewerDiscordId,
+  ownerDiscordId,
+  { getAccessibleAccounts: lookup }
+) {
+  try {
+    const shares = await lookup(viewerDiscordId, { includeOwn: false });
+    return shares.some((share) => share.ownerDiscordId === ownerDiscordId);
+  } catch (err) {
+    console.warn("[access] share lookup failed:", err?.message || err);
+    return true;
+  }
+}
+
 function pickDisplayLabel(userDoc) {
   if (!userDoc) return "";
   return (
@@ -135,4 +161,5 @@ function pickDisplayLabel(userDoc) {
 module.exports = {
   getAccessibleAccounts,
   canEditAccount,
+  isShareStillListed,
 };

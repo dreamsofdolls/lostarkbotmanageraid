@@ -18,6 +18,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-check` all: a refresh after a roster was deleted drops its page (no duplicate roster, no double-counted pending) and keeps the view on the roster you were viewing, filtered or not, or on the last valid page when that roster was the one deleted; a player whose every roster was deleted leaves the player dropdown, which clears a filter on that player.
 - A manual `/raid-status` sync that fails starts the auto-sync cooldown, like a card-open sync.
 - A side or shared daily or weekly task completed last cycle shows as not done right after the reset, on the card and in the task dropdowns (filter counts, bulk and per-character toggles, shared rows).
+- The Local Sync view of `/raid-status` acting on a superseded or expired preview moves to the newer pending one, like the DM console, and reloads rosters only when the apply wrote something, including a sync that stopped on a write error after writing some gates.
+- Gold settings, side-task toggles, roster refresh and `/raid-task` changes on a shared roster say the share was removed when the owner revoked it or is no longer a manager, and keep the view-only notice when the share was only turned view-only (earlier today both showed the view-only notice; `/raid-task` did so when the share was revoked while a change was being saved).
 
 ### Changed (internal)
 - `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.

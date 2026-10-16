@@ -192,7 +192,8 @@ async function toggleRaidGoldDisabled(options) {
  * @param {object} options - User, saveWithRetry, discordId (roster owner),
  *   targetAccountName, targetCharName, includeRaidKey, excludeRaidKey, and
  *   optionally canWrite (asked before every save attempt)
- * @returns {Promise<{ok: boolean, userDoc?: object|null}>} ok is false when nothing was saved
+ * @returns {Promise<{ok: boolean, userDoc?: object|null, denied?: boolean}>}
+ *   ok is false when nothing was saved; denied is true when canWrite refused
  */
 async function replaceRaidGoldSelection(options) {
   const {
@@ -210,7 +211,7 @@ async function replaceRaidGoldSelection(options) {
     return true;
   });
 
-  return { ok: update.saved, userDoc: update.userDoc };
+  return { ok: update.saved, userDoc: update.userDoc, denied: update.denied };
 }
 
 /**

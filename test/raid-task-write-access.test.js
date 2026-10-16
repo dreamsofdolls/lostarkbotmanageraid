@@ -17,7 +17,7 @@ for (const current of [
     assert.equal(await revalidateTaskWriteAccess({
       access: { discordId: "owner", writeTarget }, executorId: "viewer", rosterName: "Main",
       resolveTaskWriteTarget: async () => current,
-      denyViewOnly: async target => { denied = target; },
+      denyShareRefusal: async target => { denied = target; },
     }), false);
     assert.equal(denied, writeTarget);
   });

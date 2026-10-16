@@ -70,7 +70,12 @@ function revokedDuringRetry() {
   return { access, stats, model, canWrite: async () => access.granted };
 }
 
-test("a raid-status task toggle retried after the share was revoked writes nothing and says the share is view-only", async () => {
+// The shares the owner still has with the viewer, as getAccessibleAccounts
+// returns them: none once revoked, one view entry once downgraded.
+const NO_SHARES = async () => [];
+const VIEW_SHARE = async () => [{ ownerDiscordId: "owner", accessLevel: "view", isOwn: false }];
+
+async function toggleTaskWhileShareIsCutDuringRetry(getAccessibleAccountsFn) {
   const { stats, model, canWrite } = revokedDuringRetry();
   const notices = [];
   const handlers = createStatusComponentRouteHandlers({
@@ -93,6 +98,7 @@ test("a raid-status task toggle retried after the share was revoked writes nothi
     buildEmbedAndCanvas: async () => ({}),
     buildComponents: () => [],
     canEditAccountFn: (_viewer, _owner) => canWrite(),
+    getAccessibleAccountsFn,
     formatGold,
     truncateText,
   });
@@ -104,7 +110,22 @@ test("a raid-status task toggle retried after the share was revoked writes nothi
 
   assert.equal(stats.committedAfterRevocation, 0);
   assert.equal(stats.saves, 1);
-  assert.match(JSON.stringify(notices), /Share is view-only/);
+  return JSON.stringify(notices);
+}
+
+test("a raid-status task toggle retried after the share was revoked writes nothing and says the share was removed", async () => {
+  const notices = await toggleTaskWhileShareIsCutDuringRetry(NO_SHARES);
+
+  assert.match(notices, /Share removed/);
+  assert.match(notices, /can't update side tasks/);
+  assert.doesNotMatch(notices, /Share is view-only/);
+});
+
+test("a raid-status task toggle retried after the share was downgraded writes nothing and says the share is view-only", async () => {
+  const notices = await toggleTaskWhileShareIsCutDuringRetry(VIEW_SHARE);
+
+  assert.match(notices, /Share is view-only/);
+  assert.doesNotMatch(notices, /Share removed/);
 });
 
 test("raid-status gold writes retried after the share was revoked commit nothing", async () => {
@@ -140,7 +161,13 @@ test("raid-status gold writes retried after the share was revoked commit nothing
   }
 });
 
-function makeGoldSelectHandlers({ model, canEditAccountFn, shared = true, accountName = "Roster" }) {
+function makeGoldSelectHandlers({
+  model,
+  canEditAccountFn,
+  getAccessibleAccountsFn = async () => assert.fail("only a refused share asks which shares are left"),
+  shared = true,
+  accountName = "Roster",
+}) {
   return createStatusComponentRouteHandlers({
     ...discord,
     UI,
@@ -161,6 +188,7 @@ function makeGoldSelectHandlers({ model, canEditAccountFn, shared = true, accoun
     buildEmbedAndCanvas: async () => ({}),
     buildComponents: () => [],
     canEditAccountFn,
+    getAccessibleAccountsFn,
     formatGold,
     truncateText,
   });
@@ -180,13 +208,16 @@ const GOLD_SELECTS = {
 };
 
 const GOLD_VIEW_ONLY_DESCRIPTION = /change its gold settings/;
+const GOLD_REVOKED_TITLE = /Share removed/;
+const GOLD_REVOKED_DESCRIPTION = /no longer shares this roster/;
 
 for (const [label, select] of Object.entries(GOLD_SELECTS)) {
-  test(`raid-status gold ${label} on a share revoked before the click says the share is view-only`, async () => {
+  test(`raid-status gold ${label} on a share downgraded before the click says the share is view-only`, async () => {
     const notices = [];
     const handlers = makeGoldSelectHandlers({
       model: { findOne: async () => assert.fail("a refused share must not load the owner document") },
       canEditAccountFn: async () => false,
+      getAccessibleAccountsFn: VIEW_SHARE,
     });
 
     await handlers[select.action]({
@@ -196,12 +227,58 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
 
     assert.match(JSON.stringify(notices), /Share is view-only/);
     assert.match(JSON.stringify(notices), GOLD_VIEW_ONLY_DESCRIPTION);
+    assert.doesNotMatch(JSON.stringify(notices), GOLD_REVOKED_TITLE);
   });
 
-  test(`raid-status gold ${label} retried after the share was revoked says the share is view-only`, async () => {
+  test(`raid-status gold ${label} on a share revoked before the click says the share was removed`, async () => {
+    const notices = [];
+    const handlers = makeGoldSelectHandlers({
+      model: { findOne: async () => assert.fail("a refused share must not load the owner document") },
+      canEditAccountFn: async () => false,
+      getAccessibleAccountsFn: NO_SHARES,
+    });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.match(JSON.stringify(notices), GOLD_REVOKED_TITLE);
+    assert.match(JSON.stringify(notices), GOLD_REVOKED_DESCRIPTION);
+    assert.match(JSON.stringify(notices), /Owner/);
+    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+  });
+
+  test(`raid-status gold ${label} retried after the share was revoked says the share was removed`, async () => {
     const { stats, model, canWrite } = revokedDuringRetry();
     const notices = [];
-    const handlers = makeGoldSelectHandlers({ model, canEditAccountFn: () => canWrite() });
+    const handlers = makeGoldSelectHandlers({
+      model,
+      canEditAccountFn: () => canWrite(),
+      getAccessibleAccountsFn: NO_SHARES,
+    });
+
+    await handlers[select.action]({
+      values: [select.value],
+      followUp: async (payload) => { notices.push(payload); },
+    });
+
+    assert.equal(stats.saves, 1);
+    assert.equal(stats.committedAfterRevocation, 0);
+    assert.match(JSON.stringify(notices), GOLD_REVOKED_TITLE);
+    assert.match(JSON.stringify(notices), GOLD_REVOKED_DESCRIPTION);
+    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+    assert.doesNotMatch(JSON.stringify(notices), select.failedNotice);
+  });
+
+  test(`raid-status gold ${label} retried after the share was downgraded says the share is view-only`, async () => {
+    const { stats, model, canWrite } = revokedDuringRetry();
+    const notices = [];
+    const handlers = makeGoldSelectHandlers({
+      model,
+      canEditAccountFn: () => canWrite(),
+      getAccessibleAccountsFn: VIEW_SHARE,
+    });
 
     await handlers[select.action]({
       values: [select.value],

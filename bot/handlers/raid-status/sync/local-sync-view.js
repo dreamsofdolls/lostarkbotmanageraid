@@ -23,6 +23,7 @@ const {
 } = require("../../../services/local-sync");
 const {
   activeScopeForUser,
+  preferLatestActionableJob,
   previewSummaryForJob,
 } = require("../../local-sync/discord-console");
 const {
@@ -204,6 +205,9 @@ function buildLocalSyncViewRows({
  * @param {string} options.jobId
  * @param {string} options.discordId - clicker
  * @returns {Promise<{ok: boolean, reason?: string, job: object|null, applied: boolean}>}
+ *   job is the owner's newer pending job when the acted-on one was superseded
+ *   or expired; applied is true when the apply returned ok or left written
+ *   gates in the roster, and false when nothing was persisted
  */
 async function runLocalSyncViewAction({
   action,
@@ -222,6 +226,11 @@ async function runLocalSyncViewAction({
   if (existing.discordId !== discordId) {
     return { ok: false, reason: "notOwner", job: null, applied: false };
   }
+  const settle = async (job, applied) => ({
+    ok: true,
+    job: await preferLatestActionableJob(job, discordId, jobDeps),
+    applied,
+  });
 
   if (action === "apply") {
     const outcome = await applyPreviewJob(jobId, discordId, {
@@ -233,18 +242,26 @@ async function runLocalSyncViewAction({
       releaseAutoManageSyncSlot,
     });
     const job = outcome?.job || await getPreviewJob(jobId, jobDeps).catch(() => null) || existing;
-    return { ok: true, job, applied: true };
+    // A write error lists the gates written in its result, those an earlier
+    // attempt stored included. A thrown apply has no result, so the stored result
+    // of its retryable job is read, which may also come from an earlier attempt.
+    // `applied` can therefore be true when this click wrote nothing; the cost is
+    // one reload of unchanged rosters. A busy, claim-lost or scope-disabled
+    // outcome has no result and is not retryable: it wrote nothing, whatever an
+    // earlier attempt stored.
+    const written = outcome?.result || (outcome?.retryable ? job.result : null);
+    return settle(job, outcome?.ok === true || written?.applied?.length > 0);
   }
 
   if (action === "cancel") {
     const job = await cancelPreviewJob(jobId, discordId, jobDeps)
       || await getPreviewJob(jobId, jobDeps)
       || existing;
-    return { ok: true, job, applied: false };
+    return settle(job, false);
   }
 
   const job = await getLatestPreviewJob(discordId, jobDeps) || existing;
-  return { ok: true, job, applied: false };
+  return settle(job, false);
 }
 
 module.exports = {

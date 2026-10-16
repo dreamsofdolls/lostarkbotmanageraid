@@ -236,6 +236,166 @@ test("applying a preview reloads the account list before the redraw", async () =
   assert.deepEqual(calls.refresh, [{ jobId: JOB_ID }]);
 });
 
+// The real action over a one-job model: nothing is written, so the account
+// list stays as it is.
+for (const scenario of [
+  {
+    name: "a busy sync slot",
+    localSyncEnabled: true,
+    slotDeps: {
+      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
+      releaseAutoManageSyncSlot: () => {},
+    },
+  },
+  { name: "a disabled sync mode", localSyncEnabled: false, slotDeps: {} },
+]) {
+  test(`an apply refused for ${scenario.name} does not reload the account list`, async () => {
+    const job = {
+      jobId: JOB_ID,
+      discordId: "viewer",
+      scope: "full",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+      deltas: [],
+    };
+    const PreviewModel = {
+      findOne: () => job,
+      findOneAndUpdate: async (_filter, update) => ({ ...job, ...update.$set }),
+    };
+    const userDoc = { discordId: "viewer", localSyncEnabled: scenario.localSyncEnabled, accounts: [] };
+    const { handlers, calls } = createHarness({
+      handlerOverrides: {
+        runLocalSyncAction: ({ action, jobId }) => runLocalSyncViewAction({
+          action,
+          jobId,
+          discordId: "viewer",
+          User: { findOne: () => ({ select: () => ({ lean: async () => userDoc }) }) },
+          PreviewModel,
+          applyRaidSetForDiscordId: async () => assert.fail("a refused apply must not write"),
+          ...scenario.slotDeps,
+        }),
+      },
+    });
+
+    const result = await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+      customId: `status-local:apply:${JOB_ID}`,
+    });
+
+    assert.deepEqual(result, { redraw: true });
+    assert.equal(calls.reloads, 0);
+    assert.deepEqual(calls.refresh, [{ jobId: JOB_ID }]);
+  });
+}
+
+test("an apply that hit a write error after writing some gates still reloads the account list once", async () => {
+  const clear = {
+    boss: "Armoche, Sentinel of the Abyss",
+    difficulty: "Hard",
+    cleared: true,
+    lastClearMs: Date.now(),
+  };
+  const job = {
+    jobId: JOB_ID,
+    discordId: "viewer",
+    scope: "full",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 60_000),
+    deltas: [{ ...clear, charName: "Aki" }, { ...clear, charName: "Ceri" }],
+  };
+  const PreviewModel = {
+    findOne: () => job,
+    findOneAndUpdate: async (_filter, update) => ({ ...job, ...update.$set }),
+  };
+  const character = (name) => ({
+    name,
+    class: "Bard",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {},
+  });
+  const userDoc = {
+    discordId: "viewer",
+    localSyncEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [character("Aki"), character("Ceri")] }],
+  };
+  const { handlers, calls } = createHarness({
+    handlerOverrides: {
+      runLocalSyncAction: ({ action, jobId }) => runLocalSyncViewAction({
+        action,
+        jobId,
+        discordId: "viewer",
+        User: { findOne: () => ({ select: () => ({ lean: async () => userDoc }) }) },
+        PreviewModel,
+        // Aki's gate is written and Ceri's write fails, so the job goes back to pending.
+        applyRaidSetForDiscordId: async (args) => (
+          args.characterName === "Ceri"
+            ? null
+            : { matched: true, updated: true, displayName: args.characterName }
+        ),
+      }),
+    },
+  });
+
+  const result = await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+    customId: `status-local:apply:${JOB_ID}`,
+  });
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(calls.reloads, 1);
+});
+
+// A job that already holds an earlier attempt's gates in its stored result.
+function jobWithStoredGates(overrides = {}) {
+  return {
+    jobId: JOB_ID,
+    discordId: "viewer",
+    scope: "full",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 60_000),
+    deltas: [],
+    result: { applied: [{ charName: "Aki", raidKey: "armoche", modeKey: "hard", gates: [1] }] },
+    ...overrides,
+  };
+}
+
+test("an apply refused by a busy sync slot reports nothing applied even when the job stores earlier gates", async () => {
+  const job = jobWithStoredGates();
+  const outcome = await runLocalSyncViewAction({
+    action: "apply",
+    jobId: JOB_ID,
+    discordId: "viewer",
+    User: {
+      findOne: () => ({
+        select: () => ({ lean: async () => ({ discordId: "viewer", localSyncEnabled: true, accounts: [] }) }),
+      }),
+    },
+    PreviewModel: {
+      findOne: () => job,
+      findOneAndUpdate: async (_filter, update) => ({ ...job, ...update.$set }),
+    },
+    applyRaidSetForDiscordId: async () => assert.fail("a refused apply must not write"),
+    acquireAutoManageSyncSlot: async () => ({ acquired: false }),
+    releaseAutoManageSyncSlot: () => {},
+  });
+
+  assert.equal(outcome.applied, false);
+});
+
+test("a repeated apply on an already-applied job reports nothing applied", async () => {
+  const job = jobWithStoredGates({ status: "applied" });
+  const outcome = await runLocalSyncViewAction({
+    action: "apply",
+    jobId: JOB_ID,
+    discordId: "viewer",
+    User: {},
+    // The claim finds no pending job, so the second click writes nothing.
+    PreviewModel: { findOne: () => job, findOneAndUpdate: async () => null },
+    applyRaidSetForDiscordId: async () => assert.fail("a repeated apply must not write"),
+  });
+
+  assert.equal(outcome.applied, false);
+});
+
 test("cancelling refreshes without touching the account list", async () => {
   const { handlers, calls } = createHarness();
 

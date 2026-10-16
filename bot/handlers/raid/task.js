@@ -66,12 +66,13 @@ function createRaidTaskCommand(deps) {
     getAccessibleAccounts: loadAccessibleAccountsForAutocomplete,
   });
   const {
+    editShareRefusalNotice,
     editTaskNotice,
     editViewOnlyShareNotice,
+    replyShareRefusalNotice,
     replyTaskNotice,
     replyViewOnlyShareNotice,
-    viewOnlyShareNotice,
-  } = createRaidTaskNoticeHelpers({ EmbedBuilder });
+  } = createRaidTaskNoticeHelpers({ EmbedBuilder, getAccessibleAccounts });
   const {
     handleAddSingle,
     handleAddAll,
@@ -83,6 +84,7 @@ function createRaidTaskCommand(deps) {
     resolveTaskWriteTarget,
     replyTaskNotice,
     replyViewOnlyShareNotice,
+    replyShareRefusalNotice,
   });
   const {
     handleSharedAdd,
@@ -95,6 +97,7 @@ function createRaidTaskCommand(deps) {
     resolveTaskWriteTarget,
     replyTaskNotice,
     replyViewOnlyShareNotice,
+    replyShareRefusalNotice,
   });
   const { handleRemove } = createRaidTaskRemoveActionHandlers({
     User,
@@ -102,6 +105,7 @@ function createRaidTaskCommand(deps) {
     resolveTaskWriteTarget,
     replyTaskNotice,
     replyViewOnlyShareNotice,
+    replyShareRefusalNotice,
   });
   const {
     handleClear,
@@ -116,7 +120,7 @@ function createRaidTaskCommand(deps) {
     resolveTaskWriteTarget,
     editTaskNotice,
     editViewOnlyShareNotice,
-    viewOnlyShareNotice,
+    editShareRefusalNotice,
   });
 
   const { handleRaidTaskAutocomplete } = createRaidTaskAutocompleteHandlers({

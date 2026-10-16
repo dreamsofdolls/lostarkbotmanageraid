@@ -1002,6 +1002,8 @@ module.exports = {
       rosterRefreshMissingDescription: "DB 内に **{accountName}** が見つかりませんでしたわ。`/raid-status` を開き直して新しいセッションで確認してね。",
       rosterRefreshSharedLockedTitle: "共有ロスターは閲覧のみですわ",
       rosterRefreshSharedLockedDescription: "この共有ロスターは view-only なので、owner 側へ更新を書き込めませんの。直接更新したい場合は owner に edit 権限を付けてもらってね。",
+      rosterRefreshShareRevokedTitle: "共有ロスターは解除されましたわ",
+      rosterRefreshShareRevokedDescription: "このロスターはもう共有されていないので、更新できませんの。`/raid-status` を開き直して一覧を更新してね。",
       rosterRefreshFailedTitle: "ロスター更新に失敗しましたわ",
       rosterRefreshFailedDescription: "ロスター更新中にエラーが出ましたわ: `{error}`。数分後にもう一度試してね。",
       localNewLinkUnavailableTitle: "Local Reader を利用できません",
@@ -1124,6 +1126,7 @@ module.exports = {
       modeFailedTitle: "保存できませんでした",
       modeFailedDescription: "`/raid-status` を開き直してもう一度試してください。",
       shareViewOnlyDescription: "マネージャー **{owner}** さんがロスターを共有してくれましたが `view` (閲覧のみ) の権限ですわ - ゴールドの設定は変更できないの。マネージャーさんに `/raid-share grant target:@あなた permission:edit` でアップグレードしてもらってからもう一度試してね～",
+      shareRevokedDescription: "マネージャー **{owner}** さんがこのロスターの共有を解除したので、ゴールドの設定は変更できないの。`/raid-status` を開き直して一覧を更新してくださいね。もう一度使いたいときは、マネージャーさんに `/raid-share grant target:@あなた permission:edit` で共有してもらってね。",
       footerGold: "Gold {earned}/{total}",
       footerBound: "拘束 {bound}",
     },
@@ -1579,6 +1582,10 @@ module.exports = {
     shareViewOnly: {
       title: "共有は閲覧のみですわ",
       description: "マネージャー **{owner}** さんがロスターを共有してくれましたが `view` (閲覧のみ) の権限ですわ - サイドタスクは更新できないの。マネージャーさんに `/raid-share grant target:@あなた permission:edit` でアップグレードしてもらってからもう一度試してね～",
+    },
+    shareRevoked: {
+      title: "共有が解除されましたわ",
+      description: "マネージャー **{owner}** さんがこのロスターの共有を解除したので、サイドタスクは更新できないの。`/raid-status` を開き直して一覧を更新してくださいね。もう一度使いたいときは、マネージャーさんに `/raid-share grant target:@あなた permission:edit` で共有してもらってね。",
     },
     save: {
       addFailedTitle: "保存に失敗しましたわ",

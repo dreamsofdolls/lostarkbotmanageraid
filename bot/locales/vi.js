@@ -1024,6 +1024,8 @@ module.exports = {
       rosterRefreshMissingDescription: "Artist không tìm thấy roster **{accountName}** trong DB nữa. Mở lại `/raid-status` để lấy session mới nha.",
       rosterRefreshSharedLockedTitle: "Roster share đang ở quyền xem",
       rosterRefreshSharedLockedDescription: "Roster được share dạng view-only nên Artist không ghi refresh vào owner được. Nhờ owner cấp quyền edit nếu cần cập nhật trực tiếp.",
+      rosterRefreshShareRevokedTitle: "Roster share đã bị gỡ",
+      rosterRefreshShareRevokedDescription: "Roster này không còn được share cho cậu nữa nên Artist không refresh được. Cậu mở lại `/raid-status` để cập nhật danh sách roster nha.",
       rosterRefreshFailedTitle: "Refresh roster fail",
       rosterRefreshFailedDescription: "Artist gặp lỗi khi refresh roster: `{error}`. Thử lại sau vài phút nha.",
       localNewLinkUnavailableTitle: "Local Reader chưa khả dụng",
@@ -1146,6 +1148,7 @@ module.exports = {
       modeFailedTitle: "Chưa lưu được",
       modeFailedDescription: "Artist chưa lưu được lựa chọn này. Session có thể đã cũ; mở lại `/raid-status` rồi thử lại giúp tớ nhé.",
       shareViewOnlyDescription: "Manager **{owner}** đã share roster cho cậu nhưng ở mức `view` (chỉ xem, read-only) - cậu không đổi được cài đặt gold của roster này. Nhờ Manager đổi sang `/raid-share grant target:@cậu permission:edit` rồi thử lại nha~",
+      shareRevokedDescription: "Manager **{owner}** không còn share roster này cho cậu nữa nên cậu không đổi được cài đặt gold của nó. Cậu mở lại `/raid-status` để làm mới danh sách roster. Cần quyền truy cập lại thì nhờ Manager share bằng `/raid-share grant target:@cậu permission:edit` nha.",
       footerGold: "Gold {earned}/{total}",
       footerBound: "Khóa {bound}",
     },
@@ -1601,6 +1604,10 @@ module.exports = {
     shareViewOnly: {
       title: "Share view-only",
       description: "Manager **{owner}** đã share roster cho cậu nhưng ở mức `view` (xem read-only) - cậu không update side task được. Nhờ Manager đổi sang `/raid-share grant target:@cậu permission:edit` rồi thử lại nha~",
+    },
+    shareRevoked: {
+      title: "Share đã bị gỡ",
+      description: "Manager **{owner}** không còn share roster này cho cậu nữa nên cậu không update side task được. Cậu mở lại `/raid-status` để làm mới danh sách roster. Cần quyền truy cập lại thì nhờ Manager share bằng `/raid-share grant target:@cậu permission:edit` nha.",
     },
     save: {
       addFailedTitle: "Save thất bại",

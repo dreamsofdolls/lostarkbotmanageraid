@@ -8,7 +8,8 @@
  * @param {string} args.rosterName - targeted roster name.
  * @param {string} args.commandName - command label used in share logs.
  * @param {Function} args.resolveTaskWriteTarget - shared-roster access resolver.
- * @param {Function} args.denyViewOnly - sends the view-only denial reply.
+ * @param {Function} args.denyViewOnly - sends the first-resolve view-only reply
+ *   for the denied write target.
  * @param {string} [args.logKind="share-write"] - log label for share writes.
  * @param {Function} [args.logger=console.log] - log sink.
  * @returns {Promise<{ok: boolean, writeTarget: object, discordId: string}>}
@@ -38,16 +39,30 @@ async function resolveEditableTaskWriteAccess({
   return { ok: true, writeTarget, discordId };
 }
 
-/** Recheck the original shared owner on every save attempt, without retargeting a write. */
+/**
+ * Recheck the original shared owner on every save attempt, without retargeting
+ * a write.
+ * @param {object} args
+ * @param {{discordId: string, writeTarget?: object}} args.access - result of the
+ *   first resolve; `writeTarget` is the shared target the write was granted on.
+ * @param {string} args.executorId - Discord id running the command.
+ * @param {string} args.rosterName - targeted roster name.
+ * @param {Function} args.resolveTaskWriteTarget - shared-roster access resolver.
+ * @param {Function} args.denyShareRefusal - sends the refusal reply for the
+ *   original write target. The reply must tell a revoked share from a
+ *   downgraded one; the resolver's fallback to the executor cannot.
+ * @returns {Promise<boolean>} true while the original owner's edit grant stands;
+ *   false means the refusal reply was already sent.
+ */
 async function revalidateTaskWriteAccess({
-  access, executorId, rosterName, resolveTaskWriteTarget, denyViewOnly,
+  access, executorId, rosterName, resolveTaskWriteTarget, denyShareRefusal,
 }) {
   if (access.discordId === executorId) return true;
   const current = await resolveTaskWriteTarget(executorId, rosterName);
   if (current.discordId === access.discordId && current.viaShare && current.canEdit) return true;
   // A removed grant falls back to the executor in the resolver. It must never
   // authorize the already-loaded owner's document or redirect this command.
-  await denyViewOnly(access.writeTarget);
+  await denyShareRefusal(access.writeTarget);
   return false;
 }
 

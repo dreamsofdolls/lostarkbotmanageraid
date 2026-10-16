@@ -337,6 +337,34 @@ test("raid-status gold replacement survives Mongoose subdoc serialization", asyn
   assert.equal(raids.armoche.G1.completedDate, 1);
 });
 
+test("raid-status gold replacement tells a write its canWrite refused from a save that found no target", async () => {
+  const refusedDoc = makeMongooseUserDoc();
+  const options = {
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    includeRaidKey: "horizon",
+    excludeRaidKey: "armoche",
+  };
+
+  const refused = await replaceRaidGoldSelection({
+    ...options,
+    User: makeUserModel(refusedDoc),
+    canWrite: async () => false,
+  });
+  const noTarget = await replaceRaidGoldSelection({
+    ...options,
+    User: makeUserModel({ accounts: [] }),
+  });
+
+  assert.equal(refused.ok, false);
+  assert.equal(refused.denied, true);
+  assert.equal(horizonOverrideOf(refusedDoc), undefined);
+  assert.equal(noTarget.ok, false);
+  assert.equal(noTarget.denied, false);
+});
+
 test("a gold choice made after the weekly reset, before the user rolled over, survives the rollover", async (t) => {
   // The weekly reset job had not reached this user yet, so the stored cursor
   // is last week's; a choice written onto it would be cleared as old data.

@@ -43,6 +43,7 @@ function harness(kind, { deny = false, allRosters = false, saveError = null, dup
       return { discordId: "owner", viaShare: true, canEdit: !deny && !(revokeOnRetry && saves > 0) };
     },
     replyViewOnlyShareNotice: async () => { events.push("denied"); },
+    replyShareRefusalNotice: async () => { events.push("denied"); },
     replyTaskNotice: async (_interaction, notice) => { events.push("reply"); notices.push(notice); },
   });
   const interaction = {

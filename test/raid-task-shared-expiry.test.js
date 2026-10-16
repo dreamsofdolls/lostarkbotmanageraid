@@ -42,6 +42,7 @@ async function runSharedAdd(lang) {
     weekResetStartMs: () => 222,
     resolveTaskWriteTarget: async (executorId) => ({ discordId: executorId, viaShare: false, canEdit: true }),
     replyViewOnlyShareNotice: async () => {},
+    replyShareRefusalNotice: async () => {},
     replyTaskNotice: async (_interaction, notice) => { notices.push(notice); },
   });
   await handler({
