@@ -64,7 +64,13 @@ function createRosterFetchService({ bibleLimiter }) {
     // Entries hold objects but no arrays, so the first ']' closes the list.
     const end = html.indexOf("]", start);
     const payload = html.slice(start, end < 0 ? html.length : end);
-    return [...payload.matchAll(ROSTER_PAYLOAD_ENTRY)].map(([, name, classId, ilvl, score, estimate]) => ({
+    const entries = [...payload.matchAll(ROSTER_PAYLOAD_ENTRY)];
+    // A payload that lists characters but matches nothing means bible
+    // changed its shape, and stale alts silently drop out again.
+    if (entries.length === 0 && /\bname"?\s*:/.test(payload)) {
+      console.warn("[roster] roster payload found but no character matched its expected shape");
+    }
+    return entries.map(([, name, classId, ilvl, score, estimate]) => ({
       charName: unescapeJsonLike(name),
       className: getClassName(unescapeJsonLike(classId)),
       itemLevel: roundPayloadNumber(ilvl),

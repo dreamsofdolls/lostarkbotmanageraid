@@ -7,7 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-10-17
 
 ### Fixed
-- A roster read from lostark.bible now includes every character on it, not only those with a card on the page. Bible renders a card only for characters it updated recently, so an alt not refreshed for a few weeks was missing when a roster was added or edited and kept its old item level and class on a refresh. Such characters are read from the page's roster data and placed by item level.
+- A roster read from lostark.bible now includes every character on it, not only those with a card on the page. Bible renders a card only for characters it updated recently, so an alt not refreshed for a few weeks was missing when a roster was added or edited and kept its old item level and class on a refresh. Such characters are read from the page's roster data and placed by item level. If Bible changes that data's shape, the bot logs a warning and reads the cards alone.
 
 ## 2026-10-16
 
