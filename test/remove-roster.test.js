@@ -22,6 +22,33 @@ const {
   getCharacterClass,
 } = require("../bot/utils/raid/common/shared");
 const { createCharacterId } = require("../bot/utils/raid/common/character");
+const { clearUserLanguageCache, t } = require("../bot/services/i18n");
+
+test("remove-roster autocomplete reuses the loaded caller's locale without a second query", async () => {
+  clearUserLanguageCache();
+  let languageReads = 0;
+  let rosterReads = 0;
+  let choices;
+  const { handleRemoveRosterAutocomplete } = createRemoveRosterCommand({
+    User: { findOne: () => {
+      languageReads++;
+      return { lean: async () => ({ language: "jp" }) };
+    } },
+    loadUserForAutocomplete: async () => {
+      rosterReads++;
+      return { language: "jp", accounts: [{ accountName: "Alpha", characters: [{ name: "Main" }] }] };
+    },
+  });
+  await handleRemoveRosterAutocomplete({
+    user: { id: "remove-autocomplete-locale" },
+    options: { getFocused: () => ({ name: "roster", value: "Alpha" }) },
+    respond: async (value) => { choices = value; },
+  });
+  assert.equal(rosterReads, 1);
+  assert.equal(languageReads, 0);
+  assert.equal(choices[0].value, "Alpha");
+  assert.ok(choices[0].name.includes(t("raid-remove-roster.autocomplete.charsSingular", "jp")));
+});
 
 function makeUserModel(events = null) {
   const docs = new Map();

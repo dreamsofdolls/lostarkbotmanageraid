@@ -163,7 +163,7 @@ function createAllModeComponentHandlers({
 
       try {
         const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
-        if (applyRefreshedUserDoc(result.userDoc)) pendingAggregateCache.clear();
+        if (applyRefreshedUserDoc(result.userDoc)) pendingAggregateCache.clear(result.userDoc.discordId);
         recomputeFilteredPages({ resetPage: false });
         // The session can end during the refresh; its controls stay disabled.
         await interaction.editReply({

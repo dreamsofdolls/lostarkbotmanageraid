@@ -20,6 +20,22 @@ function createState({ readOwn, readShares = async () => [], now = Date.now }) {
   });
 }
 
+test("viewer reload reads a lean snapshot and still checks current share access", async () => {
+  let shares = 0;
+  const state = await createState({
+    readOwn: async (filter, _projection, options) => {
+      assert.deepEqual(filter, { discordId: "viewer" });
+      assert.equal(options?.lean, true);
+      return ownDoc(1);
+    },
+    readShares: async () => { shares++; return []; },
+  });
+  await state.reloadViewerAccounts();
+  assert.equal(state.userDoc.version, 1);
+  assert.equal(shares, 1);
+  assert.deepEqual(state.accounts.map(account => account.accountName), ["Own"]);
+});
+
 test("an older roster read cannot restore revoked shares or replace a newer saved snapshot", async () => {
   let resolveOwn, resolveShares;
   const oldOwn = new Promise(resolve => { resolveOwn = resolve; });

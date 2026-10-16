@@ -111,8 +111,11 @@ async function createRaidStatusSessionState({
     const ticket = ++latestReloadTicket;
     // Fresh share authorization and the own roster are independent reads. Keep
     // both fresh on reload, while overlapping their Mongo round trips.
+    // The own doc is a lean, render-only snapshot: the gold and task writers
+    // load their own document. The options form keeps findOne stubs that
+    // return a bare promise valid, which a chained .lean() would not.
     const [reloadedOwnDoc, reloadedShared] = await Promise.all([
-      nextOwnDoc || User.findOne({ discordId }),
+      nextOwnDoc || User.findOne({ discordId }, null, { lean: true }),
       buildMergedAccounts(discordId, []).catch((err) => {
         console.warn("[raid-status] share check failed during reload:", err?.message || err);
         return null;

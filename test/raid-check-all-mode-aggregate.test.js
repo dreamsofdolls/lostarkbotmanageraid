@@ -312,6 +312,36 @@ test("raid-check all-mode aggregate cache reuses scans and character raid deriva
   assert.equal(raidReads, 6);
 });
 
+test("refreshing one user preserves other users' derivations but recomputes all filter totals", () => {
+  const pages = [
+    createPage("a", [{ class: "Artist", itemLevel: 1740, raids: [raid("kazeros", "normal", false, { goldReceives: true })] }]),
+    createPage("b", [{ class: "Berserker", itemLevel: 1740, raids: [raid("kazeros", "normal", false, { goldReceives: true })] }]),
+  ];
+  let reads = 0;
+  const cache = createAllModePendingAggregateCache({
+    pagesData: pages, lang: "en",
+    getStatusRaidsForCharacter: character => { reads++; return character.raids.map(row => ({ ...row })); },
+  });
+  assert.equal(cache.compute().totalPending, 2);
+  assert.equal(cache.compute({ userFilter: "a" }).totalPending, 1);
+  // Support both a document replacement and an in-place refresh.
+  for (const replace of [true, false]) {
+    if (replace) pages[0].account = structuredClone(pages[0].account);
+    pages[0].account.characters[0].raids[0].isCompleted = replace;
+    const before = reads;
+    cache.clear("a");
+    for (const filter of [{}, { userFilter: "a" }, { raidFilter: "kazeros:normal" }]) {
+      assert.deepEqual(normalizeAggregate(cache.compute(filter)), normalizeAggregate(computeReferenceAggregate({
+        pagesData: pages, getStatusRaidsForCharacter, lang: "en", ...filter,
+      })));
+    }
+    assert.equal(reads - before, 1, "only the refreshed user's character needs derivation");
+  }
+  cache.clear();
+  cache.compute();
+  assert.equal(reads, 6, "unscoped invalidation still refreshes every character");
+});
+
 test("raid-check all-mode aggregate cache indexes raid rows once across new filters", () => {
   let completionReads = 0;
   const trackedRaid = {

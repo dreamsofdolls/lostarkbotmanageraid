@@ -56,7 +56,7 @@ function createRemoveRosterCommand(deps) {
   async function autocompleteRemoveRosterRoster(interaction, focused) {
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
     const matches = getRosterMatches(userDoc, focused.value || "");
-    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User, userDoc });
     const charsWord = (count) =>
       t(
         count === 1

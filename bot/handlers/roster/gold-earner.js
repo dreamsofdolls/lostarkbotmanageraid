@@ -89,10 +89,9 @@ function createRaidGoldEarnerCommand({
     const discordId = interaction.user.id;
     const rosterInput = interaction.options.getString("roster", true).trim();
     await deferEphemeralReply(interaction);
-    const langPromise = getUserLanguage(discordId, { UserModel: User });
 
     if (!rosterInput) {
-      const lang = await langPromise;
+      const lang = await getUserLanguage(discordId, { UserModel: User });
       await editPickerNotice(interaction, {
         type: "warn",
         title: t("raid-gold-earner.notice.missingRosterTitle", lang),
@@ -101,10 +100,8 @@ function createRaidGoldEarnerCommand({
       return;
     }
 
-    const [lang, userDoc] = await Promise.all([
-      langPromise,
-      User.findOne({ discordId }),
-    ]);
+    const userDoc = await User.findOne({ discordId });
+    const lang = await getUserLanguage(discordId, { UserModel: User, userDoc });
     const target = findAccountByName(userDoc, rosterInput, normalizeName);
 
     if (!target) {

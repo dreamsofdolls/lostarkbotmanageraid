@@ -40,7 +40,8 @@ function getRaidEntry({ perRaidPending, raid, lang }) {
 
 /**
  * Cache pending aggregates and per-character raid derivation for one all-mode
- * interaction session. Call clear after the backing roster data changes.
+ * interaction session. Call clear(discordId) after refreshing one user, or
+ * clear() when changes are not scoped to a user.
  * @param {object} options - Session data and raid derivation dependencies.
  * @returns {object} Cached compute, raid lookup, and invalidation functions.
  */
@@ -50,7 +51,7 @@ function createAllModePendingAggregateCache({
   lang = "vi",
 }) {
   const aggregateCache = new Map();
-  const characterRaidsCache = new Map();
+  let characterRaidsCache = new WeakMap();
   let pendingIndex = null;
 
   const getCachedRaidsForCharacter = (character) => {
@@ -205,10 +206,19 @@ function createAllModePendingAggregateCache({
     return aggregate;
   };
 
-  const clear = () => {
+  const clear = (discordId = null) => {
     aggregateCache.clear();
-    characterRaidsCache.clear();
     pendingIndex = null;
+    if (!discordId) {
+      characterRaidsCache = new WeakMap();
+      return;
+    }
+    // A refresh may replace or mutate its character objects. Invalidate that
+    // user's rows; WeakMap releases replaced objects without evicting others.
+    for (const page of pagesData) {
+      if (page.userDoc?.discordId !== discordId) continue;
+      for (const character of page.account?.characters || []) characterRaidsCache.delete(character);
+    }
   };
 
   return {

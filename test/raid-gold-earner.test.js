@@ -10,7 +10,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { t } = require("../bot/services/i18n");
+const { t, clearUserLanguageCache } = require("../bot/services/i18n");
 
 const {
   EmbedBuilder,
@@ -42,6 +42,32 @@ function makeCommand({ User, saveWithRetry, loadUserForAutocomplete } = {}) {
     loadUserForAutocomplete: loadUserForAutocomplete || (async () => null),
   });
 }
+
+test("gold-earner opens with one caller read for both roster and language", async (context) => {
+  clearUserLanguageCache();
+  const userDoc = {
+    discordId: "gold-single-read", language: "jp",
+    accounts: [{ accountName: "Alpha", characters: [{ id: "main", name: "Main", itemLevel: 1740, isGoldEarner: true }] }],
+  };
+  const events = [];
+  const cmd = makeCommand({ User: { findOne: () => {
+    events.push("read");
+    return { lean: async () => userDoc, then: (resolve, reject) => Promise.resolve(userDoc).then(resolve, reject) };
+  } } });
+  context.after(() => {
+    for (const session of cmd.__test.sessions.values()) clearTimeout(session.timer);
+  });
+  let reply;
+  await cmd.handleRaidGoldEarnerCommand({
+    user: { id: userDoc.discordId },
+    options: { getString: () => "Alpha" },
+    deferReply: async () => { events.push("defer"); },
+    editReply: async (payload) => { reply = payload; },
+  });
+  assert.deepEqual(events, ["defer", "read"]);
+  assert.equal(reply.embeds.length, 1);
+  assert.equal([...cmd.__test.sessions.values()][0].lang, "jp");
+});
 
 // --------- pickInitialSelection ---------
 

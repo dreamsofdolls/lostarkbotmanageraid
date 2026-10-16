@@ -18,6 +18,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed (internal)
 - `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.
+- `/raid-check` refreshes recompute only the refreshed user's raids; `/raid-status` reloads read the viewer's own roster as a lean render-only snapshot; `/raid-remove-roster` autocomplete and `/raid-gold-earner` read the caller's profile once for roster and language; `/raid-channel action` autocomplete reads language and config together.
 
 ## 2026-10-11
 

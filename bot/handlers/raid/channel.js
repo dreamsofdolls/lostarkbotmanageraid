@@ -68,7 +68,7 @@ function createRaidChannelCommand({
    */
   const handleRaidChannelAutocomplete = createAutocompleteDispatcher("raid-channel", {
     async action(interaction, focused) {
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+      const langPromise = getUserLanguage(interaction.user.id, { UserModel: User });
       let autoCleanupEnabled = false;
       if (interaction.guildId) {
         try {
@@ -78,6 +78,7 @@ function createRaidChannelCommand({
           console.warn("[autocomplete] raid-channel config load failed:", err?.message || err);
         }
       }
+      const lang = await langPromise;
       const choices = buildRaidChannelActionChoices({
         lang,
         needle: focused.value || "",

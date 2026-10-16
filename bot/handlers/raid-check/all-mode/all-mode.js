@@ -372,7 +372,7 @@ function createAllModeHandler({
         onUserRefreshed: (userDoc) => {
           if (!applyRefreshedUserDoc(userDoc)) return;
           published += 1;
-          pendingAggregateCache.clear();
+          pendingAggregateCache.clear(userDoc.discordId);
           recomputeFilteredPages({ resetPage: false });
           queueBackgroundRender("roster-refresh-partial");
         },
