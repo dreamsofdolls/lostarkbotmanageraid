@@ -1,6 +1,7 @@
 "use strict";
 
 const { toPlainUserDoc } = require("../../../utils/user-doc");
+const { normalizeName } = require("../../../utils/raid/common/shared");
 
 const AUTHOR_META_FETCH_CONCURRENCY = 4;
 
@@ -178,6 +179,56 @@ function buildAllModePagesData(users) {
   return pagesData;
 }
 
+function collectCharacterIds(account) {
+  const characters = Array.isArray(account?.characters) ? account.characters : [];
+  return new Set(characters.map((character) => character?.id).filter(Boolean));
+}
+
+/**
+ * Pair the open pages of one user with the accounts of a refreshed document.
+ * Accounts carry no _id, so a page follows its normalized accountName first and
+ * then a shared character id, because a roster refresh can rename an account.
+ * @param {object[]} pages - Open pages of the user.
+ * @param {object[]} accounts - Accounts of the refreshed user document.
+ * @returns {Map<object, number>} Index in `accounts` for each page that still has an account.
+ */
+function matchPagesToAccounts(pages, accounts) {
+  const accountNames = accounts.map((account) => normalizeName(account?.accountName));
+  const accountCharacterIds = accounts.map(collectCharacterIds);
+  const indexByPage = new Map();
+  const claimed = new Set();
+  const claimMatch = (page, isMatch) => {
+    if (indexByPage.has(page)) return;
+    const accountIdx = accounts.findIndex(
+      (_account, index) => !claimed.has(index) && isMatch(index)
+    );
+    if (accountIdx < 0) return;
+    claimed.add(accountIdx);
+    indexByPage.set(page, accountIdx);
+  };
+
+  for (const page of pages) {
+    const name = normalizeName(page.account?.accountName);
+    claimMatch(page, (index) => accountNames[index] === name);
+  }
+  for (const page of pages) {
+    const characterIds = collectCharacterIds(page.account);
+    claimMatch(page, (index) =>
+      [...accountCharacterIds[index]].some((id) => characterIds.has(id))
+    );
+  }
+  return indexByPage;
+}
+
+/**
+ * Index the all-mode pages by user so a refreshed user document can replace
+ * the data the open session renders.
+ * @param {object[]} users - Render snapshot rows; the refreshed row replaces its entry.
+ * @param {object[]} pagesData - Pages shared with the views; pages whose account
+ *   no longer exists are removed in place and the remaining ones get their new accountIdx.
+ * @returns {{applyRefreshedUserDoc: function(object): boolean}} Applier that returns
+ *   false when the document does not belong to this session.
+ */
 function createAllModeRefreshIndex(users, pagesData) {
   const userIndexByDiscordId = new Map();
   for (let index = 0; index < users.length; index += 1) {
@@ -203,11 +254,24 @@ function createAllModeRefreshIndex(users, pagesData) {
     if (!hasUser && userPages.length === 0) return false;
 
     if (hasUser) users[userIndexByDiscordId.get(key)] = userDoc;
+    const accountIdxByPage = matchPagesToAccounts(userPages, userDoc.accounts);
+    const keptPages = [];
+    const droppedPages = new Set();
     for (const page of userPages) {
+      const accountIdx = accountIdxByPage.get(page);
+      if (accountIdx === undefined) {
+        droppedPages.add(page);
+        continue;
+      }
       page.userDoc = userDoc;
-      const freshAccount = userDoc.accounts[page.accountIdx];
-      if (freshAccount) page.account = freshAccount;
+      page.account = userDoc.accounts[accountIdx];
+      page.accountIdx = accountIdx;
+      keptPages.push(page);
     }
+    for (let index = pagesData.length - 1; index >= 0; index -= 1) {
+      if (droppedPages.has(pagesData[index])) pagesData.splice(index, 1);
+    }
+    pagesByDiscordId.set(key, keptPages);
     return true;
   };
 

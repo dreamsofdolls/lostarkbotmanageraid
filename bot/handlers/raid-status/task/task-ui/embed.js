@@ -27,6 +27,7 @@ function createTaskViewEmbedBuilder({
       getClassEmoji,
       truncateText,
       lang,
+      now,
     });
 
     if (totals.charsWithTasks === 0 && sharedTasks.length === 0) {

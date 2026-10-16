@@ -188,11 +188,39 @@ function createAllModeHandler({
     const {
       applyRefreshedUserDoc: applyRefreshedPageDocs,
     } = createAllModeRefreshIndex(users, pagesData);
-    // The embed reads the refreshed doc, so the auto-sync button's maps follow it.
+    const dropUsersWithoutPages = () => {
+      const pageUserIds = new Set(pagesData.map((page) => page.userDoc.discordId));
+      // Discord rejects a select menu without options, so a session left with
+      // no page keeps its user list.
+      if (pageUserIds.size === 0) return;
+      visibleUserIds.splice(
+        0,
+        visibleUserIds.length,
+        ...visibleUserIds.filter((discordId) => pageUserIds.has(discordId))
+      );
+      if (state.filterUserId && !pageUserIds.has(state.filterUserId)) {
+        state.filterUserId = null;
+      }
+    };
+    // Applies a refreshed doc to the session and recomputes the filtered pages.
+    // The embed reads the refreshed doc, so the auto-sync button's maps follow
+    // it. A refresh that drops pages shifts the absolute page indices, so the
+    // selected roster and the viewed page are looked up again by identity, and
+    // a user left without pages leaves the user list. The pending cache is
+    // cleared before the recompute because the status filters read it.
     const applyRefreshedUserDoc = (userDoc) => {
+      const selectedPage = pagesData[state.filterRosterIndex];
+      const viewedPage = pagesData[currentAbsoluteIndex()];
       if (!applyRefreshedPageDocs(userDoc)) return false;
       autoManageStateByDiscordId.set(userDoc.discordId, !!userDoc.autoManageEnabled);
       localSyncStateByDiscordId.set(userDoc.discordId, !!userDoc.localSyncEnabled);
+      const selectedIndex = pagesData.indexOf(selectedPage);
+      state.filterRosterIndex = selectedIndex < 0 ? null : selectedIndex;
+      dropUsersWithoutPages();
+      pendingAggregateCache.clear(userDoc.discordId);
+      recomputeFilteredPages({ resetPage: false });
+      const viewedLocalPage = state.filteredIndices.indexOf(pagesData.indexOf(viewedPage));
+      if (viewedLocalPage >= 0) state.currentLocalPage = viewedLocalPage;
       return true;
     };
     const { buildRaidPage } = createAllModePageRenderers({
@@ -310,7 +338,6 @@ function createAllModeHandler({
       currentAbsoluteIndex,
       renderEmbed,
       buildComponents,
-      pendingAggregateCache,
       applyRefreshedUserDoc,
     });
 
@@ -372,8 +399,6 @@ function createAllModeHandler({
         onUserRefreshed: (userDoc) => {
           if (!applyRefreshedUserDoc(userDoc)) return;
           published += 1;
-          pendingAggregateCache.clear(userDoc.discordId);
-          recomputeFilteredPages({ resetPage: false });
           queueBackgroundRender("roster-refresh-partial");
         },
       })

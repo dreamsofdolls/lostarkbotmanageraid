@@ -4,6 +4,7 @@ const {
   resolveCharacterNameFilter,
 } = require("../../state/character-filter");
 const { normalizeName } = require("../../../../utils/raid/common/shared");
+const { isTaskDone } = require("../../../../utils/raid/tasks/task-cycle");
 
 const ALL_CHARS_SENTINEL = "__ALL_CHARS__";
 
@@ -36,6 +37,7 @@ function createTaskFilterState({
   }
 
   function aggregateTasksOnPage() {
+    const now = new Date();
     const byKey = new Map();
     for (const character of charsWithTasksOnPage()) {
       const charName = getCharacterName(character);
@@ -55,12 +57,13 @@ function createTaskFilterState({
           };
           byKey.set(key, entry);
         }
+        const completed = isTaskDone(task, now);
         entry.owners.push({
           charName,
           taskId: task.taskId,
-          completed: !!task.completed,
+          completed,
         });
-        if (task.completed) entry.doneCount += 1;
+        if (completed) entry.doneCount += 1;
       }
     }
     return [...byKey.values()].sort((a, b) =>

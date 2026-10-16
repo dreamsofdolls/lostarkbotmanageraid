@@ -600,6 +600,15 @@ test("INLINE_SPACER is frozen so mutation can't poison shared reference", () => 
 // Shared task-view helper: pure function used by both /raid-status + /raid-check
 // ---------------------------------------------------------------------------
 
+const {
+  dailyResetStartMs: resetWindowDailyStart,
+  weeklyResetStartMs: resetWindowWeeklyStart,
+} = require("../bot/utils/raid/schedule/reset-windows");
+const TASK_VIEW_NOW = new Date(Date.UTC(2026, 3, 22, 12, 0, 0, 0));
+const CURRENT_DAILY_START = resetWindowDailyStart(TASK_VIEW_NOW);
+const CURRENT_WEEKLY_START = resetWindowWeeklyStart(TASK_VIEW_NOW);
+const TASK_VIEW_DAY_MS = 24 * 60 * 60 * 1000;
+
 test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () => {
   const { buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
   const account = {
@@ -610,7 +619,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
         class: "Berserker",
         itemLevel: 1700,
         sideTasks: [
-          { taskId: "1", name: "Una", reset: "daily", completed: true },
+          { taskId: "1", name: "Una", reset: "daily", completed: true, lastResetAt: CURRENT_DAILY_START },
           { taskId: "2", name: "Chaos", reset: "daily", completed: false },
         ],
       },
@@ -619,7 +628,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
         className: "Bard",
         itemLevel: 1690,
         sideTasks: [
-          { taskId: "3", name: "Guardian", reset: "weekly", completed: true },
+          { taskId: "3", name: "Guardian", reset: "weekly", completed: true, lastResetAt: CURRENT_WEEKLY_START },
         ],
       },
       // No-tasks char should be filtered out.
@@ -631,6 +640,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
     getClassEmoji: (className) =>
       className === "Bard" ? "<:bard_test:123456789012345678>" : "",
     truncateText: (s) => s,
+    now: TASK_VIEW_NOW,
   };
   const { fields, totals } = buildAccountTaskFields(account, helpers);
 
@@ -668,6 +678,7 @@ test("buildAccountTaskFields renders every task char when roster exceeds 2-colum
           name: `Daily ${index + 1}`,
           reset: "daily",
           completed: index % 2 === 0,
+          lastResetAt: CURRENT_DAILY_START,
         },
       ],
     })),
@@ -676,6 +687,7 @@ test("buildAccountTaskFields renders every task char when roster exceeds 2-colum
   const { fields, totals } = buildAccountTaskFields(account, {
     UI: { icons: { done: "done", pending: "todo" } },
     truncateText: (s) => s,
+    now: TASK_VIEW_NOW,
   });
 
   assert.equal(totals.charsWithTasks, PAGE_CHAR_CAP + 1);
@@ -722,6 +734,85 @@ test("buildAccountTaskFields odd char count pads with spacer to keep 2-column", 
   assert.equal(fields.length, 3);
   assert.equal(fields[1].name, "​");
   assert.equal(fields[2].name, "​");
+});
+
+test("buildAccountTaskFields shows a task completed in an earlier cycle as not done", () => {
+  const { buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
+  const account = {
+    accountName: "main",
+    characters: [
+      {
+        name: "Alpha",
+        class: "Berserker",
+        itemLevel: 1700,
+        sideTasks: [
+          { taskId: "1", name: "Stale daily", reset: "daily", completed: true, lastResetAt: CURRENT_DAILY_START - TASK_VIEW_DAY_MS },
+          { taskId: "2", name: "Fresh daily", reset: "daily", completed: true, lastResetAt: CURRENT_DAILY_START },
+          { taskId: "3", name: "Stale weekly", reset: "weekly", completed: true, lastResetAt: CURRENT_WEEKLY_START - 7 * TASK_VIEW_DAY_MS },
+          { taskId: "4", name: "Fresh weekly", reset: "weekly", completed: true, lastResetAt: CURRENT_WEEKLY_START },
+        ],
+      },
+    ],
+  };
+
+  const { fields, totals } = buildAccountTaskFields(account, {
+    UI: { icons: { done: "done", pending: "todo" } },
+    truncateText: (s) => s,
+    now: TASK_VIEW_NOW,
+  });
+
+  assert.equal(totals.daily, 2);
+  assert.equal(totals.dailyDone, 1, "the earlier-cycle daily is not counted");
+  assert.equal(totals.weekly, 2);
+  assert.equal(totals.weeklyDone, 1, "the earlier-cycle weekly is not counted");
+  assert.match(fields[0].value, /\*\*Daily\*\* · 1\/2/);
+  assert.match(fields[0].value, /todo Stale daily/);
+  assert.match(fields[0].value, /done Fresh daily/);
+  assert.match(fields[0].value, /\*\*Weekly\*\* · 1\/2/);
+  assert.match(fields[0].value, /todo Stale weekly/);
+  assert.match(fields[0].value, /done Fresh weekly/);
+});
+
+test("getSharedTaskDisplay reads a daily shared task completed before today's reset as not completed", () => {
+  const stale = { name: "Stale", reset: "daily", completed: true, lastResetAt: CURRENT_DAILY_START - TASK_VIEW_DAY_MS };
+  const fresh = { ...stale, name: "Fresh", lastResetAt: CURRENT_DAILY_START };
+
+  assert.equal(getSharedTaskDisplay(stale, TASK_VIEW_NOW, "en").completed, false);
+  assert.equal(getSharedTaskDisplay(fresh, TASK_VIEW_NOW, "en").completed, true);
+});
+
+test("addTaskViewContent shows a shared daily or weekly task completed in an earlier cycle as not done", () => {
+  const { addTaskViewContent } = require("../bot/utils/raid/tasks/task-view");
+  const embed = { fields: [], addFields(...nextFields) { this.fields.push(...nextFields); } };
+  const sharedTasks = [
+    { name: "Stale", emoji: "S", status: "weekly", reset: "weekly", completed: true, lastResetAt: CURRENT_WEEKLY_START - 7 * TASK_VIEW_DAY_MS },
+    { name: "Fresh", emoji: "F", status: "daily", reset: "daily", completed: true, lastResetAt: CURRENT_DAILY_START },
+  ];
+
+  const footerParts = addTaskViewContent({
+    embed,
+    fields: [],
+    totals: { daily: 0, dailyDone: 0, weekly: 0, weeklyDone: 0 },
+    sharedTasks,
+    now: TASK_VIEW_NOW,
+    lang: "en",
+    UI: { icons: { done: "done", pending: "pending" } },
+    // The display owns the cycle check; the stub keeps the task's own emoji and name.
+    getSharedTaskDisplay: (task, now) => ({ ...task, completed: getSharedTaskDisplay(task, now).completed }),
+    truncateText: (value) => value,
+    text: {
+      sharedOverflow: (n) => `${n} shared more`,
+      sharedHeader: () => "Shared tasks",
+      characterOverflow: (n) => `${n} characters more`,
+      sharedFooter: ({ done, total }) => `shared ${done}/${total}`,
+      dailyFooter: ({ done, total }) => `daily ${done}/${total}`,
+      weeklyFooter: ({ done, total }) => `weekly ${done}/${total}`,
+    },
+  });
+
+  assert.deepEqual(footerParts, ["shared 1/2"]);
+  assert.match(embed.fields[0].value, /pending S \*\*Stale\*\*/);
+  assert.match(embed.fields[0].value, /done F \*\*Fresh\*\*/);
 });
 
 test("addTaskViewContent shares Discord field budgeting without changing surface copy", () => {

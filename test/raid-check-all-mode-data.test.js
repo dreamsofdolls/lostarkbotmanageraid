@@ -11,6 +11,9 @@ const {
   resolveAllModeAuthorMeta,
   toPlainUserDoc,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-data");
+const {
+  createAllModePendingAggregateCache,
+} = require("../bot/handlers/raid-check/all-mode/all-mode-aggregate");
 
 function createQuery({ leanRows, awaitedRows, onSelect }) {
   return {
@@ -227,7 +230,10 @@ test("all-mode refresh index updates only the matching user pages", () => {
   const users = [
     {
       discordId: "100",
-      accounts: [{ accountName: "A-old" }, { accountName: "B-old" }],
+      accounts: [
+        { accountName: "A-old", characters: [{ id: "a" }] },
+        { accountName: "B-old", characters: [{ id: "b" }] },
+      ],
     },
     {
       discordId: "200",
@@ -240,7 +246,10 @@ test("all-mode refresh index updates only the matching user pages", () => {
   const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
   const refreshedUser = {
     discordId: "100",
-    accounts: [{ accountName: "A-fresh" }, { accountName: "B-fresh" }],
+    accounts: [
+      { accountName: "A-fresh", characters: [{ id: "a" }] },
+      { accountName: "B-fresh", characters: [{ id: "b" }] },
+    ],
   };
 
   assert.equal(applyRefreshedUserDoc(refreshedUser), true);
@@ -257,6 +266,127 @@ test("all-mode refresh index updates only the matching user pages", () => {
     false
   );
   assert.equal(applyRefreshedUserDoc({ discordId: "100" }), false);
+});
+
+function rosterAccount(accountName, characterId) {
+  return {
+    accountName,
+    characters: [
+      {
+        id: characterId,
+        name: accountName,
+        class: "Artist",
+        itemLevel: 1740,
+        raids: [{ raidKey: "kazeros", modeKey: "normal", goldReceives: true, isCompleted: false }],
+      },
+    ],
+  };
+}
+
+function openRefreshSession(accounts) {
+  const users = [{ discordId: "manager", accounts }];
+  const pagesData = buildAllModePagesData(users);
+  const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
+  return { pagesData, applyRefreshedUserDoc };
+}
+
+function describePages(pagesData) {
+  return pagesData.map((page) => [page.account.accountName, page.accountIdx]);
+}
+
+test("all-mode refresh drops the page of a deleted first roster instead of duplicating the next one", () => {
+  const { pagesData, applyRefreshedUserDoc } = openRefreshSession([
+    rosterAccount("Alpha", "a1"),
+    rosterAccount("Bravo", "b1"),
+  ]);
+  const sharedPages = pagesData;
+  const refreshed = { discordId: "manager", accounts: [rosterAccount("Bravo", "b1")] };
+
+  assert.equal(applyRefreshedUserDoc(refreshed), true);
+
+  assert.equal(pagesData, sharedPages, "the page list shared with the views is edited in place");
+  assert.deepEqual(describePages(pagesData), [["Bravo", 0]]);
+  assert.equal(pagesData[0].userDoc, refreshed);
+  assert.equal(pagesData[0].account, refreshed.accounts[0]);
+  const cache = createAllModePendingAggregateCache({
+    pagesData,
+    lang: "en",
+    getStatusRaidsForCharacter: (character) => character.raids,
+  });
+  assert.equal(cache.compute().totalPending, 1, "Bravo must be counted once");
+});
+
+test("all-mode refresh drops the page of a deleted last roster", () => {
+  const { pagesData, applyRefreshedUserDoc } = openRefreshSession([
+    rosterAccount("Alpha", "a1"),
+    rosterAccount("Bravo", "b1"),
+  ]);
+  const refreshed = { discordId: "manager", accounts: [rosterAccount("Alpha", "a1")] };
+
+  assert.equal(applyRefreshedUserDoc(refreshed), true);
+
+  assert.deepEqual(describePages(pagesData), [["Alpha", 0]]);
+  assert.equal(pagesData[0].account, refreshed.accounts[0]);
+});
+
+test("all-mode refresh drops every page of a user whose rosters were all deleted", () => {
+  const users = [
+    { discordId: "manager", accounts: [rosterAccount("Alpha", "a1"), rosterAccount("Bravo", "b1")] },
+    { discordId: "other", accounts: [rosterAccount("Cleo", "c1")] },
+  ];
+  const pagesData = buildAllModePagesData(users);
+  const otherPage = pagesData[2];
+  const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
+
+  assert.equal(applyRefreshedUserDoc({ discordId: "manager", accounts: [] }), true);
+
+  assert.deepEqual(pagesData, [otherPage]);
+  assert.deepEqual(describePages(pagesData), [["Cleo", 0]]);
+});
+
+test("all-mode refresh follows a reordered roster list by account, not by position", () => {
+  const { pagesData, applyRefreshedUserDoc } = openRefreshSession([
+    rosterAccount("Alpha", "a1"),
+    rosterAccount("Bravo", "b1"),
+  ]);
+  const refreshed = {
+    discordId: "manager",
+    accounts: [rosterAccount("Bravo", "b1"), rosterAccount("Alpha", "a1")],
+  };
+
+  assert.equal(applyRefreshedUserDoc(refreshed), true);
+
+  assert.deepEqual(describePages(pagesData), [["Alpha", 1], ["Bravo", 0]]);
+  assert.equal(pagesData[0].account, refreshed.accounts[1]);
+  assert.equal(pagesData[1].account, refreshed.accounts[0]);
+});
+
+test("all-mode refresh keeps a renamed roster on its page through a shared character id", () => {
+  const { pagesData, applyRefreshedUserDoc } = openRefreshSession([
+    rosterAccount("Alpha", "a1"),
+    rosterAccount("Bravo", "b1"),
+  ]);
+  const refreshed = {
+    discordId: "manager",
+    accounts: [rosterAccount("Bravo", "b1"), rosterAccount("Alpha-resolved", "a1")],
+  };
+
+  assert.equal(applyRefreshedUserDoc(refreshed), true);
+
+  assert.deepEqual(describePages(pagesData), [["Alpha-resolved", 1], ["Bravo", 0]]);
+});
+
+test("all-mode refresh leaves a roster added while the session is open for the next open", () => {
+  const { pagesData, applyRefreshedUserDoc } = openRefreshSession([rosterAccount("Alpha", "a1")]);
+  const refreshed = {
+    discordId: "manager",
+    accounts: [rosterAccount("Alpha", "a1"), rosterAccount("Charlie", "c1")],
+  };
+
+  assert.equal(applyRefreshedUserDoc(refreshed), true);
+
+  assert.deepEqual(describePages(pagesData), [["Alpha", 0]]);
+  assert.equal(pagesData[0].account, refreshed.accounts[0]);
 });
 
 test("all-mode author meta never waits on Discord REST before first render", async () => {

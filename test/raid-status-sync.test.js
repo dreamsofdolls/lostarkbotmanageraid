@@ -239,6 +239,71 @@ test("raid-status manual sync reports failed when every character failed", async
   assert.equal(result.outcome.outcome, "failed");
 });
 
+function createGatherFailureSync({ stampAutoManageAttempt }) {
+  const seedDoc = {
+    discordId: "user-1",
+    accounts: [{ accountName: "Roster", characters: [] }],
+    autoManageEnabled: true,
+  };
+  const counters = { commits: 0, releases: 0 };
+  const sync = createSync({
+    User: {
+      findOne: () => {
+        const read = Promise.resolve(seedDoc);
+        read.lean = async () => ({ ...seedDoc });
+        return read;
+      },
+    },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {
+      counters.releases += 1;
+    },
+    gatherAutoManageLogsForUserDoc: async () => {
+      throw new Error("bible down");
+    },
+    commitAutoManageCollected: async () => {
+      counters.commits += 1;
+      return { status: "committed", report: null, snapshot: null };
+    },
+    stampAutoManageAttempt,
+  });
+  return { sync, counters };
+}
+
+test("raid-status manual sync starts the cooldown when the gather throws", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const stamps = [];
+  const { sync, counters } = createGatherFailureSync({
+    stampAutoManageAttempt: async (discordId) => {
+      stamps.push(discordId);
+    },
+  });
+
+  const result = await sync.runManualStatusSync("user-1", {});
+
+  assert.deepEqual(
+    { outcome: result.outcome.outcome, stamps, commits: counters.commits, releases: counters.releases },
+    { outcome: "failed", stamps: ["user-1"], commits: 0, releases: 1 }
+  );
+});
+
+test("raid-status manual sync stamps a failed gather once even when the stamp rejects", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(console, "error", () => {});
+  let stampCalls = 0;
+  const { sync } = createGatherFailureSync({
+    stampAutoManageAttempt: async () => {
+      stampCalls += 1;
+      throw new Error("mongo down");
+    },
+  });
+
+  const result = await sync.runManualStatusSync("user-1", {});
+
+  assert.equal(result.outcome.outcome, "failed");
+  assert.equal(stampCalls, 1);
+});
+
 test("raid-status card-open sync reports failed when every character failed", async () => {
   const seedDoc = {
     discordId: "user-1",

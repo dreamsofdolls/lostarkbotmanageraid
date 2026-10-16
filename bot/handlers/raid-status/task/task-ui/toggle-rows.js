@@ -2,6 +2,7 @@
 
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
 const { normalizeName } = require("../../../../utils/raid/common/shared");
+const { isTaskDone } = require("../../../../utils/raid/tasks/task-cycle");
 
 function createTaskToggleRows({
   ActionRowBuilder,
@@ -36,6 +37,8 @@ function createTaskToggleRows({
   function buildTaskCharFilterRow(disabled) {
     const candidates = charsWithTasksOnPage();
     if (candidates.length === 0) return null;
+    const now = new Date();
+    const isDone = (task) => isTaskDone(task, now);
     const activeName = resolveTaskCharFilter();
     const options = [];
 
@@ -46,7 +49,7 @@ function createTaskToggleRows({
             ? character.sideTasks
             : [];
           acc.total += sideTasks.length;
-          acc.done += sideTasks.filter((task) => task?.completed).length;
+          acc.done += sideTasks.filter(isDone).length;
           return acc;
         },
         { total: 0, done: 0 }
@@ -71,7 +74,7 @@ function createTaskToggleRows({
       const sideTasks = Array.isArray(character.sideTasks)
         ? character.sideTasks
         : [];
-      const doneCount = sideTasks.filter((task) => task?.completed).length;
+      const doneCount = sideTasks.filter(isDone).length;
       const label = truncateText(
         `${name} \u00B7 ${Number(character.itemLevel) || 0} \u00B7 ${doneCount}/${sideTasks.length}`,
         100
@@ -147,8 +150,9 @@ function createTaskToggleRows({
       });
     }
 
+    const now = new Date();
     const options = sideTasks.slice(0, 25).map((task) => {
-      const icon = task.completed ? UI.icons.done : UI.icons.pending;
+      const icon = isTaskDone(task, now) ? UI.icons.done : UI.icons.pending;
       return {
         label: truncateText(`${icon} ${task.name} \u00B7 ${task.reset}`, 100),
         value: `${activeName}::${task.taskId}`.slice(0, 100),

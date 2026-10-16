@@ -10,6 +10,7 @@
 
 const { pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
 const { t } = require("../../../services/i18n");
+const { isTaskDone } = require("./task-cycle");
 
 const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 
@@ -60,7 +61,8 @@ function formatItemLevel(character) {
  * Caller still owns title, description, footer, and any placeholder
  * fields appended after the char cards.
  * @param {object} account - account sub-doc (must have characters[])
- * @param {{UI: object, getClassEmoji?: function, truncateText?: function, lang?: string}} helpers
+ * @param {{UI: object, getClassEmoji?: function, truncateText?: function, lang?: string, now?: Date|number}} helpers
+ *   - `now` decides which reset cycle a task's completion must belong to
  * @returns {{fields: Array, totals: {daily: number, weekly: number, dailyDone: number, weeklyDone: number, charsWithTasks: number, rendered: number}}}
  */
 function buildAccountTaskFields(account, helpers) {
@@ -73,6 +75,7 @@ function buildAccountTaskFields(account, helpers) {
     // pre-i18n behavior). The /raid-status Side tasks callers pass lang
     // explicitly.
     lang = "vi",
+    now = new Date(),
   } = helpers;
 
   const characters = Array.isArray(account?.characters)
@@ -95,6 +98,8 @@ function buildAccountTaskFields(account, helpers) {
     return { fields: [], totals };
   }
 
+  const isDone = (task) => isTaskDone(task, now);
+
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
     const classIcon = getClassEmoji(getCharacterClass(character));
@@ -111,28 +116,28 @@ function buildAccountTaskFields(account, helpers) {
     const weeklyTasks = sideTasks.filter((t) => t?.reset === "weekly");
     totals.daily += dailyTasks.length;
     totals.weekly += weeklyTasks.length;
-    totals.dailyDone += dailyTasks.filter((t) => t?.completed).length;
-    totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
+    totals.dailyDone += dailyTasks.filter(isDone).length;
+    totals.weeklyDone += weeklyTasks.filter(isDone).length;
 
     const lines = [];
     if (dailyTasks.length > 0) {
-      const dailyDone = dailyTasks.filter((task) => task.completed).length;
+      const dailyDone = dailyTasks.filter(isDone).length;
       lines.push(
         `**${t("task-view.dailyHeader", lang)}** · ${dailyDone}/${dailyTasks.length}`
       );
       for (const task of dailyTasks) {
-        const icon = task.completed ? UI.icons.done : UI.icons.pending;
+        const icon = isDone(task) ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name}`);
       }
     }
     if (weeklyTasks.length > 0) {
       if (dailyTasks.length > 0) lines.push("");
-      const weeklyDone = weeklyTasks.filter((task) => task.completed).length;
+      const weeklyDone = weeklyTasks.filter(isDone).length;
       lines.push(
         `**${t("task-view.weeklyHeader", lang)}** · ${weeklyDone}/${weeklyTasks.length}`
       );
       for (const task of weeklyTasks) {
-        const icon = task.completed ? UI.icons.done : UI.icons.pending;
+        const icon = isDone(task) ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name}`);
       }
     }

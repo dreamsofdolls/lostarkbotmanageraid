@@ -12,6 +12,7 @@ const {
   resolveScheduledSharedTaskState,
 } = require("./schedule");
 const { t } = require("../../../../services/i18n");
+const { isTaskDone } = require("../task-cycle");
 
 const SHARED_RESET_LABEL_KEY_BY_TYPE = new Map([
   ["daily", "shared-task.reset.daily"],
@@ -55,6 +56,15 @@ function formatScheduledOptionStatus(state, nextScheduleLabel, fallback, lang) {
     : fallback;
 }
 
+/**
+ * Display fields of one shared task. `completed` is true only for the current
+ * cycle: a daily or weekly task completed before the last reset reads false,
+ * and a scheduled task is completed for its current slot key only.
+ * @param {object} task - Shared task.
+ * @param {Date} [now=new Date()] - Clock for the schedule and the reset cycle.
+ * @param {string} [lang] - Viewer language.
+ * @returns {object} Name, emoji, completed flag, status texts and schedule state.
+ */
 function getSharedTaskDisplay(task, now = new Date(), lang) {
   const preset = getSharedTaskPreset(task?.preset);
   const name = String(task?.name || preset.defaultName).trim();
@@ -93,7 +103,7 @@ function getSharedTaskDisplay(task, now = new Date(), lang) {
   return {
     name,
     emoji: preset.emoji,
-    completed: !!task?.completed,
+    completed: isTaskDone(task, now),
     status: formatSharedResetLabel(task?.reset, lang),
     optionStatus: formatSharedResetLabel(task?.reset, lang),
     scheduleText: formatSharedResetLabel(task?.reset, lang),

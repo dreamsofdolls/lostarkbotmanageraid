@@ -39,6 +39,10 @@ const {
 } = require("../bot/handlers/raid-status/components/component-layout");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
 const {
+  dailyResetStartMs,
+  weeklyResetStartMs,
+} = require("../bot/utils/raid/schedule/reset-windows");
+const {
   UI,
   truncateText,
   formatShortRelative,
@@ -1759,6 +1763,122 @@ test("raid-status view-only shares render the task toggles disabled, like the go
     "status-task:char-filter": false,
     "status-task:toggle": false,
   });
+});
+
+const TASK_UI_NOW = Date.UTC(2026, 3, 22, 12, 0, 0, 0);
+const TASK_UI_DAILY_START = dailyResetStartMs(TASK_UI_NOW);
+const TASK_UI_WEEKLY_START = weeklyResetStartMs(TASK_UI_NOW);
+const TASK_UI_DAY_MS = 24 * 60 * 60 * 1000;
+
+function createStaleTaskUi({ accounts, taskCharFilter, lang = "en" }) {
+  return createRaidStatusTaskUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    lang,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "task",
+    getTaskCharFilter: () => taskCharFilter,
+  });
+}
+
+function sideTaskCharacter(name, tasks) {
+  return { ...makeChar(name, 1700), sideTasks: tasks };
+}
+
+function optionLabels(row) {
+  return row.toJSON().components[0].options.map((option) => option.label);
+}
+
+test("raid-status bulk task toggle counts a completion from an earlier cycle as not done", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: TASK_UI_NOW });
+  const accounts = [
+    {
+      accountName: "Alpha",
+      characters: [
+        sideTaskCharacter("Aki", [
+          { taskId: "a1", name: "Una", reset: "daily", completed: true, lastResetAt: TASK_UI_DAILY_START - TASK_UI_DAY_MS },
+        ]),
+        sideTaskCharacter("Bea", [
+          { taskId: "b1", name: "Una", reset: "daily", completed: true, lastResetAt: TASK_UI_DAILY_START },
+        ]),
+      ],
+    },
+  ];
+  const taskUi = createStaleTaskUi({ accounts, taskCharFilter: "__ALL_CHARS__" });
+
+  assert.deepEqual(optionLabels(taskUi.buildTaskToggleRow(false)), [
+    `${UI.icons.pending} Una · daily (1/2)`,
+  ]);
+});
+
+test("raid-status task character filter counts a completion from an earlier cycle as not done", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: TASK_UI_NOW });
+  const accounts = [
+    {
+      accountName: "Alpha",
+      characters: [
+        sideTaskCharacter("Aki", [
+          { taskId: "a1", name: "Una", reset: "daily", completed: true, lastResetAt: TASK_UI_DAILY_START - TASK_UI_DAY_MS },
+          { taskId: "a2", name: "Chaos", reset: "weekly", completed: true, lastResetAt: TASK_UI_WEEKLY_START },
+        ]),
+        sideTaskCharacter("Bea", [
+          { taskId: "b1", name: "Una", reset: "daily", completed: false },
+        ]),
+      ],
+    },
+  ];
+  const taskUi = createStaleTaskUi({ accounts, taskCharFilter: undefined });
+
+  assert.deepEqual(optionLabels(taskUi.buildTaskCharFilterRow(false)), [
+    "🌐 All characters · 1/3",
+    `Aki · 1700 · 1/2`,
+    `Bea · 1700 · 0/1`,
+  ]);
+});
+
+test("raid-status character task toggle marks a completion from an earlier cycle as pending", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: TASK_UI_NOW });
+  const accounts = [
+    {
+      accountName: "Alpha",
+      characters: [
+        sideTaskCharacter("Aki", [
+          { taskId: "a1", name: "Stale", reset: "daily", completed: true, lastResetAt: TASK_UI_DAILY_START - TASK_UI_DAY_MS },
+          { taskId: "a2", name: "Fresh", reset: "daily", completed: true, lastResetAt: TASK_UI_DAILY_START },
+        ]),
+      ],
+    },
+  ];
+  const taskUi = createStaleTaskUi({ accounts, taskCharFilter: "Aki" });
+
+  assert.deepEqual(optionLabels(taskUi.buildTaskToggleRow(false)), [
+    `${UI.icons.pending} Stale · daily`,
+    `${UI.icons.done} Fresh · daily`,
+  ]);
+});
+
+test("raid-status shared task toggle marks a completion from an earlier cycle as pending", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: TASK_UI_NOW });
+  const accounts = [
+    {
+      accountName: "Alpha",
+      sharedTasks: [
+        { taskId: "s1", name: "Stale shop", reset: "weekly", completed: true, lastResetAt: TASK_UI_WEEKLY_START - 7 * TASK_UI_DAY_MS },
+        { taskId: "s2", name: "Fresh shop", reset: "weekly", completed: true, lastResetAt: TASK_UI_WEEKLY_START },
+      ],
+      characters: [sideTaskCharacter("Aki", [])],
+    },
+  ];
+  const taskUi = createStaleTaskUi({ accounts, taskCharFilter: undefined });
+
+  const labels = optionLabels(taskUi.buildSharedTaskToggleRow(false));
+  assert.match(labels[0], new RegExp("^" + UI.icons.pending + " Stale shop"));
+  assert.match(labels[1], new RegExp("^" + UI.icons.done + " Fresh shop"));
 });
 
 test("raid-status view toggle includes the received-gold screen", () => {

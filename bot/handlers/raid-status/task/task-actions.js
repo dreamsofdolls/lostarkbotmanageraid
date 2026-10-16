@@ -9,22 +9,16 @@
 
 const { normalizeName } = require("../../../utils/raid/common/shared");
 const { resolveScheduledSharedTaskState } = require("../../../utils/raid/tasks/shared-tasks");
-const { dailyResetStartMs, weeklyResetStartMs } = require("../../../utils/raid/schedule/reset-windows");
+const { CYCLE_START_BY_RESET, isTaskInCurrentCycle } = require("../../../utils/raid/tasks/task-cycle");
 const { findAccountByName } = require("../../../utils/user-doc");
-
-const CYCLE_START_BY_RESET = Object.freeze({
-  daily: dailyResetStartMs,
-  weekly: weeklyResetStartMs,
-});
 
 // The side-task reset scheduler ticks every 30 minutes, so a clicked task can
 // still carry the previous cycle. Reset it the way that tick would, so the
 // toggle starts from this cycle and the tick then leaves the result alone.
 function freshenTaskCycle(task, now) {
-  const cycleStart = CYCLE_START_BY_RESET[task?.reset]?.(now);
-  if (!cycleStart || Number(task.lastResetAt) >= cycleStart) return;
+  if (isTaskInCurrentCycle(task, now)) return;
   task.completed = false;
-  task.lastResetAt = cycleStart;
+  task.lastResetAt = CYCLE_START_BY_RESET[task.reset](now);
 }
 
 function parseTaskToggleValue(value) {

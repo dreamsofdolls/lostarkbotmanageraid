@@ -54,13 +54,17 @@ function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
 /**
  * Create the per-customId handler map for the all-mode collector.
  *
- * @param {object} deps Session wiring: builders, caches and the shared
- *   mutable `state` the handlers mutate.
+ * @param {object} deps Session wiring: builders and the shared mutable
+ *   `state` the handlers mutate.
  * @param {object} deps.state Mutable session state (filters, page).
  * @param {(component: object) => Promise<void>} deps.applyUserFilter Applies
  *   the user selector value and recomputes filtered pages.
  * @param {(options?: { resetPage?: boolean }) => void} deps.recomputeFilteredPages
  *   Recomputes the filtered page list from current state.
+ * @param {(userDoc: object) => boolean} deps.applyRefreshedUserDoc Applies a
+ *   refreshed user doc to the session, keeps the selected and the viewed
+ *   page by identity and recomputes the filtered pages. Returns false, with
+ *   the session unchanged, when the doc does not belong to the session.
  * @param {() => number | null} deps.currentAbsoluteIndex Resolves the page
  *   index currently shown to the user.
  * @param {(pageIndex: number | null) => object} deps.renderEmbed Renders the
@@ -83,7 +87,6 @@ function createAllModeComponentHandlers({
   currentAbsoluteIndex,
   renderEmbed,
   buildComponents,
-  pendingAggregateCache,
   applyRefreshedUserDoc,
 }) {
   const updateAllModeMessage = (component) =>
@@ -163,8 +166,7 @@ function createAllModeComponentHandlers({
 
       try {
         const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
-        if (applyRefreshedUserDoc(result.userDoc)) pendingAggregateCache.clear(result.userDoc.discordId);
-        recomputeFilteredPages({ resetPage: false });
+        applyRefreshedUserDoc(result.userDoc);
         // The session can end during the refresh; its controls stay disabled.
         await interaction.editReply({
           embeds: [renderEmbed(currentAbsoluteIndex())],

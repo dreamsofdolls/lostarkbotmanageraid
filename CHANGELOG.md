@@ -15,6 +15,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The label for a roster without a name follows the user's language.
 - A Local Sync apply started from the Discord console or the Local Sync view of `/raid-status` now refreshes the owner's other open `/raid-status` cards and shared viewers' cards, as a Reader apply already did.
 - `/raid-log` no longer switches an English or Japanese user to Vietnamese when their roster lookup fails.
+- `/raid-check` all: a refresh after a roster was deleted drops its page (no duplicate roster, no double-counted pending) and keeps the view on the roster you were viewing, filtered or not, or on the last valid page when that roster was the one deleted; a player whose every roster was deleted leaves the player dropdown, which clears a filter on that player.
+- A manual `/raid-status` sync that fails starts the auto-sync cooldown, like a card-open sync.
+- A side or shared daily or weekly task completed last cycle shows as not done right after the reset, on the card and in the task dropdowns (filter counts, bulk and per-character toggles, shared rows).
 
 ### Changed (internal)
 - `bot/commands.js` passes each handler only the dependencies it reads; raid group keys, the roster refresh cooldown, maintenance slots and choice truncation come from one place each; unused exports, the router's `selectHandlers` option and `readSupportShare` are gone; comments and JSDoc state what the code does.

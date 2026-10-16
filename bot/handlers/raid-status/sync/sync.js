@@ -287,6 +287,7 @@ function createRaidStatusSync(deps) {
             gatherErr?.message || gatherErr
           );
           manualOutcome.outcome = "failed";
+          await stampAutoManageAttempt(discordId).catch(() => {});
         }
 
         if (collectedLocal) {
