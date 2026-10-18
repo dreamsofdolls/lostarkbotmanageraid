@@ -11,6 +11,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - A 1750+ character has five raids for three gold slots, so two show no gold each week: Horizon (bound gold) and one raid outside the cap. Among raids at the same progress, the gold slots now go to the highest-paying raids, so the raid left out is the cheapest one (Act 4 Hard at 1750) instead of the raid the catalog lists last. Cleared and partly cleared raids still keep their slots first, and gold settings forced on or off still win. The `#1` to `#3` slot numbers in the gold view follow the same order, so they can change below 1750 too. Below 1750 the raids that earn gold stay the same unless a gold slot is forced on (for example Horizon): then the cheapest raid is the one left out, where it used to be the raid the catalog lists last. A raid outside the cap is hidden from `/raid-check`, so this also keeps Belgardin visible there.
+- `/raid-help` for `/raid-check` says that a raid a character earns no gold from this week is hidden there, and which raid that is at 1750.
 
 ## 2026-10-17
 

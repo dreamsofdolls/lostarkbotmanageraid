@@ -32,7 +32,7 @@ function deriveRole(className) {
  * reset job has not cleared yet does not block this week's. Without one,
  * any positive stamp counts.
  * @param {object} character - roster character sub-document
- * @param {string} raidKey - armoche | kazeros | serca
+ * @param {string} raidKey - a raid key of `RAID_ORDER` (bot/domain/raid-catalog.js)
  * @param {number} [weekStartMs] - start of the event's reset week
  * @returns {boolean}
  */
