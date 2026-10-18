@@ -68,8 +68,11 @@ test("/raid-status lists a character's raids in catalog order", () => {
   // At 1730 Horizon is listed on its hard mode (1720), which sits below
   // Kazeros' hard mode (1730), so the min-item-level tiebreak alone would put
   // Horizon ahead of Kazeros.
-  const raidKeys = getStatusRaidsForCharacter({ itemLevel: 1730, assignedRaids: {}, tasks: [] })
+  const itemLevel = 1730;
+  const raidKeys = getStatusRaidsForCharacter({ itemLevel, assignedRaids: {}, tasks: [] })
     .map((raid) => raid.raidKey);
-  assert.equal(raidKeys.length, CATALOG_KEYS.length);
-  assert.deepEqual(raidKeys, CATALOG_KEYS.filter((raidKey) => raidKeys.includes(raidKey)));
+  const eligibleKeys = CATALOG_KEYS.filter((raidKey) =>
+    Object.values(RAID_REQUIREMENTS[raidKey].modes).some((mode) => mode.minItemLevel <= itemLevel));
+  assert.ok(eligibleKeys.length >= 4);
+  assert.deepEqual(raidKeys, eligibleKeys);
 });

@@ -117,6 +117,7 @@ const VI = {
     kazeros: "Kazeros",
     serca: "Serca",
     horizon: "Horizon",
+    belgardin: "Belgardin",
   },
   modeLabels: {
     normal: "Normal",
@@ -237,6 +238,7 @@ const JP = {
     kazeros: "カゼロス",
     serca: "セルカ",
     horizon: "Horizon",
+    belgardin: "Belgardin",
   },
   modeLabels: {
     normal: "ノーマル",
@@ -357,6 +359,7 @@ const EN = {
     kazeros: "Kazeros",
     serca: "Serca",
     horizon: "Horizon",
+    belgardin: "Belgardin",
   },
   modeLabels: {
     normal: "Normal",

@@ -27,7 +27,7 @@ const {
 } = require("../bot/utils/raid/common/character");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 
-const SOLO_RAID_KEYS = ["armoche", "kazeros", "serca"];
+const SOLO_RAID_KEYS = ["armoche", "kazeros", "serca", "belgardin"];
 
 test("solo mode is a manual alias of Normal metadata only for difficulty-based raids", () => {
   const requirementMap = getRaidRequirementMap();

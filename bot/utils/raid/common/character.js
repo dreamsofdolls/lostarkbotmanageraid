@@ -133,6 +133,11 @@ function compareGoldSlotPriority(a, b) {
   const bPartial = Array.isArray(b?.completedGateKeys) && b.completedGateKeys.length > 0;
   if (aPartial !== bPartial) return aPartial ? -1 : 1;
 
+  // Among raids at the same progress, the higher-paying raid takes the slot,
+  // so a 1750+ character with five raids leaves its cheapest raid outside
+  // the cap instead of whichever raid the catalog lists last.
+  const goldDiff = (Number(b?.rawTotalGold) || 0) - (Number(a?.rawTotalGold) || 0);
+  if (goldDiff !== 0) return goldDiff;
   const orderDiff = raidDisplayRank(a) - raidDisplayRank(b);
   if (orderDiff !== 0) return orderDiff;
   return (Number(a?.minItemLevel) || 0) - (Number(b?.minItemLevel) || 0);
@@ -224,7 +229,7 @@ function getStatusRaidsForCharacter(character) {
     });
   }
 
-  // Display order: Act 4 -> Kazeros (Final) -> Serca -> Horizon, top-to-bottom per
+  // Display order: Act 4 -> Kazeros (Final) -> Serca -> Horizon -> Belgardin, top-to-bottom per
   // character card. Each raid contributes at most one mode; Serca follows
   // the same lockout model as Kazeros: default to the best eligible mode,
   // then show the mode actually cleared when the player runs a lower tier.

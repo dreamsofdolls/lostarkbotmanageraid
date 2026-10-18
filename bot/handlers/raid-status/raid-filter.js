@@ -93,7 +93,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
   }
 
   // Order by canonical raid progression + difficulty (Act 4 -> Kazeros ->
-  // Serca -> Horizon, Normal -> Hard -> Nightmare) so the same raid's modes
+  // Serca -> Horizon -> Belgardin, Normal -> Hard -> Nightmare) so the same raid's modes
   // sit together and the list reads predictably. The old pending-desc sort
   // shuffled raids by backlog, which split a raid's modes apart. Solo raids
   // need no party, so they all sit below the raids a group has to run.

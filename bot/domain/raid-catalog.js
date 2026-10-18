@@ -113,6 +113,20 @@ const RAID_REQUIREMENTS = {
       nightmare: { label: "Level 3", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
     },
   },
+  // Hard and Nightmare gate splits are estimates: only their totals (62,000 /
+  // 75,000) are published, split here at Normal's 40/60 gate ratio. Replace
+  // them with the in-game gate values once known.
+  belgardin: {
+    label: "Belgardin",
+    partySize: 8,
+    gates: ["G1", "G2"],
+    supportsSolo: true,
+    modes: {
+      normal: { label: "Normal", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, goldFactor: 0.5 },
+      hard: { label: "Hard", minItemLevel: 1770, gold: { G1: 24800, G2: 37200 } },
+      nightmare: { label: "Nightmare", minItemLevel: 1780, gold: { G1: 30000, G2: 45000 } },
+    },
+  },
 };
 
 // Solo is derived for raids that expose a Normal difficulty instead of copied
@@ -233,7 +247,7 @@ function getGateGoldParts(raidKey, modeKey, gate) {
 }
 
 // Canonical progression order: raid groups follow their catalog declaration
-// order (Act 4 -> Kazeros -> Serca -> Horizon), and modes follow theirs
+// order (Act 4 -> Kazeros -> Serca -> Horizon -> Belgardin), and modes follow theirs
 // (normal -> solo -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
 // and ordered by difficulty instead of shuffling by pending count, and as the raid
 // key list of the User schema, the reset seed and the per-character raid loops.

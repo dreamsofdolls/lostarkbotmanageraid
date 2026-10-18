@@ -25,6 +25,8 @@ const RAID_ALIASES = new Map([
   ["horizon", "horizon"],
   ["cathedral", "horizon"],
   ["hc", "horizon"],
+  ["belgardin", "belgardin"],
+  ["belg", "belgardin"],
   // Native JP raid names. Token lower-casing does not affect katakana, so exact
   // aliases are enough once separator normalization has run.
   ["アクト4", "armoche"],

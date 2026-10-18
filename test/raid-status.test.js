@@ -864,12 +864,13 @@ test("getStatusRaidsForCharacter: manual goldOverride include can count a bound 
   assert.equal(horizon.goldOverride, "include");
   assert.equal(horizon.goldReceives, true);
   assert.equal(horizon.goldSlotRank, 1);
-  assert.equal(raids.find((raid) => raid.raidKey === "serca").goldExcludedReason, "cap");
+  // The forced slot pushes out the cheapest uncleared raid, Act 4 Hard.
+  assert.equal(raids.find((raid) => raid.raidKey === "armoche").goldExcludedReason, "cap");
   assert.deepEqual(
     raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
-    ["armoche", "kazeros", "horizon"],
+    ["kazeros", "serca", "horizon"],
   );
-  assert.equal(summarizeCharacterGold(raids).total, 126000);
+  assert.equal(summarizeCharacterGold(raids).total, 132000);
 });
 
 test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the cleared lower mode", () => {

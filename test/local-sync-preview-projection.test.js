@@ -84,7 +84,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 4,
+    totalRaids: 5,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -101,6 +101,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
         { raidKey: "kazeros", modeKey: "hard", status: "partial", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
         { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "belgardin", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -135,7 +136,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   // there - still NOT a completed raid. So both percent and projected
   // percent stay at 0%.
   assert.deepEqual(summary.completion, {
-    totalRaids: 4,
+    totalRaids: 5,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -160,6 +161,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
         { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "partial", incoming: true },
         { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "belgardin", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -231,11 +233,11 @@ test("preview summary expands cumulative gates when only later gate is logged (L
   // Pre-sync: nothing cleared. Post-sync: kazeros fully cleared via the
   // G2-implies-G1 cumulative rule.
   assert.deepEqual(summary.completion, {
-    totalRaids: 4,
+    totalRaids: 5,
     cleared: 0,
     projected: 1,
     percent: 0,
-    projectedPercent: 25,
+    projectedPercent: 20,
   });
   // Gold credits BOTH gates (Kazeros Hard: G1=16000 + G2=32000) even
   // though only G2 was in the file. This preserves G1 gold for users who
@@ -254,6 +256,7 @@ test("preview summary expands cumulative gates when only later gate is logged (L
         { raidKey: "kazeros", modeKey: "hard", status: "done", incoming: true },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
         { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "belgardin", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -368,11 +371,11 @@ test("preview summary marks fully-cleared raid as done", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 4,
+    totalRaids: 5,
     cleared: 1,
     projected: 1,
-    percent: 25,
-    projectedPercent: 25,
+    percent: 20,
+    projectedPercent: 20,
   });
   // The character still has other eligible raids pending, so it remains
   // in charsAfterSync with the completed raid shown as done.
@@ -387,6 +390,7 @@ test("preview summary marks fully-cleared raid as done", () => {
         { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
         { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "belgardin", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -523,7 +527,7 @@ test("preview summary Solo scope contains only Solo-capable raid states", () => 
     },
   }), buckets, { scope: "solo", currentWeekStartMs: 1000 });
 
-  assert.equal(summary.completion.totalRaids, 3);
+  assert.equal(summary.completion.totalRaids, 4);
   assert.equal(summary.completion.cleared, 0, "stored Normal completion is not Solo progress");
   assert.equal(
     summary.completion.projected,
@@ -533,7 +537,7 @@ test("preview summary Solo scope contains only Solo-capable raid states", () => 
   assert.equal(summary.charsAfterSync.length, 1);
   assert.deepEqual(
     summary.charsAfterSync[0].raids.map((raid) => raid.raidKey),
-    ["armoche", "kazeros", "serca"]
+    ["armoche", "kazeros", "serca", "belgardin"]
   );
   assert.ok(summary.charsAfterSync[0].raids.every((raid) => raid.modeKey === "solo"));
   assert.ok(summary.charsAfterSync[0].raids.every((raid) => raid.incoming === false));
