@@ -133,9 +133,8 @@ function compareGoldSlotPriority(a, b) {
   const bPartial = Array.isArray(b?.completedGateKeys) && b.completedGateKeys.length > 0;
   if (aPartial !== bPartial) return aPartial ? -1 : 1;
 
-  // Among raids at the same progress, the higher-paying raid takes the slot,
-  // so a 1750+ character with five raids leaves its cheapest raid outside
-  // the cap instead of whichever raid the catalog lists last.
+  // Among raids at the same progress, the raid with the larger total gold
+  // (bound share included) takes the slot; catalog order breaks ties.
   const goldDiff = (Number(b?.rawTotalGold) || 0) - (Number(a?.rawTotalGold) || 0);
   if (goldDiff !== 0) return goldDiff;
   const orderDiff = raidDisplayRank(a) - raidDisplayRank(b);

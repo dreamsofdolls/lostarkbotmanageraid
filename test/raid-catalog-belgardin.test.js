@@ -115,6 +115,27 @@ test("a cleared raid keeps its gold slot ahead of higher-paying raids not cleare
   ]);
 });
 
+test("a partly cleared raid keeps its gold slot ahead of higher-paying raids not started", () => {
+  const raids = getStatusRaidsForCharacter({
+    itemLevel: 1750,
+    assignedRaids: {
+      armoche: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 100 },
+        G2: { difficulty: "Hard", completedDate: null },
+      },
+    },
+    tasks: [],
+  });
+  assert.deepEqual(goldSlots(raids), [
+    ["armoche", 1, null],
+    ["kazeros", null, "cap"],
+    ["serca", 2, null],
+    ["horizon", null, "bound"],
+    ["belgardin", 3, null],
+  ]);
+});
+
 test("a 1749 character is not offered Belgardin", () => {
   const raids = getStatusRaidsForCharacter({ itemLevel: 1749, assignedRaids: {}, tasks: [] });
   assert.equal(raids.some((raid) => raid.raidKey === "belgardin"), false);
