@@ -59,6 +59,28 @@ function makeUserDoc(assignedRaids) {
   };
 }
 
+test("auto-manage records Belgardin clears from its bible boss names", () => {
+  const service = makeService();
+  const userDoc = makeUserDoc({});
+  userDoc.accounts[0].characters[0].itemLevel = 1780;
+
+  const report = service.applyAutoManageCollected(userDoc, 1000, [
+    {
+      entryKey: service.autoManageEntryKey("Roster", "Aki"),
+      logs: [
+        { boss: "Belgardin, Arbiter of Death", difficulty: "Nightmare", timestamp: 2000 },
+        { boss: "Phaetus An Kragma", difficulty: "Nightmare", timestamp: 3000 },
+      ],
+    },
+  ]);
+
+  const belgardin = userDoc.accounts[0].characters[0].assignedRaids.belgardin;
+  assert.equal(report.appliedTotal, 2);
+  assert.equal(belgardin.modeKey, "nightmare");
+  assert.equal(belgardin.G1.completedDate, 2000);
+  assert.equal(belgardin.G2.completedDate, 3000);
+});
+
 test("auto-manage difficulty aliases use the canonical mode lookup", () => {
   const aliasesByMode = {
     solo: ["solo", "solo mode"],

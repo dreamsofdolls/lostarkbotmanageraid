@@ -15,8 +15,10 @@ const {
   getGoldForGate,
   getRaidLabel,
   getRaidPartySize,
+  getRaidGateForBoss,
   getRaidRequirementMap,
 } = require("../bot/domain/raid-catalog");
+const { buildLocalSyncCatalog } = require("../bot/services/local-sync/core/catalog");
 const { getStatusRaidsForCharacter } = require("../bot/utils/raid/common/character");
 const { parseRaidMessage } = require("../bot/services/raid/channel-monitor/channel-monitor-parser");
 
@@ -57,7 +59,11 @@ test("Belgardin Normal pays 20,000 + 30,000 with half of each gate bound", () =>
   );
 });
 
-test("Belgardin Hard and Nightmare pay their published totals as tradeable gold", () => {
+test("Belgardin Hard and Nightmare pay their published gate gold as tradeable gold", () => {
+  assert.deepEqual(
+    ["hard", "nightmare"].map((modeKey) => ["G1", "G2"].map((gate) => getBaseGoldForGate("belgardin", modeKey, gate))),
+    [[25000, 37000], [30000, 45000]],
+  );
   assert.equal(baseGoldTotal("hard"), 62000);
   assert.equal(baseGoldTotal("nightmare"), 75000);
   assert.equal(boundGoldTotal("hard"), 0);
@@ -139,6 +145,21 @@ test("a partly cleared raid keeps its gold slot ahead of higher-paying raids not
 test("a 1749 character is not offered Belgardin", () => {
   const raids = getStatusRaidsForCharacter({ itemLevel: 1749, assignedRaids: {}, tasks: [] });
   assert.equal(raids.some((raid) => raid.raidKey === "belgardin"), false);
+});
+
+test("Belgardin's combat-log boss names map to its gates for Auto Sync and the Local Reader", () => {
+  // Names as lostark.bible logs spell them (NA Nightmare clears).
+  const expected = [
+    ["Belgardin, Arbiter of Death", { raidKey: "belgardin", gate: "G1" }],
+    ["Phaetus An Kragma", { raidKey: "belgardin", gate: "G2" }],
+  ];
+  for (const [boss, target] of expected) {
+    assert.deepEqual(getRaidGateForBoss(boss), target, boss);
+  }
+  const readerMap = new Map(buildLocalSyncCatalog().bossToRaidGate);
+  for (const [boss, target] of expected) {
+    assert.deepEqual(readerMap.get(boss), target, `${boss} in the Local Sync catalog`);
+  }
 });
 
 test("the raid channel accepts belgardin and belg", () => {

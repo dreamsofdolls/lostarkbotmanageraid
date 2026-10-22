@@ -113,9 +113,6 @@ const RAID_REQUIREMENTS = {
       nightmare: { label: "Level 3", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
     },
   },
-  // Hard and Nightmare gate splits are estimates: only their totals (62,000 /
-  // 75,000) are published, split here at Normal's 40/60 gate ratio. Replace
-  // them with the in-game gate values once known.
   belgardin: {
     label: "Belgardin",
     partySize: 8,
@@ -123,7 +120,7 @@ const RAID_REQUIREMENTS = {
     supportsSolo: true,
     modes: {
       normal: { label: "Normal", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, goldFactor: 0.5 },
-      hard: { label: "Hard", minItemLevel: 1770, gold: { G1: 24800, G2: 37200 } },
+      hard: { label: "Hard", minItemLevel: 1770, gold: { G1: 25000, G2: 37000 } },
       nightmare: { label: "Nightmare", minItemLevel: 1780, gold: { G1: 30000, G2: 45000 } },
     },
   },
@@ -203,6 +200,9 @@ const BOSS_TO_RAID_GATE = new Map([
 
   ["Archbishop Arcenos", { raidKey: "horizon", gate: "G1" }],
   ["Arcenos, Vanguard of Fanaticism", { raidKey: "horizon", gate: "G2" }],
+
+  ["Belgardin, Arbiter of Death", { raidKey: "belgardin", gate: "G1" }],
+  ["Phaetus An Kragma", { raidKey: "belgardin", gate: "G2" }],
 ]);
 
 function getRaidGateForBoss(bossName) {

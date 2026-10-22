@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-22
+
+### Changed
+- Belgardin clears now sync: Auto Sync and Local Sync recognize its bosses (`Belgardin, Arbiter of Death` for G1, `Phaetus An Kragma` for G2), as lostark.bible logs spell them for Nightmare clears since the global release on 2026-10-21. If Normal or Hard logs use another boss name, those clears are still skipped and recorded with `/raid-set` or the raid channel.
+- Belgardin Hard pays 25,000 + 37,000, the published gate gold, in place of the 24,800 + 37,200 estimate. The total (62,000) and Nightmare (30,000 + 45,000) are unchanged.
+
 ## 2026-10-18
 
 ### Added
