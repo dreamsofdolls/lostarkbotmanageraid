@@ -284,3 +284,85 @@ test("raid-channel parse validation renders reset syntax hints", () => {
     assert.match(resolved.content, new RegExp(`^text-parser\\.${error === "reset-with-gate" ? "resetWithGate" : "resetWithDifficulty"}\\|vi\\|`));
   }
 });
+
+test("raid-channel done stays at raid level and leaves the mode to the writer", () => {
+  const resolved = resolveParsedRaidUpdate({
+    parsed: {
+      raidKeys: ["kazeros", "act4"],
+      raidDisplayNames: { kazeros: "Final" },
+      modeKey: null,
+      action: "done",
+      charNames: ["Qiylyn"],
+      gate: null,
+    },
+    RAID_REQUIREMENT_MAP,
+    getGatesForRaid,
+    getRaidLabel: (raidKey) => ({ kazeros: "Kazeros", act4: "Act 4" })[raidKey],
+    UI,
+    lang: "en",
+    t: fakeT,
+  });
+
+  assert.equal(resolved.action, "update");
+  assert.deepEqual(
+    resolved.updates.map(({ raidMeta, statusType, effectiveGates }) => ({
+      raidKey: raidMeta.raidKey,
+      modeKey: raidMeta.modeKey,
+      label: raidMeta.label,
+      raidDisplayName: raidMeta.raidDisplayName,
+      minItemLevel: raidMeta.minItemLevel,
+      useCurrentMode: raidMeta.useCurrentMode,
+      statusType,
+      effectiveGates,
+    })),
+    [
+      { raidKey: "kazeros", modeKey: null, label: "Final", raidDisplayName: "Final", minItemLevel: 0, useCurrentMode: true, statusType: "complete", effectiveGates: [] },
+      { raidKey: "act4", modeKey: null, label: "Act 4", raidDisplayName: undefined, minItemLevel: 0, useCurrentMode: true, statusType: "complete", effectiveGates: [] },
+    ],
+  );
+});
+
+test("raid-channel done with a gate marks the gates up to it and checks the gate", () => {
+  const resolve = (gate) => resolveParsedRaidUpdate({
+    parsed: { raidKeys: ["act4"], modeKey: null, action: "done", charNames: ["Qiylyn"], gate },
+    RAID_REQUIREMENT_MAP,
+    getGatesForRaid,
+    getRaidLabel: () => "Act 4",
+    UI,
+    lang: "en",
+    t: fakeT,
+  });
+
+  const g1 = resolve("G1");
+  assert.equal(g1.action, "update");
+  assert.equal(g1.statusType, "process");
+  assert.deepEqual(g1.effectiveGates, ["G1"]);
+  assert.equal(g1.raidMeta.useCurrentMode, true);
+
+  const g4 = resolve("G4");
+  assert.equal(g4.action, "hint");
+  assert.match(g4.content, /^text-parser\.invalidGate\|en\|/);
+});
+
+test("raid-channel done renders its two parser error hints in every language", () => {
+  const { t: realT } = require("../bot/services/i18n");
+  for (const [error, key] of [
+    ["done-with-difficulty", "text-parser.doneWithDifficulty"],
+    ["done-with-reset", "text-parser.doneWithReset"],
+  ]) {
+    const resolved = resolveParsedRaidUpdate({
+      parsed: { error },
+      RAID_REQUIREMENT_MAP,
+      getGatesForRaid,
+      UI,
+      lang: "en",
+      t: fakeT,
+    });
+    assert.equal(resolved.action, "hint");
+    assert.equal(resolved.content, `${key}|en|{"icon":"[warn]"}`);
+    for (const lang of ["en", "vi", "jp"]) {
+      const text = realT(key, lang, { icon: "[warn]" });
+      assert.ok(text.startsWith("[warn] ") && text.includes("done"), `${lang}: ${text}`);
+    }
+  }
+});

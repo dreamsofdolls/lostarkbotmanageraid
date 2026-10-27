@@ -1752,7 +1752,7 @@ module.exports = {
       missingPermsDescription: "Artist can't monitor <#{channelId}> - missing: **{missing}**. Grant the bot the right permissions on that channel, then rerun `/raid-channel config action:set`.",
       greetingMessage: "Oh, a new home to look after! Hello everyone - from now on, post raid clears in the format shown in the welcome pin above and Artist will update progress automatically. This greeting self-deletes in 2 minutes; the welcome pin stays.",
       successTitle: "Raid Channel Set",
-      successDescription: "Bot will monitor <#{channelId}> and parse clears as `<raid...> <difficulty> <character...> [gate]`, or resets as `<raid...> reset <character...>`.",
+      successDescription: "Bot will monitor <#{channelId}> and parse clears as `<raid...> <difficulty> <character...> [gate]` (or `done` in place of the difficulty to keep each character's mode), or resets as `<raid...> reset <character...>`.",
       examplesField: "Examples",
       examplesValue: "`Act4 Final HM A B` → mark both raids DONE for A and B\n`Act4 Solo Priscilladuk` → mark all Act 4 Solo gates DONE\n`Serca Nor Soulrano G1` → mark G1 as done\n`Act4 rs Clauseduk` → reset all Act 4 gates",
       welcomeField: "Welcome message",
@@ -1896,7 +1896,7 @@ module.exports = {
           "**2️⃣ View progress**: type `/raid-status` any time to see which char cleared which raid this week.",
           "**3️⃣ Update progress**: 2 ways - (a) `/raid-set` for manual edits, or (b) `/raid-auto-manage action:on` to let Artist reconcile public clear logs from lostark.bible in the daily roster cycle that starts at 00:00 VN.",
           "",
-          "**Bonus**: post text like `<raid> <difficulty> <character>` in the raid channel (admin sets via `/raid-channel`) - Artist auto-parses + updates + DMs you a confirmation. Example: `Serca Hard Clauseduk`.",
+          "**Bonus**: post text like `<raid> <difficulty> <character>` in the raid channel (admin sets via `/raid-channel`) - Artist auto-parses + updates + DMs you a confirmation. Example: `Serca Hard Clauseduk`. Type `done` instead of the difficulty (`Serca done Clauseduk`) to record it in the mode the character already has.",
           "",
           "Advanced commands: `/raid-task` (track daily/weekly chores), `/raid-edit-roster` (modify saved roster), `/raid-remove-roster` (delete). Each has its own section in the dropdown below.",
           "",
@@ -2156,7 +2156,8 @@ module.exports = {
           "• `Act4 Solo Priscilladuk` (mark all Act 4 Solo gates done)",
           "• Multi-raid × multi-char: `Act4, Final Hard A, B, C` (every character gets both raids)",
           "• Reset all gates: `Act4 reset A` or `Act4 rs A` (no difficulty/gate; stored mode stays)",
-          "**Aliases**: act4/armoche · kazeros/kaz/final · serca · horizon/cathedral/hc · belgardin/belg · solo (Act4/Kazeros/Serca/Belgardin only) · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3 · reset/rs. Note: `nm` = Normal.",
+          "• Done in the mode each character already has: `Final done A, B` (`done` in place of the difficulty; a gate still works; the mode never changes)",
+          "**Aliases**: act4/armoche · kazeros/kaz/final · serca · horizon/cathedral/hc · belgardin/belg · solo (Act4/Kazeros/Serca/Belgardin only) · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3 · reset/rs · done. Note: `nm` = Normal.",
           "**Auto-cleanup every 30 min** (active outside 03:00-08:00 UTC quiet hours): bot deletes non-pinned + posts a tone-shifting notice based on cleanup volume. Quiet hours 03:00-08:00 UTC: no sweeping, no noise.",
           "**Permissions required**: View Channel, Send Messages, Manage Messages, Read Message History, Embed Links. Missing any of the 5 → action:set rejects.",
           "**Admin-only**: requires `Manage Server` permission.",
@@ -2279,6 +2280,8 @@ module.exports = {
     invalidGate: "{icon} Gate **{gate}** is not valid for **{raidLabel}**. Valid gates: {validGates}. Repost with the correct gate.",
     resetWithDifficulty: "{icon} Reset does not take a difficulty. Use `<raid> reset <character>` or `<raid> rs <character>`.",
     resetWithGate: "{icon} Text reset clears the whole raid, so it cannot include a gate. Use `<raid> reset <character>`.",
+    doneWithDifficulty: "{icon} `done` takes the difficulty's place and keeps each character's own mode. Use `<raid> done <character>`, or `<raid> <difficulty> <character>` to set a mode.",
+    doneWithReset: "{icon} `done` marks a raid cleared and `reset` clears it, so a post takes only one. Use `<raid> done <character>` or `<raid> reset <character>`.",
     noRoster: "{icon} You don't have a roster yet. Run `/raid-add-roster` first, then come back and post your clear.",
     spamWarn: {
       variants: [
@@ -2369,6 +2372,7 @@ module.exports = {
       "`Serca Nor Soulrano G2` → records **G1 + G2** (a later gate counts the earlier ones)",
       "`Act4, Final HM A, B` → both raids DONE for both characters",
       "`Act4 reset Priscilladuk` → clear every gate; keep the stored difficulty",
+      "`Final done A` → DONE in the mode A already has",
     ],
     aliasesName: "🏷️ Aliases Artist accepts (case-insensitive)",
     aliasesValue: [
@@ -2377,7 +2381,7 @@ module.exports = {
       "**Horizon level**: `level1` / `l1` · `level2` / `l2` · `level3` / `l3`",
       "**Gate**: `G1`, `G2` - use only when you want to mark a single gate",
       "**Reset**: `reset` / `rs` - whole raid only; do not add a difficulty or gate",
-      "**Order**: raid(s) before difficulty/reset · space, `+`, or `,` all work",
+      "**Order**: raid(s) before difficulty/done/reset · space, `+`, or `,` all work",
     ],
     notesName: "⚠️ A few notes from Artist",
     notesValue: [

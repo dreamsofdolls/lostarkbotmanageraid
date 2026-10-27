@@ -23,6 +23,7 @@ const {
   toCharacterLookupKey,
   uniqueNames,
 } = require("./channel-monitor-characters");
+const { resolveResultRaidMeta } = require("./channel-monitor-parse-validation");
 
 const RECEIPT_TEXT_LIMIT = 200;
 
@@ -66,7 +67,7 @@ function collectReceiptOutcomes(resultGroups) {
       const key = toCharacterLookupKey(result.displayName || result.charName);
       const raids = byCharacter.get(key) || new Map();
       if (!raids.has(group.raidMeta.raidKey) || outcome === "updated") {
-        raids.set(group.raidMeta.raidKey, { raidMeta: group.raidMeta, outcome });
+        raids.set(group.raidMeta.raidKey, { raidMeta: resolveResultRaidMeta(group, result), outcome });
       }
       byCharacter.set(key, raids);
     }

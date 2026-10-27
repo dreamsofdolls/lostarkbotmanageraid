@@ -7,6 +7,7 @@ const {
   toCharacterLookupKey,
   uniqueNames,
 } = require("./channel-monitor-characters");
+const { resolveResultRaidMeta } = require("./channel-monitor-parse-validation");
 
 // Discord refuses a channel message longer than this.
 const MESSAGE_LIMIT = 2000;
@@ -69,7 +70,8 @@ function labelsByCharacter(resultGroups, predicate) {
       const name = result.displayName || result.charName;
       const key = toCharacterLookupKey(name);
       const entry = byKey.get(key) || { name, labels: [] };
-      if (!entry.labels.includes(group.raidMeta.label)) entry.labels.push(group.raidMeta.label);
+      const { label } = resolveResultRaidMeta(group, result);
+      if (!entry.labels.includes(label)) entry.labels.push(label);
       byKey.set(key, entry);
     }
   }
@@ -113,9 +115,10 @@ function buildRaidChannelErrorHint({ resultGroups, accounts, authorLang, UI, t =
       const name = r.displayName || r.charName;
       const key = toCharacterLookupKey(name);
       const entry = ineligible.get(key) || { name, itemLevel: r.ineligibleItemLevel, raids: [] };
+      const raidMeta = resolveResultRaidMeta(group, r);
       const raid = t("text-parser.errorIneligibleRaid", authorLang, {
-        raidLabel: group.raidMeta.label,
-        minItemLevel: group.raidMeta.minItemLevel,
+        raidLabel: raidMeta.label,
+        minItemLevel: raidMeta.minItemLevel,
       });
       if (!entry.raids.includes(raid)) entry.raids.push(raid);
       ineligible.set(key, entry);

@@ -27,6 +27,10 @@ const PARSE_ERROR_HINTS = {
     t("text-parser.resetWithDifficulty", lang, { icon: UI.icons.warn }),
   "reset-with-gate": ({ UI, lang, t }) =>
     t("text-parser.resetWithGate", lang, { icon: UI.icons.warn }),
+  "done-with-difficulty": ({ UI, lang, t }) =>
+    t("text-parser.doneWithDifficulty", lang, { icon: UI.icons.warn }),
+  "done-with-reset": ({ UI, lang, t }) =>
+    t("text-parser.doneWithReset", lang, { icon: UI.icons.warn }),
 };
 
 function resolveRaidLevelResetMeta({ raidKey, RAID_REQUIREMENT_MAP, getRaidLabel }) {
@@ -49,6 +53,14 @@ function resolveRaidLevelResetMeta({ raidKey, RAID_REQUIREMENT_MAP, getRaidLabel
   };
 }
 
+function resolveDoneRaidMeta({ raidKey, raidDisplayName, RAID_REQUIREMENT_MAP, getRaidLabel }) {
+  const raidMeta = resolveRaidLevelResetMeta({ raidKey, RAID_REQUIREMENT_MAP, getRaidLabel });
+  if (!raidMeta) return null;
+  // `done` carries no mode: applyRaidSet resolves each character's own mode
+  // (useCurrentMode), and the reply relabels that mode with raidDisplayName.
+  return { ...raidMeta, modeKey: null, useCurrentMode: true, raidDisplayName };
+}
+
 function expandRaidChannelEffectiveGates({ gate, raidMeta, getGatesForRaid }) {
   if (!gate) return [];
   const allGates = getGatesForRaid(raidMeta.raidKey);
@@ -69,6 +81,18 @@ function applyParsedRaidDisplayName(raidMeta, displayName) {
       ? label.replace(/^kazeros/i, displayName)
       : [displayName, fallbackModeLabel].filter(Boolean).join(" "),
   };
+}
+
+/**
+ * The raid meta one character's result belongs under. A `done` write reports
+ * the mode it found for that character, named as the post typed the raid.
+ * @param {{raidMeta: object}} group - one raid of the post
+ * @param {object} result - one character's write result
+ * @returns {object} raid meta with raidKey, modeKey, label and minItemLevel
+ */
+function resolveResultRaidMeta(group, result) {
+  if (!result?.resolvedRaidMeta) return group.raidMeta;
+  return applyParsedRaidDisplayName(result.resolvedRaidMeta, group.raidMeta.raidDisplayName);
 }
 
 function resolveParsedRaidUpdate({
@@ -142,7 +166,14 @@ function resolveParsedRaidUpdate({
   const updates = [];
   const invalidRaidKeys = [];
   for (const raidKey of raidKeys) {
-    const raidMeta = RAID_REQUIREMENT_MAP[`${raidKey}_${modeKey}`];
+    const raidMeta = action === "done"
+      ? resolveDoneRaidMeta({
+          raidKey,
+          raidDisplayName: raidDisplayNames[raidKey],
+          RAID_REQUIREMENT_MAP,
+          getRaidLabel,
+        })
+      : RAID_REQUIREMENT_MAP[`${raidKey}_${modeKey}`];
     if (!raidMeta) {
       invalidRaidKeys.push(raidKey);
       continue;
@@ -158,7 +189,7 @@ function resolveParsedRaidUpdate({
         .map((raidKey) => t("text-parser.invalidCombo", lang, {
           icon: UI.icons.warn,
           raidKey,
-          modeKey,
+          modeKey: modeKey || action,
         }))
         .join("\n"),
     };
@@ -204,4 +235,5 @@ function resolveParsedRaidUpdate({
 
 module.exports = {
   resolveParsedRaidUpdate,
+  resolveResultRaidMeta,
 };

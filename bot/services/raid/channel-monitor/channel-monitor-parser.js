@@ -42,9 +42,12 @@ const DIFFICULTY_ALIASES = buildModeAliasMap(
   JP_MODE_ALIASES
 );
 
+// `done` takes the mode's place and marks the raid done in the mode each
+// character already has, so it never carries a difficulty of its own.
 const ACTION_ALIASES = new Map([
   ["reset", "reset"],
   ["rs", "reset"],
+  ["done", "done"],
 ]);
 
 const GATE_TOKEN_RE = /^g([1-9])$/;
@@ -103,6 +106,9 @@ function parseRaidMessage(content) {
   }
 
   if (invalidRaids.length > 0 || raidSet.size === 0) {
+    // `done` is common in chat ("all done thanks"); with no raid named before
+    // it, the post is chat, not a clear with a mistyped raid.
+    if (raidSet.size === 0 && ACTION_ALIASES.get(tokens[directiveIndex]) === "done") return null;
     return {
       error: "invalid-raid",
       raids: [...new Set(invalidRaids.length > 0
@@ -139,10 +145,14 @@ function parseRaidMessage(content) {
   if (diffSet.size > 1) return { error: "multi-difficulty", difficulties: [...diffSet] };
   if (gateSet.size > 1) return { error: "multi-gate", gates: [...gateSet] };
 
+  if (actionSet.size > 1) return { error: "done-with-reset" };
+
   const action = [...actionSet][0] || null;
   if (action === "reset") {
     if (diffSet.size > 0) return { error: "reset-with-difficulty" };
     if (gateSet.size > 0) return { error: "reset-with-gate" };
+  } else if (action === "done") {
+    if (diffSet.size > 0) return { error: "done-with-difficulty" };
   } else if (diffSet.size === 0) {
     return null;
   }

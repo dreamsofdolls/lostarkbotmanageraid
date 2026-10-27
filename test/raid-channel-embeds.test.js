@@ -317,3 +317,26 @@ test("raid-channel welcome embed renders the configured onboarding field set", (
     /rosters wearing.*👑/i
   );
 });
+
+test("a done post's rows use the mode the writer found for each character", () => {
+  // `done` posts the raid without a mode; the writer reports each character's.
+  const FINAL_DONE = { ...RAIDS.kazeros_normal, modeKey: null, label: "Final", raidDisplayName: "Final", minItemLevel: 0, useCurrentMode: true };
+  const found = (result, meta) => ({
+    ...result,
+    resolvedRaidMeta: { raidKey: meta.raidKey, modeKey: meta.modeKey, label: meta.label, minItemLevel: meta.minItemLevel },
+  });
+  const bori = found({ charName: "bori", displayName: "Bori", matched: true, updated: false, ineligibleItemLevel: 1725 }, RAIDS.kazeros_hard);
+  const embed = receipt({
+    text: "final done Qiaoli, Bori",
+    resultGroups: [group(FINAL_DONE, [found(written("Qiaoli"), RAIDS.kazeros_normal), bori])],
+    accounts: [account("Main", [
+      character("Qiaoli", "Aeromancer", 1742, {}),
+      character("Bori", "Bard", 1725, {}),
+    ])],
+    afterWrite: false,
+  });
+  const card = (name) => cardsOf(embed).find((field) => field.name.includes(name)).value;
+
+  assert.equal(card("Qiaoli"), `${UI.icons.done} Kazeros Normal`);
+  assert.equal(card("Bori"), `${UI.icons.warn} Kazeros Hard · _cần 1730+_`);
+});

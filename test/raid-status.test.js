@@ -73,6 +73,7 @@ const {
   computeRaidGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
+  getStatusRaidModeKey,
   isCountedRaidProgress,
   ensureAssignedRaids,
 } = require("../bot/utils/raid/common/character");
@@ -1129,6 +1130,19 @@ test("buildRaidDropdownState: counts pending Solo raids without adding them to m
     row.toJSON().components[0].options[0].label,
     "Raids (Còn 1 raid · 1 solo)",
   );
+});
+
+test("getStatusRaidModeKey: the mode the /raid-status card shows for a raid", () => {
+  assert.equal(getStatusRaidModeKey(ensureAssignedRaids({ itemLevel: 1730 }).kazeros, "kazeros"), "hard");
+  assert.equal(
+    getStatusRaidModeKey({ modeKey: "solo", G1: { difficulty: "Solo" }, G2: { difficulty: "Solo" } }, "armoche"),
+    "solo",
+  );
+  assert.equal(getStatusRaidModeKey({ G1: { difficulty: "Normal" } }, "kazeros"), "normal");
+  const character = { itemLevel: 1730, assignedRaids: { serca: { modeKey: "normal" } } };
+  for (const raid of getStatusRaidsForCharacter(character)) {
+    assert.equal(raid.modeKey, getStatusRaidModeKey(ensureAssignedRaids(character)[raid.raidKey], raid.raidKey));
+  }
 });
 
 test("buildRaidDropdownState: a Solo raid without a gold slot is counted nowhere", () => {

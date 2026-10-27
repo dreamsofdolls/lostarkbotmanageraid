@@ -11,6 +11,7 @@ const {
   isModeAllowedForCompanionScope,
   resolveRequiredCompanionScope,
 } = require("../../../services/local-sync/core/scope");
+const { getStatusRaidModeKey } = require("../../../utils/raid/common/character");
 const { findAccountByName } = require("../../../utils/user-doc");
 const { isCurrentWeekCompletion } = require("../../../utils/raid/schedule/reset-windows");
 
@@ -26,6 +27,7 @@ function createRaidSetApplyService({
   getGatesForRaid,
   toModeLabel,
   findCharacterInUser,
+  RAID_REQUIREMENT_MAP = {},
 }) {
   function makeRaidSetResult(raidMeta) {
     return {
@@ -166,6 +168,30 @@ function createRaidSetApplyService({
     return null;
   }
 
+  // The raid channel's `done` names no mode. Resolving the character's own
+  // mode here, inside the same load and save, means the write below never
+  // sees a mode change, so `done` can neither switch a mode nor wipe progress.
+  function resolveCurrentModeMeta(result, character, raidMeta) {
+    const { raidKey } = raidMeta;
+    const modeKey = getStatusRaidModeKey(ensureAssignedRaids(character)[raidKey], raidKey);
+    const resolved = RAID_REQUIREMENT_MAP[`${raidKey}_${modeKey}`];
+    if (!resolved) return null;
+    // Recorded before the item-level check so a refusal can name the floor.
+    result.resolvedRaidMeta = {
+      raidKey,
+      modeKey: resolved.modeKey,
+      label: resolved.label,
+      minItemLevel: resolved.minItemLevel,
+    };
+    const itemLevel = Number(character.itemLevel) || 0;
+    if (itemLevel < resolved.minItemLevel) {
+      result.ineligibleItemLevel = itemLevel;
+      return null;
+    }
+    result.selectedDifficulty = toModeLabel(resolved.modeKey);
+    return resolved;
+  }
+
   function prepareRaidMutation(character, {
     raidMeta,
     statusType,
@@ -287,7 +313,6 @@ function createRaidSetApplyService({
   }, now = Date.now()) {
     const result = makeRaidSetResult(raidMeta);
     const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
-    const selectedDifficulty = result.selectedDifficulty;
 
     const scope = resolveCompanionWriteScope(result, userDoc, {
       requiredCompanionScope,
@@ -305,9 +330,14 @@ function createRaidSetApplyService({
       raidMeta,
     });
     if (!character) return result;
+    const writeMeta = raidMeta?.useCurrentMode
+      ? resolveCurrentModeMeta(result, character, raidMeta)
+      : raidMeta;
+    if (!writeMeta) return result;
+    const selectedDifficulty = result.selectedDifficulty;
 
     const mutation = prepareRaidMutation(character, {
-      raidMeta,
+      raidMeta: writeMeta,
       statusType,
       selectedDifficulty,
       currentWeekStartMs,
@@ -323,7 +353,7 @@ function createRaidSetApplyService({
     if (rejectSoloProgressConflict(result, scope.companionScope, mutation.modeChange)) {
       return result;
     }
-    applyModeTransition(result, mutation, raidMeta, selectedDifficulty);
+    applyModeTransition(result, mutation, writeMeta, selectedDifficulty);
     const gateKeys = gateList.length > 0 ? gateList : getGateKeys(mutation.raidData);
     if (rejectAlreadyAppliedState(
       result,
@@ -337,7 +367,7 @@ function createRaidSetApplyService({
       result,
       mutation,
       character,
-      raidMeta,
+      raidMeta: writeMeta,
       gateKeys,
       selectedDifficulty,
       now,

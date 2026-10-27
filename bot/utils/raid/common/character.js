@@ -183,6 +183,18 @@ function applyCharacterGoldCap(raids) {
   });
 }
 
+/**
+ * The mode /raid-status shows for one assigned raid: its stored mode, else the
+ * difficulty its gates carry. The raid channel's `done` marks this same mode.
+ * @param {object} assignedRaid - one entry of ensureAssignedRaids(character)
+ * @param {string} raidKey - catalog raid key
+ * @returns {string} mode key
+ */
+function getStatusRaidModeKey(assignedRaid, raidKey) {
+  return getAssignedRaidModeKey(assignedRaid, raidKey)
+    || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");
+}
+
 function getStatusRaidsForCharacter(character) {
   const itemLevel = Number(character?.itemLevel) || 0;
   const assignedRaids = ensureAssignedRaids(character);
@@ -190,8 +202,7 @@ function getStatusRaidsForCharacter(character) {
 
   for (const raidKey of RAID_ORDER) {
     const assignedRaid = assignedRaids[raidKey];
-    const modeKey = getAssignedRaidModeKey(assignedRaid, raidKey)
-      || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");
+    const modeKey = getStatusRaidModeKey(assignedRaid, raidKey);
     const completedGateKeys = getCompletedGateKeys(assignedRaid);
 
     const rawGateKeys = getGateKeys(assignedRaid);
@@ -473,6 +484,7 @@ module.exports = {
   toPlainAssignedRaid,
   buildCharacterRecord,
   getStatusRaidsForCharacter,
+  getStatusRaidModeKey,
   isGoldReceivingRaid,
   isCountedRaidProgress,
   getRaidFilterModeKey,

@@ -218,3 +218,41 @@ test("an error hint past Discord's limit drops whole lines and keeps the note", 
   assert.ok(lines.at(-2).endsWith("Serca Hard (cần 1730+)…"));
   assert.equal(lines.at(-1), "_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_");
 });
+
+// `done` posts a raid without a mode; the writer reports the mode it found for
+// each character in resolvedRaidMeta, with the catalog label.
+const FINAL_DONE = { raidKey: "kazeros", modeKey: null, label: "Final", raidDisplayName: "Final", minItemLevel: 0, useCurrentMode: true };
+const inMode = (result, modeKey, minItemLevel) => ({
+  ...result,
+  resolvedRaidMeta: { raidKey: "kazeros", modeKey, label: `Kazeros ${modeKey[0].toUpperCase()}${modeKey.slice(1)}`, minItemLevel },
+});
+
+test("a done post names each character's raid in the mode the writer found, as typed", (t) => {
+  withClassIcons(t);
+  const content = buildRaidChannelDmFallbackText({
+    resultGroups: [group(FINAL_DONE, [inMode(written("Qiaoli"), "hard", 1730), inMode(written("Bori"), "normal", 1710)])],
+    accounts: ACCOUNTS,
+    authorLang: "vi",
+    UI,
+    userId: "user-1",
+  });
+
+  assert.equal(content, `${UI.icons.done} <@user-1> đã ghi <:aero:1> **Qiaoli** · Final Hard; <:bard:2> **Bori** · Final Normal. ${DM_OFF}`);
+});
+
+test("a done post names the found mode's item-level floor, and the bare raid when the write failed first", (t) => {
+  withClassIcons(t);
+  const low = inMode({ charName: "bori", displayName: "Bori", matched: true, updated: false, ineligibleItemLevel: 1725 }, "hard", 1730);
+  const failed = { charName: "qiaoli", error: "Write conflict", matched: false, updated: false };
+  const content = buildRaidChannelErrorHint({
+    resultGroups: [group(FINAL_DONE, [failed, low])],
+    accounts: ACCOUNTS,
+    authorLang: "vi",
+    UI,
+  });
+
+  assert.deepEqual(content.split("\n").slice(0, 2), [
+    `${UI.icons.warn} Chưa đủ iLvl: <:bard:2> **Bori** (iLvl 1725) · Final Hard (cần 1730+)`,
+    `${UI.icons.warn} Lỗi hệ thống khi update: <:aero:1> **Qiaoli** · Final`,
+  ]);
+});

@@ -6,6 +6,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-10-27
 
+### Added
+- The raid channel takes `done` in place of the difficulty: `final done Qiaoli` marks Kazeros done in the mode Qiaoli already has, so a mistyped difficulty can no longer switch a character's mode and wipe its progress. One post can name several characters in different modes; each is recorded in its own (a raid with no stored mode uses the one `/raid-status` shows), and the replies name each mode (`Final Hard`, `Final Normal` in the channel; the DM receipt names raids as `/raid-status` does). A gate still works (`final done Qiaoli G1`); `done` beside a difficulty or `reset` gets a hint instead. A post with `done` but no raid name before it (`all done thanks`) is read as chat and left alone.
+
 ### Fixed
 - `/raid-status` no longer counts a Solo raid that takes no gold slot this week (`🔒`). The raid dropdown counted it while the card and the roster dropdown hid it under that raid's filter, so an option such as `Act 4 Solo (10 pending)` could open on a single character. The raid still shows on its character card with the lock, like a gold-locked group raid. An uncleared Act 4 Solo on a 1750+ character is the usual case, since Belgardin takes its gold slot.
 

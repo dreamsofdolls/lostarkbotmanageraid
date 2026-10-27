@@ -1775,7 +1775,7 @@ module.exports = {
       missingPermsDescription: "Artist không monitor được <#{channelId}> vì thiếu: **{missing}**. Grant cho bot ở channel đó rồi chạy lại `/raid-channel config action:set` nha.",
       greetingMessage: "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
       successTitle: "Raid Channel Set",
-      successDescription: "Bot sẽ monitor <#{channelId}> và parse clear dạng `<raid...> <difficulty> <character...> [gate]`, hoặc reset dạng `<raid...> reset <character...>`.",
+      successDescription: "Bot sẽ monitor <#{channelId}> và parse clear dạng `<raid...> <difficulty> <character...> [gate]` (hoặc `done` thay difficulty để giữ mode của từng character), hoặc reset dạng `<raid...> reset <character...>`.",
       examplesField: "Examples",
       examplesValue: "`Act4 Final HM A B` → DONE cả 2 raid cho A và B\n`Act4 Solo Priscilladuk` → mark toàn bộ Act 4 Solo DONE\n`Serca Nor Soulrano G1` → mark G1 done\n`Act4 rs Clauseduk` → reset mọi gate Act 4",
       welcomeField: "Welcome message",
@@ -1919,7 +1919,7 @@ module.exports = {
           "**2️⃣ Xem progress**: gõ `/raid-status` bất cứ lúc nào để xem char nào đã clear raid gì tuần này.",
           "**3️⃣ Update tiến độ**: 2 cách - (a) gõ `/raid-set` chỉnh tay, hoặc (b) gõ `/raid-auto-manage action:on` để Artist đối chiếu clear log public từ lostark.bible trong chu kỳ roster hằng ngày bắt đầu lúc 00:00 VN.",
           "",
-          "**Bonus**: post text dạng `<raid> <difficulty> <character>` vào channel raid (admin set qua `/raid-channel`) - Artist tự đọc + update + DM xác nhận. Ví dụ: `Serca Hard Clauseduk`.",
+          "**Bonus**: post text dạng `<raid> <difficulty> <character>` vào channel raid (admin set qua `/raid-channel`) - Artist tự đọc + update + DM xác nhận. Ví dụ: `Serca Hard Clauseduk`. Gõ `done` thay difficulty (`Serca done Clauseduk`) thì Artist ghi đúng mode character đang có.",
           "",
           "Lệnh nâng cao: `/raid-task` (track chore daily/weekly), `/raid-edit-roster` (sửa roster đã có), `/raid-remove-roster` (xoá). Mỗi lệnh có section riêng ở dropdown phía dưới~",
           "",
@@ -2179,7 +2179,8 @@ module.exports = {
           "• `Act4 Solo Priscilladuk` (mark toàn bộ Act 4 Solo done)",
           "• Multi-raid × multi-char: `Act4, Final Hard A, B, C` (mỗi char nhận cả 2 raid)",
           "• Reset mọi gate: `Act4 reset A` hoặc `Act4 rs A` (không thêm difficulty/gate; giữ nguyên mode)",
-          "**Aliases**: act4/armoche · kazeros/kaz/final · serca · horizon/cathedral/hc · belgardin/belg · solo (chỉ Act4/Kazeros/Serca/Belgardin) · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3 · reset/rs. Lưu ý `nm` = Normal.",
+          "• Done theo mode từng char đang có: `Final done A, B` (`done` đứng thay difficulty; vẫn thêm gate được; không bao giờ đổi mode)",
+          "**Aliases**: act4/armoche · kazeros/kaz/final · serca · horizon/cathedral/hc · belgardin/belg · solo (chỉ Act4/Kazeros/Serca/Belgardin) · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3 · reset/rs · done. Lưu ý `nm` = Normal.",
           "**Auto-cleanup mỗi 30 phút** (giờ VN, từ 8h-3h sáng): bot xoá non-pinned + post biển báo tone đổi theo lượng rác. Quiet hours 3h-8h sáng VN: không dọn, không ồn.",
           "**Permissions cần**: View Channel, Send Messages, Manage Messages, Read Message History, Embed Links. Thiếu 1 trong 5 → action:set reject.",
           "**Admin-only**: cần permission `Manage Server`.",
@@ -2309,6 +2310,8 @@ module.exports = {
     invalidGate: "{icon} Gate **{gate}** không có cho **{raidLabel}**. Gates hợp lệ: {validGates}. Post lại với gate đúng nha.",
     resetWithDifficulty: "{icon} Reset không cần difficulty. Dùng `<raid> reset <character>` hoặc `<raid> rs <character>` nhé.",
     resetWithGate: "{icon} Reset bằng text sẽ xóa toàn bộ raid nên không nhận gate. Dùng `<raid> reset <character>` nhé.",
+    doneWithDifficulty: "{icon} `done` đứng thay difficulty và giữ nguyên mode của từng character. Dùng `<raid> done <character>`, hoặc `<raid> <difficulty> <character>` nếu muốn đổi mode nhé.",
+    doneWithReset: "{icon} `done` là đánh dấu clear, còn `reset` là xóa progress, nên mỗi post chỉ dùng một cái thôi. Dùng `<raid> done <character>` hoặc `<raid> reset <character>` nhé.",
     noRoster: "{icon} Cậu chưa có roster. Dùng `/raid-add-roster` trước rồi quay lại post clear nha.",
     spamWarn: {
       variants: [
@@ -2399,6 +2402,7 @@ module.exports = {
       "`Serca Nor Soulrano G2` → ghi **G1 + G2** (gate sau tự tính luôn gate trước)",
       "`Act4, Final HM Priscilladuk, Nailaduk` → DONE cả 2 raid cho cả 2 character",
       "`Act4 reset Priscilladuk` → xóa mọi gate, giữ difficulty đang lưu",
+      "`Final done A` → DONE theo mode A đang có",
     ],
     aliasesName: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
     aliasesValue: [
@@ -2407,7 +2411,7 @@ module.exports = {
       "**Horizon level**: `level1` / `l1` · `level2` / `l2` · `level3` / `l3`",
       "**Gate**: `G1`, `G2` - chỉ dùng khi muốn đánh dấu đúng 1 gate",
       "**Reset**: `reset` / `rs` - chỉ reset toàn raid, không thêm difficulty hay gate",
-      "**Thứ tự**: raid(s) trước difficulty/reset · space, `+`, hay `,` đều dùng được",
+      "**Thứ tự**: raid(s) trước difficulty/done/reset · space, `+`, hay `,` đều dùng được",
     ],
     notesName: "⚠️ Vài chuyện Artist muốn nhắc nhỏ",
     notesValue: [

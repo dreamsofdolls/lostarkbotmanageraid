@@ -166,3 +166,38 @@ test("raid-channel parser supports multi-raid reset", () => {
     gate: null,
   });
 });
+
+test("raid-channel parser reads done in the mode's place without a mode", () => {
+  assert.deepEqual(parseRaidMessage("final done Qiaoli"), {
+    raidKey: "kazeros",
+    raidDisplayNames: { kazeros: "Final" },
+    modeKey: null,
+    action: "done",
+    charNames: ["qiaoli"],
+    gate: null,
+  });
+  assert.deepEqual(parseRaidMessage("act4 final done A B"), {
+    raidKeys: ["armoche", "kazeros"],
+    raidDisplayNames: { kazeros: "Final" },
+    modeKey: null,
+    action: "done",
+    charNames: ["a", "b"],
+    gate: null,
+  });
+  assert.equal(parseRaidMessage("serca done Name G1").gate, "G1");
+});
+
+test("raid-channel parser refuses done with a mode or with reset", () => {
+  assert.deepEqual(parseRaidMessage("final hard done Qiaoli"), { error: "done-with-difficulty" });
+  assert.deepEqual(parseRaidMessage("final done rs Qiaoli"), { error: "done-with-reset" });
+});
+
+test("raid-channel parser reads done with no raid before it as chat", () => {
+  assert.equal(parseRaidMessage("i am done"), null);
+  assert.equal(parseRaidMessage("all done thanks"), null);
+  assert.equal(parseRaidMessage("<@123> all done thanks"), null);
+  // A post that names a raid is still read as a clear, so a stray word gets the hint.
+  assert.deepEqual(parseRaidMessage("serca is done now"), { error: "invalid-raid", raids: ["is"] });
+  // Difficulty words keep their hint.
+  assert.deepEqual(parseRaidMessage("i am hard stuck"), { error: "invalid-raid", raids: ["i", "am"] });
+});

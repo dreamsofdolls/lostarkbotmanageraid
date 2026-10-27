@@ -233,6 +233,7 @@ Kazeros Hard Soulrano G1             → mark G1 only (cumulative: G_N also mark
 Act4 Solo Priscilladuk                → mark all Act 4 Solo gates done
 Act4 Hard Priscilladuk, Nailaduk     → multi-char in one post
 Act4 reset Priscilladuk               → reset all Act 4 gates while preserving its stored mode
+Kazeros done Priscilladuk             → mark Kazeros done in the mode the character already has
 ```
 
 Aliases (case-insensitive):
@@ -243,6 +244,7 @@ Aliases (case-insensitive):
 | Difficulty | `solo` (Act 4/Kazeros/Serca/Belgardin only) · `normal` / `nor` / `nm` / `level 1` / `l1` · `hard` / `hm` / `level 2` / `l2` · `nightmare` / `9m` / `level 3` / `l3` |
 | Gate | `G1`, `G2`, ... (validated per raid) |
 | Reset | `reset` / `rs` (whole raid; no difficulty or gate) |
+| Done | `done` in place of the difficulty: each character's raid is marked in the mode it already has (a raid with no stored mode uses the one `/raid-status` shows), so the mode never changes; a gate still works; no difficulty or `reset` beside it |
 | Separator | space, `+`, or `,` |
 
 Note: `nm` is Normal (not Nightmare). Nightmare only accepts the full word or `9m`. Horizon uses Level 1/2/3 and does not support Solo.

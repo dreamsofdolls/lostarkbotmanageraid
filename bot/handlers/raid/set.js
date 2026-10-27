@@ -91,6 +91,7 @@ function createRaidSetCommand(deps) {
     getGatesForRaid,
     toModeLabel,
     findCharacterInUser,
+    RAID_REQUIREMENT_MAP,
   });
 
   const { handleRaidSetAutocomplete } = createRaidSetAutocompleteService({
@@ -195,7 +196,9 @@ function createRaidSetCommand(deps) {
    *   is not the owner; checked against the roster's registeredBy and edit shares
    * @param {string} params.characterName
    * @param {string|null} [params.rosterName=null]
-   * @param {object} params.raidMeta - raid requirement entry (raid, mode, minItemLevel)
+   * @param {object} params.raidMeta - raid requirement entry (raid, mode, minItemLevel);
+   *   with `useCurrentMode` set, only the raid counts and the write uses the
+   *   mode the character already has (the raid channel's `done`)
    * @param {string} [params.statusType="process"] - "complete" and "process"
    *   mark the gates done; any other value resets them
    * @param {string[]} params.effectiveGates - gates to write; empty means every
@@ -213,7 +216,9 @@ function createRaidSetCommand(deps) {
    *   document was saved, otherwise a flag says why (`noRoster`,
    *   `outsideCurrentWeek`, `authLost`, `syncDisabled`, `scopeNotAllowed`,
    *   `progressConflict`, `progressProtected`, `alreadyComplete`,
-   *   `alreadyReset`, or `matched` false / `ineligibleItemLevel` for the character)
+   *   `alreadyReset`, or `matched` false / `ineligibleItemLevel` for the character);
+   *   a `useCurrentMode` write also carries `resolvedRaidMeta` (raidKey, modeKey,
+   *   label, minItemLevel) once the character's mode is known
    */
   async function applyRaidSetForDiscordId({
     discordId,

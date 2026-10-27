@@ -1753,7 +1753,7 @@ module.exports = {
       missingPermsDescription: "アーティストは <#{channelId}> を監視できませんわ - 不足: **{missing}**。そのチャンネルでボットに権限を付与してから `/raid-channel config action:set` を再実行してね♪",
       greetingMessage: "あら、新しい場所に招かれましたのね～♪ みなさんこんにちは、これからは上のウェルカムピンの形式でレイドクリアを投稿してくれれば、アーティストが進捗を自動更新しますわ。この案内は2分後に消えますが、ウェルカムは残りますわよ♪",
       successTitle: "レイドチャンネルの設定完了ですわ♪",
-      successDescription: "ボットが <#{channelId}> を監視し、クリアは `<raid...> <difficulty> <character...> [gate]`、リセットは `<raid...> reset <character...>` として読み取りますわ。",
+      successDescription: "ボットが <#{channelId}> を監視し、クリアは `<raid...> <difficulty> <character...> [gate]` (難易度の代わりに `done` なら各キャラの今のモードのまま)、リセットは `<raid...> reset <character...>` として読み取りますわ。",
       examplesField: "例",
       examplesValue: "`Act4 Final HM A B` → A と B の両レイドを完了\n`Act4 Solo Priscilladuk` → アクト4 Solo の全ゲートを完了\n`セルカ ノーマル Soulrano G1` → G1 を完了\n`Act4 rs Clauseduk` → アクト4の全ゲートをリセット",
       welcomeField: "ウェルカムメッセージ",
@@ -1897,7 +1897,7 @@ module.exports = {
           "**2️⃣ 進捗を確認**: `/raid-status` でどのキャラが今週どのレイドをクリアしたか見られますわ～",
           "**3️⃣ 進捗を更新**: 2通りありますわ - (a) `/raid-set` で手動更新、または (b) `/raid-auto-manage action:on` で毎日 00:00 VN に始まるロスター周期から lostark.bible の公開クリアログを照合しますの♪",
           "",
-          "**おまけ**: レイドチャンネル (管理者が `/raid-channel` で設定) に `<レイド> <難易度> <キャラ>` 形式のメッセージを投稿すると、アーティストが自動で読んで更新して、DM で確認まで送りますわ～♪ 例: `セルカ ハード Clauseduk`",
+          "**おまけ**: レイドチャンネル (管理者が `/raid-channel` で設定) に `<レイド> <難易度> <キャラ>` 形式のメッセージを投稿すると、アーティストが自動で読んで更新して、DM で確認まで送りますわ～♪ 例: `セルカ ハード Clauseduk`。難易度の代わりに `done` (例: `Serca done Clauseduk`) と書けば、キャラの今のモードのまま記録しますの♪",
           "",
           "上級コマンド: `/raid-task` (毎日/毎週のタスク追跡)、`/raid-edit-roster` (登録済ロスターの編集)、`/raid-remove-roster` (削除)。各コマンドの詳細は下のドロップダウンで見られますわ～",
           "",
@@ -2157,7 +2157,8 @@ module.exports = {
           "• `Act4 Solo Priscilladuk` (アクト4 Solo の全ゲートを完了にマーク)",
           "• 複数レイド × 複数キャラ: `アクト4, Final ハード A, B, C` (全キャラに両レイド)",
           "• 全ゲートをリセット: `Act4 reset A` または `Act4 rs A` (難易度/ゲートなし、モード維持)",
-          "**エイリアス**: アクト4/act4/armoche · カゼロス/kazeros/kaz/final · セルカ/serca · horizon/cathedral/hc · belgardin/belg · ソロ/solo · ノーマル/normal/nor/nm/level1/l1 · ハード/hard/hm/level2/l2 · ナイトメア/nightmare/9m/level3/l3 · reset/rs。`nm` = Normal ですわ。",
+          "• 各キャラの今のモードのまま完了: `Final done A, B` (難易度の代わりに `done`、ゲートも付けられ、モードは変わりませんの)",
+          "**エイリアス**: アクト4/act4/armoche · カゼロス/kazeros/kaz/final · セルカ/serca · horizon/cathedral/hc · belgardin/belg · ソロ/solo · ノーマル/normal/nor/nm/level1/l1 · ハード/hard/hm/level2/l2 · ナイトメア/nightmare/9m/level3/l3 · reset/rs · done。`nm` = Normal ですわ。",
           "**自動クリーンアップ 30 分ごと** (JST 朝3時 - 朝8時の静音時間帯以外): ボットがピン留め以外を削除 + ゴミの量に応じてトーンが変わる通知を投稿ですわ。静音時間帯 JST 朝3時 - 朝8時: 掃除なし、騒音なし。",
           "**必要な権限**: View Channel、Send Messages、Manage Messages、Read Message History、Embed Links。5 つのうち 1 つでも欠けたら → action:set はお断りしますわ。",
           "**管理者限定**: `サーバー管理` 権限が必要ですわ。",
@@ -2280,6 +2281,8 @@ module.exports = {
     invalidGate: "{icon} **{raidLabel}** にゲート **{gate}** はありませんわ。有効なゲート: {validGates}。正しいゲートで投稿し直してね♪",
     resetWithDifficulty: "{icon} リセットに難易度は要りませんの。`<raid> reset <character>` または `<raid> rs <character>` を使ってね♪",
     resetWithGate: "{icon} テキストのリセットはレイド全体を消すため、ゲートは指定できませんの。`<raid> reset <character>` を使ってね♪",
+    doneWithDifficulty: "{icon} `done` は難易度の代わりで、各キャラのモードはそのままですの。`<raid> done <character>` か、モードを変えるなら `<raid> <difficulty> <character>` を使ってね♪",
+    doneWithReset: "{icon} `done` はクリア記録、`reset` は進行の消去なので、一つの投稿ではどちらか一方だけですの。`<raid> done <character>` か `<raid> reset <character>` を使ってね♪",
     noRoster: "{icon} まだロスターがありませんわ。先に `/raid-add-roster` を実行してからクリアを投稿してくださいませ♪",
     spamWarn: {
       variants: [
@@ -2370,6 +2373,7 @@ module.exports = {
       "`セルカ ノーマル Soulrano G2` → セルカ ノーマル の **G1 + G2** をマーク (累積 - G2 まで進めば G1 も済んだ扱い)",
       "`Act4, Final HM Priscilladuk, Nailaduk` → 両キャラの両レイドを DONE",
       "`Act4 reset Priscilladuk` → アクト4の全ゲートを消し、保存済みの難易度はそのまま維持",
+      "`Final done A` → A の今のモードのままDONE",
     ],
     aliasesName: "🏷️ アーティストが受け付けるエイリアス (大文字小文字区別なし)",
     aliasesValue: [
@@ -2378,7 +2382,7 @@ module.exports = {
       "**Horizon level**: `level1` / `l1` · `level2` / `l2` · `level3` / `l3`",
       "**Gate**: `G1`, `G2` - 1ゲートだけマークしたい時に使ってね♪",
       "**Reset**: `reset` / `rs` - レイド全体のみ。難易度やゲートは付けませんの",
-      "**順番**: レイドを difficulty/reset より前へ · スペース、`+`、`,` すべて OK",
+      "**順番**: レイドを difficulty/done/reset より前へ · スペース、`+`、`,` すべて OK",
     ],
     notesName: "⚠️ アーティストからのちょっとしたお知らせ",
     notesValue: [

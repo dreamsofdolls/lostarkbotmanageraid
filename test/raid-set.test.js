@@ -37,6 +37,12 @@ const {
   clearCharacterProgress,
   ensureFreshWeek,
 } = require("../bot/services/raid/schedulers/weekly-reset");
+const {
+  createRaidChannelMessageHandler,
+} = require("../bot/services/raid/channel-monitor/channel-monitor-message-handler");
+const { parseRaidMessage } = require("../bot/services/raid/channel-monitor/channel-monitor-parser");
+const { getRaidLabel } = require("../bot/utils/raid/common/labels");
+const { tPick } = require("../bot/services/i18n");
 const User = require("../bot/models/user");
 
 function makeUserModel() {
@@ -1729,4 +1735,186 @@ test("normalizeAssignedRaid: empty stored difficulty falls back to best-eligible
   const result = normalizeAssignedRaid({}, "Hard", "armoche");
   assert.equal(result.G1.difficulty, "Hard");
   assert.equal(result.G2.difficulty, "Hard");
+});
+
+// The raid channel's `done` names no mode: the writer finishes the mode the
+// character already has.
+const KAZEROS_DONE = Object.freeze({
+  raidKey: "kazeros",
+  modeKey: null,
+  label: "Kazeros",
+  minItemLevel: 0,
+  useCurrentMode: true,
+});
+
+function applyDone(factory) {
+  return factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: KAZEROS_DONE,
+    statusType: "complete",
+    effectiveGates: [],
+  });
+}
+
+test("applyRaidSetForDiscordId: useCurrentMode finishes the stored mode without switching it", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano", 1730, {
+    kazeros: {
+      modeKey: "normal",
+      G1: { difficulty: "Normal", completedDate: Date.now() },
+      G2: { difficulty: "Normal", completedDate: null },
+    },
+  })] }]);
+
+  const result = await applyDone(factory);
+
+  assert.equal(result.updated, true);
+  assert.equal(result.modeResetCount, 0);
+  assert.deepEqual(result.resolvedRaidMeta, {
+    raidKey: "kazeros",
+    modeKey: "normal",
+    label: KAZEROS_NORMAL.label,
+    minItemLevel: KAZEROS_NORMAL.minItemLevel,
+  });
+  const kaz = getStoredRaid(docs, "kazeros");
+  assert.equal(kaz.modeKey, "normal");
+  assert.equal(kaz.G1.difficulty, "Normal");
+  assert.equal(kaz.G2.difficulty, "Normal");
+  assert.ok(Number(kaz.G1.completedDate) > 0);
+  assert.ok(Number(kaz.G2.completedDate) > 0);
+});
+
+test("applyRaidSetForDiscordId: useCurrentMode on an untouched raid uses the mode the card shows", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] }]);
+
+  const result = await applyDone(factory);
+
+  assert.equal(result.updated, true);
+  assert.equal(result.resolvedRaidMeta.modeKey, "hard");
+  assert.equal(getStoredRaid(docs, "kazeros").modeKey, "hard");
+  assert.equal(getStoredRaid(docs, "kazeros").G2.difficulty, "Hard");
+});
+
+test("applyRaidSetForDiscordId: useCurrentMode on a finished raid reports it already complete", async () => {
+  const { factory, docs } = makeFactory();
+  const doneAt = Date.now();
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano", 1730, {
+    kazeros: {
+      modeKey: "hard",
+      G1: { difficulty: "Hard", completedDate: doneAt },
+      G2: { difficulty: "Hard", completedDate: doneAt },
+    },
+  })] }]);
+
+  const result = await applyDone(factory);
+
+  assert.equal(result.alreadyComplete, true);
+  assert.equal(result.updated, false);
+  assert.equal(getStoredRaid(docs, "kazeros").G2.completedDate, doneAt);
+});
+
+test("applyRaidSetForDiscordId: useCurrentMode refuses a character below its mode's item level", async () => {
+  const { factory, docs } = makeFactory();
+  const itemLevel = KAZEROS_NORMAL.minItemLevel - 5;
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano", itemLevel, {
+    kazeros: { modeKey: "normal" },
+  })] }]);
+
+  const result = await applyDone(factory);
+
+  assert.equal(result.updated, false);
+  assert.equal(result.ineligibleItemLevel, itemLevel);
+  assert.equal(result.resolvedRaidMeta?.minItemLevel, KAZEROS_NORMAL.minItemLevel, "the reply names the floor it missed");
+  assert.equal(getStoredRaid(docs, "kazeros").modeKey, "normal");
+});
+
+test("raid channel: `final done` finishes each character in the mode it already has", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [{ accountName: "Alpha", characters: [
+    makeChar("Cyrano", 1735, { kazeros: {
+      modeKey: "hard",
+      G1: { difficulty: "Hard", completedDate: null },
+      G2: { difficulty: "Hard", completedDate: null },
+    } }),
+    makeChar("Lyra", 1735, { kazeros: {
+      modeKey: "normal",
+      G1: { difficulty: "Normal", completedDate: Date.now() },
+      G2: { difficulty: "Normal", completedDate: null },
+    } }),
+  ] }]);
+  const rendered = [];
+  const channelPosts = [];
+  const { handleRaidChannelMessage } = createRaidChannelMessageHandler({
+    GuildConfig: {
+      findOne: () => ({
+        select: () => ({
+          lean: async () => ({ announcements: { whisperAck: { enabled: false } } }),
+        }),
+      }),
+    },
+    RAID_REQUIREMENT_MAP,
+    UI,
+    applyRaidSetBatchForDiscordId: factory.applyRaidSetBatchForDiscordId,
+    applyRaidSetForDiscordId: factory.applyRaidSetForDiscordId,
+    buildRaidChannelReceiptEmbed: (args) => {
+      rendered.push(args);
+      return { data: { title: "receipt" } };
+    },
+    checkUserMonitorCooldown: () => ({ accepted: true }),
+    clearPendingHint: async () => {},
+    commitUserMonitorActivity: () => {},
+    getAccessibleAccounts: async () => docs.get("user-1").accounts.map((account) => ({
+      ownerDiscordId: "user-1",
+      accountName: account.accountName,
+      isOwn: true,
+      accessLevel: "edit",
+      account,
+    })),
+    getAnnouncementsConfig: () => ({ whisperAck: { enabled: false } }),
+    getCachedMonitorChannelId: () => "channel-1",
+    getGatesForRaid,
+    getRaidLabel,
+    getUserLanguage: async () => "vi",
+    hintKey: () => "hint-key",
+    parseRaidMessage,
+    postEmptyContentWarning: async () => {},
+    postPersistentHint: async (message, content) => channelPosts.push(content),
+    postSpamWarning: async () => {},
+    t: tPick,
+    UserModel: {},
+  });
+
+  await handleRaidChannelMessage({
+    id: "message-1",
+    guildId: "guild-1",
+    channelId: "channel-1",
+    guild: { name: "Raid Guild" },
+    content: "final done Cyrano Lyra",
+    author: {
+      id: "user-1",
+      bot: false,
+      send: async () => {
+        throw new Error("DMs disabled");
+      },
+    },
+    channel: {
+      send: async (payload) => {
+        channelPosts.push(payload.content);
+        return { delete: async () => {} };
+      },
+    },
+    delete: async () => {},
+  });
+
+  const cyrano = getStoredRaid(docs, "kazeros", 0);
+  const lyra = getStoredRaid(docs, "kazeros", 1);
+  assert.deepEqual([cyrano.modeKey, cyrano.G1.difficulty, cyrano.G2.difficulty], ["hard", "Hard", "Hard"]);
+  assert.deepEqual([lyra.modeKey, lyra.G1.difficulty, lyra.G2.difficulty], ["normal", "Normal", "Normal"]);
+  assert.ok(Number(cyrano.G2.completedDate) > 0 && Number(lyra.G2.completedDate) > 0);
+  assert.equal(rendered.length, 1);
+  assert.equal(channelPosts.length, 1, channelPosts.join("\n"));
+  assert.match(channelPosts[0], /\*\*Cyrano\*\* · Final Hard; .*\*\*Lyra\*\* · Final Normal\./);
 });
