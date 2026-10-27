@@ -158,6 +158,13 @@ async function applyRaidChannelWritePlans({
  * @param {object} [options.logger=console] - logger dependency
  * @returns {Promise<Array<object>>} updates paired with ordered result arrays
  */
+// A `done` write carries no mode until the writer resolves the character's
+// own; before that the log says `current`.
+function formatRaidLogKey(raidMeta, result = null) {
+  const modeKey = result?.resolvedRaidMeta?.modeKey || raidMeta.modeKey || "current";
+  return `${raidMeta.raidKey}_${modeKey}`;
+}
+
 async function applyRaidChannelUpdatePlans({
   plans,
   updates,
@@ -191,14 +198,14 @@ async function applyRaidChannelUpdatePlans({
     };
     if (operation.executorId) {
       logger.log?.(
-        `[raid-channel] share-write executor=${operation.executorId} owner=${operation.discordId} char=${operation.charName} raid=${operation.raidMeta.raidKey}_${operation.raidMeta.modeKey}`,
+        `[raid-channel] share-write executor=${operation.executorId} owner=${operation.discordId} char=${operation.charName} raid=${formatRaidLogKey(operation.raidMeta, result)}`,
       );
     }
   };
 
   const assignError = (operation, err) => {
     logger.error?.(
-      `[raid-channel] write for "${operation.charName}" (${operation.raidMeta.raidKey}_${operation.raidMeta.modeKey}) failed:`,
+      `[raid-channel] write for "${operation.charName}" (${formatRaidLogKey(operation.raidMeta)}) failed:`,
       err?.message || err,
     );
     resultsByUpdate[operation.updateIndex][operation.charIndex] = {

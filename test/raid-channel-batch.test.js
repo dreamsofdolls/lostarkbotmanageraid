@@ -301,3 +301,30 @@ test("buildWritePlanSegments only batches consecutive matching targets", () => {
     [["A1"], ["B1"], ["A2"]],
   );
 });
+
+test("raid-channel write logs name the mode a done write found, or `current` before it is known", async () => {
+  const logs = [];
+  const logger = { warn() {}, log: (line) => logs.push(line), error: (line) => logs.push(line) };
+  const doneMeta = { raidKey: "kazeros", modeKey: null, label: "Final", minItemLevel: 0, useCurrentMode: true };
+  await applyRaidChannelUpdatePlans({
+    plans: [
+      { index: 0, charName: "Shared", discordId: "owner-1", executorId: "viewer-1", rosterName: "OwnerRoster" },
+      { index: 1, charName: "Broken", discordId: "viewer-1", executorId: null, rosterName: null },
+    ],
+    updates: [{ raidMeta: doneMeta, statusType: "complete", effectiveGates: [] }],
+    applyRaidSetForDiscordId: async ({ characterName }) => {
+      if (characterName === "Broken") throw new Error("save failed");
+      return {
+        matched: true,
+        updated: true,
+        resolvedRaidMeta: { raidKey: "kazeros", modeKey: "hard", label: "Kazeros Hard", minItemLevel: 1730 },
+      };
+    },
+    logger,
+  });
+
+  assert.deepEqual([...logs].sort(), [
+    "[raid-channel] share-write executor=viewer-1 owner=owner-1 char=Shared raid=kazeros_hard",
+    "[raid-channel] write for \"Broken\" (kazeros_current) failed:",
+  ].sort());
+});
