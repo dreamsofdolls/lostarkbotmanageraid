@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-10-27
+
+### Fixed
+- `/raid-status` no longer counts a Solo raid that takes no gold slot this week (`🔒`). The raid dropdown counted it while the card and the roster dropdown hid it under that raid's filter, so an option such as `Act 4 Solo (10 pending)` could open on a single character. The raid still shows on its character card with the lock, like a gold-locked group raid. An uncleared Act 4 Solo on a 1750+ character is the usual case, since Belgardin takes its gold slot.
+
 ## 2026-10-22
 
 ### Changed

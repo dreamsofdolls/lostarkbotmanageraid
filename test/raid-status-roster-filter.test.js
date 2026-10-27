@@ -5,9 +5,11 @@ const assert = require("node:assert/strict");
 
 const {
   FILTER_ALL_ROSTERS,
+  buildRaidDropdownState,
   buildStatusRosterFilterEntries,
   buildStatusRosterFilterRow,
 } = require("../bot/handlers/raid-status/raid-filter");
+const { getStatusRaidsForCharacter } = require("../bot/utils/raid/common/character");
 const {
   createRaidStatusComponentLayout,
 } = require("../bot/handlers/raid-status/components/component-layout");
@@ -136,6 +138,50 @@ test("raid-status roster entries separate display eligibility from progress coun
       displayMatches,
     })),
     [{ pageIndex: 0, pending: 0, soloPending: 1, displayMatches: 1 }]
+  );
+});
+
+test("raid-status roster entries leave a gold-locked Solo raid out of the solo count", () => {
+  const accounts = [
+    account("Alpha", [
+      { raidKey: "armoche", modeKey: "solo", isCompleted: false, goldReceives: true },
+      { raidKey: "kazeros", modeKey: "solo", isCompleted: false, goldReceives: false },
+    ]),
+  ];
+
+  assert.deepEqual(
+    buildStatusRosterFilterEntries({ accounts, getRaidsFor: (character) => character.raids })
+      .map(({ soloPending }) => soloPending),
+    [1]
+  );
+});
+
+test("raid-status Solo dropdown count equals the rosters it lists when a 1750 Act 4 Solo loses its gold slot", () => {
+  const soloAct4 = () => ({
+    modeKey: "solo",
+    G1: { difficulty: "Solo", completedDate: null },
+    G2: { difficulty: "Solo", completedDate: null },
+  });
+  const low = { name: "Lowalt", class: "Berserker", itemLevel: 1710, assignedRaids: { armoche: soloAct4() } };
+  const high = { name: "Highalt", class: "Bard", itemLevel: 1750, assignedRaids: { armoche: soloAct4() } };
+  const accounts = [
+    { accountName: "Vencone", characters: [low] },
+    { accountName: "Main", characters: [high] },
+  ];
+  const getRaidsFor = (character) => getStatusRaidsForCharacter(character);
+  assert.equal(
+    getRaidsFor(high).find((raid) => raid.raidKey === "armoche").goldReceives,
+    false,
+    "precondition: the 1750 character's Act 4 Solo holds no gold slot"
+  );
+
+  const dropdown = buildRaidDropdownState(accounts, getRaidsFor).raidDropdownEntries
+    .find((entry) => entry.key === "armoche:solo");
+  const rosterEntries = buildStatusRosterFilterEntries({ accounts, raidFilter: "armoche:solo", getRaidsFor });
+
+  assert.deepEqual(
+    { dropdown: dropdown.pending, rosters: rosterEntries.map(({ accountName, soloPending }) => [accountName, soloPending]) },
+    { dropdown: 1, rosters: [["Vencone", 1]] }
   );
 });
 

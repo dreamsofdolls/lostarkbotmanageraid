@@ -1131,6 +1131,39 @@ test("buildRaidDropdownState: counts pending Solo raids without adding them to m
   );
 });
 
+test("buildRaidDropdownState: a Solo raid without a gold slot is counted nowhere", () => {
+  const accounts = [{ characters: [
+    {
+      class: "Berserker",
+      raids: [
+        { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: true },
+      ],
+    },
+    {
+      class: "Bard",
+      raids: [
+        { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: false },
+        { raidKey: "kazeros", modeKey: "solo", raidName: "Kazeros Solo", isCompleted: true, goldReceives: false },
+      ],
+    },
+  ] }];
+  const getRaidsFor = (character) => character.raids;
+  const { raidDropdownEntries, totalSoloPending } = buildRaidDropdownState(accounts, getRaidsFor);
+
+  assert.deepEqual(
+    {
+      entries: raidDropdownEntries.map((raid) => ({ key: raid.key, pending: raid.pending, supports: raid.supports })),
+      totalSoloPending,
+      soloProgress: summarizeSoloRaidProgress(accounts, getRaidsFor),
+    },
+    {
+      entries: [{ key: "armoche:solo", pending: 1, supports: 0 }],
+      totalSoloPending: 1,
+      soloProgress: { completed: 0, total: 1 },
+    },
+  );
+});
+
 test("buildRaidDropdownState: groups a deferred Normal -> Solo switch under Solo only", () => {
   const accounts = [{
     characters: [

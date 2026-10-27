@@ -28,6 +28,13 @@ function getRaidFilterKey(raid) {
   return `${raid?.raidKey}:${getRaidFilterModeKey(raid)}`;
 }
 
+// A Solo raid without a gold slot this week keeps its lock on the card but is
+// counted nowhere, like a gold-locked group raid. The raid filter hides it, so
+// counting it would make the dropdowns promise rows the card never shows.
+function isCountedSoloRaid(raid) {
+  return isSoloModeKey(getRaidFilterModeKey(raid)) && isGoldReceivingRaid(raid);
+}
+
 /**
  * Summarize raids currently presented as Solo across the visible accounts.
  * Solo is detail-only and intentionally excluded from the main progress
@@ -41,7 +48,7 @@ function summarizeSoloRaidProgress(accounts, getRaidsFor) {
     for (const character of account.characters || []) {
       const raids = getRaidsFor(character) || [];
       for (const raid of raids) {
-        if (!isSoloModeKey(getRaidFilterModeKey(raid))) continue;
+        if (!isCountedSoloRaid(raid)) continue;
         total += 1;
         if (raid?.isCompleted === true) completed += 1;
       }
@@ -58,12 +65,13 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
         const modeKey = getRaidFilterModeKey(raid);
-        if (isSoloModeKey(modeKey) && raid?.isCompleted !== true) totalSoloPending += 1;
+        const countedSolo = isCountedSoloRaid(raid);
+        if (countedSolo && raid?.isCompleted !== true) totalSoloPending += 1;
         const countsTowardTotal = isCountedRaidFilterProgress(raid);
         // Solo stays discoverable in the raid dropdown even though the
         // all-raids headline and roster counters intentionally exclude it.
-        // Other non-counted raids retain the existing hidden behavior.
-        if (!countsTowardTotal && !isSoloModeKey(modeKey)) continue;
+        // Gold-locked Solo and other non-counted raids stay hidden.
+        if (!countsTowardTotal && !countedSolo) continue;
         const key = getRaidFilterKey(raid);
         let entry = raidAggregate.get(key);
         if (!entry) {
@@ -184,7 +192,7 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
       }
       displayMatches += 1;
       if (isSoloModeKey(getRaidFilterModeKey(raid))) {
-        if (raid?.isCompleted !== true) soloPending += 1;
+        if (isCountedSoloRaid(raid) && raid?.isCompleted !== true) soloPending += 1;
         continue;
       }
       // Detail-only raids remain renderable when selected, while roster
