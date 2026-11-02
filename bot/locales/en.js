@@ -746,9 +746,9 @@ module.exports = {
       charsPlural: "chars",
     },
     fallback: {
-      noSeed: "No seed available to fetch bible.",
+      noSeed: "No seed available to fetch bible",
       zeroOverlap: "The rosters Bible returned share no character with the saved ones (renamed in game?)",
-      noResults: "Bible returned no results.",
+      noResults: "Bible returned no results",
     },
     picker: {
       title: "✏️ Edit roster · {rosterIcon} {rosterName}",

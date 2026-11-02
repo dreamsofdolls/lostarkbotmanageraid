@@ -747,9 +747,9 @@ module.exports = {
       charsPlural: "キャラ",
     },
     fallback: {
-      noSeed: "Bible 取得用の seed がありませんわ。",
+      noSeed: "Bible 取得用の seed がありませんわ",
       zeroOverlap: "Bible が返したロスターに保存済みキャラが一人もいませんでしたわ (ゲーム内で改名?)",
-      noResults: "Bible から結果が返って来ませんでしたわ。",
+      noResults: "Bible から結果が返って来ませんでしたわ",
     },
     picker: {
       title: "✏️ ロスター編集 · {rosterIcon} {rosterName}",

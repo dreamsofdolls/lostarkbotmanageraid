@@ -217,6 +217,7 @@ function buildDiscordIdentityFields(source) {
 }
 
 const EMBED_DESCRIPTION_MAX_LENGTH = 4096;
+const EMBED_TITLE_MAX_LENGTH = 256;
 
 // Build a richer ephemeral notice embed for user-facing rejection /
 // guidance / "session expired" surfaces. Replaces the plain
@@ -231,11 +232,11 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
   const { color, icon } = NOTICE_STYLE_BY_TYPE[type]
     || NOTICE_STYLE_BY_TYPE.info;
   const embed = new EmbedBuilder().setColor(color);
-  if (title) embed.setTitle(`${icon} ${title}`);
-  // Descriptions can carry raw user input (e.g. a roster name interpolated
-  // into an error notice); clamp to Discord's embed description limit so
-  // setDescription cannot throw and turn the notice into a generic command
-  // failure.
+  // Titles and descriptions can carry raw user input (e.g. a roster name
+  // interpolated into a notice); clamp both to Discord's embed limits so
+  // setTitle/setDescription cannot throw and turn the notice into a generic
+  // command failure.
+  if (title) embed.setTitle(truncateText(`${icon} ${title}`, EMBED_TITLE_MAX_LENGTH));
   if (description) embed.setDescription(truncateText(description, EMBED_DESCRIPTION_MAX_LENGTH));
   return embed;
 }

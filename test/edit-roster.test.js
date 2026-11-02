@@ -796,6 +796,68 @@ test("edit not-found notice shows the question mark", async () => {
   assert.ok(embed.title.endsWith("Không thấy roster · ❓ Perfectwing"), embed.title);
 });
 
+test("Bible warning line reads one stop after each fallback reason", () => {
+  for (const lang of ["vi", "en", "jp"]) {
+    for (const key of ["noSeed", "noResults", "zeroOverlap"]) {
+      const line = t("raid-edit-roster.picker.bibleOffline", lang, {
+        iconWarn: "⚠️",
+        error: t(`raid-edit-roster.fallback.${key}`, lang),
+      });
+      assert.doesNotMatch(line, /\.\.|。。|。\./, `${lang} ${key}: ${line}`);
+    }
+  }
+});
+
+test("edit not-found notice clips a very long roster name instead of failing", async () => {
+  clearUserLanguageCache();
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Perfectwings", characters: [] }],
+  });
+  const edits = [];
+
+  await factory.handleEditRosterCommand({
+    user: { id: "user-1" },
+    options: { getString: () => "x".repeat(300) },
+    deferReply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  assert.equal(edits.length, 1);
+  assert.ok(edits[0].embeds[0].toJSON().title.length <= 256);
+});
+
+test("edit picker counts saved characters past the cap, with their roles", async () => {
+  clearUserLanguageCache();
+  const { factory, docs } = makeFactory({
+    fetchRosterCharacters: async () => { throw new TypeError("fetch failed"); },
+  });
+  // 23 saved characters, 10 of them support: 3 sit past the 20-option cap.
+  const characters = Array.from({ length: 23 }, (_, index) => ({
+    id: `c${index}`,
+    name: `Char${index}`,
+    class: index >= 13 ? "Bard" : "Berserker",
+    itemLevel: 1700,
+    combatScore: String(90000 - index),
+    assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+    tasks: [],
+  }));
+  docs.set("user-1", { discordId: "user-1", accounts: [{ accountName: "Char0", characters }] });
+  const edits = [];
+
+  await factory.handleEditRosterCommand({
+    user: { id: "user-1" },
+    options: { getString: () => "Char0" },
+    deferReply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+  for (const session of factory.__test.sessions.values()) clearTimeout(session.expireTimer);
+
+  const summary = edits[0].embeds[0].toJSON().description.split("\n")[0];
+  assert.equal(summary, "Lưu xong còn **23** char · 🛡️ 10 · ⚔️ 13");
+});
+
 test("persistEditedRoster: throws when user doc disappeared entirely", async () => {
   const { factory } = makeFactory();
   // No user doc seeded at all.

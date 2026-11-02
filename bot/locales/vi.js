@@ -769,9 +769,9 @@ module.exports = {
       charsPlural: "chars",
     },
     fallback: {
-      noSeed: "Không có seed để fetch bible.",
+      noSeed: "Không có seed để fetch bible",
       zeroOverlap: "Roster Bible trả về không có char nào trùng với char đã lưu (đổi tên trong game?)",
-      noResults: "Bible không trả về kết quả nào.",
+      noResults: "Bible không trả về kết quả nào",
     },
     picker: {
       title: "✏️ Sửa roster · {rosterIcon} {rosterName}",

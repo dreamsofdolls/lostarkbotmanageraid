@@ -11,12 +11,12 @@ const {
 const ROSTER_ICON_UNKNOWN = "❓";
 const FIELD_VALUE_LIMIT = 1024;
 // A zero-width space: Discord requires a non-empty field name.
-const CONTINUATION_FIELD_NAME = "​";
+const CONTINUATION_FIELD_NAME = String.fromCharCode(0x200b);
 
 /**
  * The closing card of a roster picker: "expired" (the session timed out) or
  * "cancelled" (the caller pressed Cancel). Its copy lives under
- * `<keyPrefix>.<state>.{title,description,footerText}`.
+ * `<keyPrefix>.<state>.{title,description}`.
  * @param {object} args
  * @param {Function} args.EmbedBuilder
  * @param {object} args.UI - shared color and icon palette
@@ -27,7 +27,6 @@ const CONTINUATION_FIELD_NAME = "​";
  * @param {object} [args.vars] - description variables
  * @param {object} [args.titleVars] - extra title variables, such as the roster icon and name
  * @param {string} [args.url] - link for the title
- * @param {boolean} [args.withFooter=false] - add the footerText line
  * @returns {object} the embed
  */
 function buildPickerClosedEmbed({
@@ -40,7 +39,6 @@ function buildPickerClosedEmbed({
   vars = {},
   titleVars = {},
   url = "",
-  withFooter = false,
 }) {
   const stateIconVars = state === "expired"
     ? { iconWarn: UI.icons.warn }
@@ -50,7 +48,6 @@ function buildPickerClosedEmbed({
     .setDescription(t(`${keyPrefix}.${state}.description`, lang, vars))
     .setColor(UI.colors.muted);
   if (url) embed.setURL(url);
-  if (withFooter) embed.setFooter({ text: t(`${keyPrefix}.${state}.footerText`, lang) });
   return embed;
 }
 

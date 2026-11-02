@@ -59,7 +59,7 @@ test("chunkLinesIntoFields keeps every line whole under the limit", () => {
     assert.equal(field.inline, false);
   }
   assert.equal(fields[0].name, "Character (20)");
-  assert.equal(fields[1].name, "​");
+  assert.equal(fields[1].name, String.fromCharCode(0x200b));
   assert.deepEqual(fields.flatMap((field) => field.value.split("\n")), lines);
 });
 

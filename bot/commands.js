@@ -305,9 +305,8 @@ const {
 } = createAddRosterCommand({
   EmbedBuilder,
   // /raid-add-roster picker = one flip dropdown + Save/Cancel buttons. The
-  // dropdown pre-selects nothing: an earlier dropdown that pre-selected every
-  // pick read as noise once closed, so the closed menu now shows only its
-  // placeholder and the card lists the picks.
+  // dropdown pre-selects nothing, so the closed menu shows only its
+  // placeholder and the card itself lists the picks.
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,

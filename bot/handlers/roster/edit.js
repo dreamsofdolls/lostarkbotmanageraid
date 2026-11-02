@@ -32,6 +32,10 @@ const {
   sessionTitleVars,
 } = require("./edit/edit-render");
 const { ROSTER_ICON_UNKNOWN } = require("./picker/render");
+const {
+  SESSION_TTL_MS,
+  PICKER_MAX_OPTIONS,
+} = require("./picker/constants");
 
 // A roster the user does not have, or one with no characters left, has no
 // class to show, so its notices carry the unknown icon.
@@ -47,10 +51,6 @@ function notFoundNotice(rosterName, lang) {
     description: t("raid-edit-roster.notice.notFoundDescription", lang, vars),
   };
 }
-const {
-  SESSION_TTL_MS,
-  PICKER_MAX_OPTIONS,
-} = require("./picker/constants");
 
 function createEditRosterCommand({
   EmbedBuilder,
