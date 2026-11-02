@@ -276,28 +276,6 @@ async function openAllModeSession({
 
 const lastEditComponents = edits => edits.at(-1).components.flatMap(row => row.toJSON().components);
 
-test("a rejected Discord call in the raid-check collector is logged instead of crashing the bot", async (t) => {
-  const errors = [];
-  t.mock.method(console, "error", (...args) => { errors.push(args); });
-  const { handlers } = await openAllModeSession({
-    userDoc: {
-      discordId: "roster-user", discordDisplayName: "Roster user",
-      accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
-    },
-  });
-  const unknownInteraction = Object.assign(new Error("Unknown interaction"), { code: 10062 });
-
-  // An unhandled rejection here would reach process-lifecycle and exit the bot.
-  await handlers.collect({
-    customId: "raid-check-all-teams:0", user: { id: "ui-manager" }, values: ["event-1"],
-    deferReply: async () => { throw unknownInteraction; },
-  });
-
-  assert.equal(errors.length, 1);
-  assert.equal(errors[0].at(-1), unknownInteraction);
-  await handlers.end();
-});
-
 test("raid-check roster refresh that outlives the session leaves the controls disabled", async () => {
   const userDoc = {
     discordId: "roster-user", discordDisplayName: "Roster user",

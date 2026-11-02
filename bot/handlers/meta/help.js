@@ -29,7 +29,6 @@ const SECTION_ORDER = [
   "raid-gold-earner",
   "raid-auction",
   "raid-log",
-  "raid-schedule-preview",
   "raid-task",
   "raid-set",
   "raid-check",
@@ -74,20 +73,6 @@ const SECTION_META = {
   "raid-log": {
     icon: "📸",
     options: [],
-  },
-  "raid-schedule-preview": {
-    icon: "📅",
-    options: [
-      { name: "create", required: true },
-      { name: "raid", required: true },
-      { name: "mode", required: true },
-      { name: "when", required: true },
-      { name: "skip_notify", required: true },
-      { name: "auto_lock", required: false },
-      { name: "title", required: false },
-      { name: "show", required: false },
-      { name: "action", required: false },
-    ],
   },
   "raid-task": {
     icon: "📝",

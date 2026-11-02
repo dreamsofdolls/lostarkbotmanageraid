@@ -4,11 +4,9 @@ const {
   buildNoticeEmbed,
   deferEphemeralReply,
   editNotice,
-  UI,
 } = require("../../../utils/raid/common/shared");
 // tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
-const { createTeamsViewUi } = require("../views/teams-view");
 const {
   createAllModePendingAggregateCache,
 } = require("./all-mode-aggregate");
@@ -65,22 +63,7 @@ function createAllModeHandler({
   runManualRosterRefresh,
   RAID_CHECK_USER_QUERY_FIELDS,
   RAID_CHECK_PAGINATION_SESSION_MS,
-  RaidEvent,
-  buildScheduleEmbed,
-  buildTurnPlanEmbed,
 }) {
-  const teamsView = createTeamsViewUi({
-    EmbedBuilder,
-    ActionRowBuilder,
-    StringSelectMenuBuilder,
-    UI,
-    RaidEvent,
-    User,
-    buildScheduleEmbed,
-    buildTurnPlanEmbed,
-    truncateText,
-  });
-
   async function handleRaidCheckAllCommand(interaction) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -168,7 +151,6 @@ function createAllModeHandler({
       filteredIndices: [],
       currentLocalPage: 0,
       backgroundRefreshing: refreshQueued > 0,
-      teamsSnapshot: [],
       sessionEnded: false,
     };
 
@@ -292,7 +274,6 @@ function createAllModeHandler({
       computePendingAggregate,
       getRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,
       buildPaginationRow,
-      teamsView,
       state,
       currentAbsoluteIndex,
     });
@@ -331,7 +312,6 @@ function createAllModeHandler({
       interaction,
       pagesData,
       state,
-      teamsView,
       runManualRosterRefresh,
       applyUserFilter,
       recomputeFilteredPages,
@@ -345,9 +325,7 @@ function createAllModeHandler({
       time: RAID_CHECK_PAGINATION_SESSION_MS,
     });
     collector.on("collect", guardCollectorListener("[raid-check all] component", async (component) => {
-      const route = getRaidCheckAllComponentRoute(component.customId, {
-        teamsSelectPrefix: teamsView.TEAMS_SELECT_PREFIX,
-      });
+      const route = getRaidCheckAllComponentRoute(component.customId);
       if (component.user.id !== interaction.user.id) {
         if (route) {
           const deferred = await deferEphemeralReply(component)
@@ -415,23 +393,6 @@ function createAllModeHandler({
           return queueBackgroundRender("roster-refresh-failed");
         });
     }
-
-    const teamsStarted = Date.now();
-    void teamsView
-      .loadActiveEventsForTeams({
-        guildId: interaction.guildId || interaction.guild?.id,
-      })
-      .then((rows) => {
-        state.teamsSnapshot = Array.isArray(rows) ? rows : [];
-        console.log(
-          `[raid-check all] background teams=${state.teamsSnapshot.length} ms=${Date.now() - teamsStarted}`
-        );
-        if (state.teamsSnapshot.length > 0) return queueBackgroundRender("teams");
-        return null;
-      })
-      .catch((err) => {
-        console.warn("[raid-check all] background teams failed:", err?.message || err);
-      });
   }
 
   return { handleRaidCheckAllCommand };

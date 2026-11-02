@@ -31,7 +31,6 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-bg",
   "raid-auction",
   "raid-log",
-  "raid-schedule-preview",
 ]);
 
 /**
@@ -76,7 +75,6 @@ function createRaidInteractionRouter({
       { prefix: "local-sync:roster:", handle: handlers.handleLocalSyncRosterSelect },
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
-      { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },
       // The roster pickers' character dropdown; their Save/Cancel buttons
       // share the same handler through buttonRoutes below.
       { prefix: "add-roster:", handle: handlers.handleAddRosterButton },
@@ -85,7 +83,6 @@ function createRaidInteractionRouter({
     buttonRoutes: [
       { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },
       { prefix: "local-sync:", handle: handlers.handleLocalSyncButton },
-      { prefix: "rse:", handle: handlers.handleRaidScheduleButton },
       { prefix: "raid-check:", handle: handlers.handleRaidCheckButton },
       { prefix: "add-roster:", handle: handlers.handleAddRosterButton },
       { prefix: "edit-roster:", handle: handlers.handleEditRosterButton },

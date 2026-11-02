@@ -9,7 +9,6 @@ const RAID_CHECK_ALL_COMPONENT_ACTION = Object.freeze({
   statusFilter: "statusFilter",
   page: "page",
   rosterRefresh: "rosterRefresh",
-  teamsSelect: "teamsSelect",
 });
 
 const EXACT_COMPONENT_ACTION_BY_ID = new Map([
@@ -29,7 +28,7 @@ const PREFIX_COMPONENT_ROUTES = Object.freeze([
   },
 ]);
 
-function getRaidCheckAllComponentRoute(customId, { teamsSelectPrefix = "" } = {}) {
+function getRaidCheckAllComponentRoute(customId) {
   const id = String(customId || "");
   if (!id) return null;
 
@@ -42,12 +41,7 @@ function getRaidCheckAllComponentRoute(customId, { teamsSelectPrefix = "" } = {}
     };
   }
 
-  const prefixRoute = PREFIX_COMPONENT_ROUTES.find((route) => id.startsWith(route.prefix));
-  const route = prefixRoute || (
-    teamsSelectPrefix && id.startsWith(teamsSelectPrefix)
-      ? { action: RAID_CHECK_ALL_COMPONENT_ACTION.teamsSelect }
-      : null
-  );
+  const route = PREFIX_COMPONENT_ROUTES.find((prefixRoute) => id.startsWith(prefixRoute.prefix));
   if (!route) return null;
 
   const payload = route.payloadKey
@@ -57,7 +51,7 @@ function getRaidCheckAllComponentRoute(customId, { teamsSelectPrefix = "" } = {}
     customId: id,
     action: route.action,
     ...payload,
-    updatesMainMessage: Boolean(prefixRoute),
+    updatesMainMessage: true,
   };
 }
 

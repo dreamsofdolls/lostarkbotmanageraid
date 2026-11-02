@@ -362,7 +362,6 @@ test("raid-status layout paginates the visible roster list and mirrors its selec
     buildRosterRefreshButton: () => null,
     buildRaidFilterRow: makeRow,
     buildStatusRosterFilterRow,
-    buildMyRaidsRow: makeRow,
     getAccounts: () => [
       { accountName: "Alpha" },
       { accountName: "Beta" },
@@ -379,7 +378,6 @@ test("raid-status layout paginates the visible roster list and mirrors its selec
     getFilterRaidId: () => "armoche:hard",
     getRosterFilterEntries: () => entries,
     getSelectedRosterIndex: () => 2,
-    getMyRaidsShaped: () => [],
     getBackgroundRefreshing: () => false,
   });
 

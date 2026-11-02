@@ -4,25 +4,26 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const User = require("../bot/models/user");
-const RaidEvent = require("../bot/models/RaidEvent");
 const {
   startWeeklyResetJob,
 } = require("../bot/services/raid/schedulers/weekly-reset");
 
+// Lets the released tick run to completion: it only awaits stubbed promises.
+async function drainImmediates(rounds = 20) {
+  for (let i = 0; i < rounds; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 test("weekly-reset scheduler skips an interval while the previous tick is running", async () => {
   const originalUserFind = User.find;
-  const originalRaidEventFind = RaidEvent.find;
   const originalSetInterval = global.setInterval;
   const originalWarn = console.warn;
   let intervalFn = null;
   let releaseFirstTick = null;
   let userFindCalls = 0;
-  let markPurgeReached = null;
   const firstTick = new Promise((resolve) => {
     releaseFirstTick = resolve;
-  });
-  const purgeReached = new Promise((resolve) => {
-    markPurgeReached = resolve;
   });
 
   User.find = () => ({
@@ -33,12 +34,6 @@ test("weekly-reset scheduler skips an interval while the previous tick is runnin
       },
     }),
   });
-  RaidEvent.find = () => {
-    markPurgeReached();
-    return {
-      select: () => ({ lean: async () => [] }),
-    };
-  };
   global.setInterval = (fn, ms) => {
     intervalFn = fn;
     return { ms };
@@ -55,13 +50,11 @@ test("weekly-reset scheduler skips an interval while the previous tick is runnin
     assert.equal(userFindCalls, 1);
 
     releaseFirstTick([]);
-    await purgeReached;
-    await new Promise((resolve) => setImmediate(resolve));
+    await drainImmediates();
     await intervalFn();
     assert.equal(userFindCalls, 2);
   } finally {
     User.find = originalUserFind;
-    RaidEvent.find = originalRaidEventFind;
     global.setInterval = originalSetInterval;
     console.warn = originalWarn;
     releaseFirstTick([]);

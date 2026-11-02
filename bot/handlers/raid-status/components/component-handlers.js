@@ -1,6 +1,5 @@
 "use strict";
 
-const RaidEvent = require("../../../models/RaidEvent");
 const {
   FILTER_ALL_RAIDS,
   FILTER_ALL_ROSTERS,
@@ -32,7 +31,6 @@ const {
   editNotice,
   followUpNotice,
   replyNotice,
-  replyEmbed,
 } = require("../../../utils/raid/common/shared");
 const {
   COMPANION_SCOPE,
@@ -522,24 +520,6 @@ function createStatusComponentRouteHandlers(ctx) {
 
       const followupPayload = buildManualSyncFollowupPayload(manualOutcome, lang);
       if (followupPayload) await followUpNotice(component, EmbedBuilder, followupPayload).catch(() => {});
-      return noRedraw();
-    },
-
-    [STATUS_COMPONENT_ACTION.myRaidsSelect]: async (component) => {
-      const eventId = firstSelectValue(component);
-      const ev = eventId ? await RaidEvent.findById(eventId).catch(() => null) : null;
-      if (!ev) {
-        await replyNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.myRaids.notFoundTitle", lang),
-          description: t("raid-status.myRaids.notFoundDescription", lang),
-        }).catch(() => {});
-        return noRedraw();
-      }
-      await replyEmbed(
-        component,
-        ctx.buildMyRaidDetailEmbed(ev, component.user.id, { EmbedBuilder, UI, lang }),
-      ).catch(() => {});
       return noRedraw();
     },
 

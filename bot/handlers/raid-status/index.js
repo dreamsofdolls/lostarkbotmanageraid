@@ -19,13 +19,6 @@ const {
   buildStatusRosterFilterRow,
 } = require("./raid-filter");
 const {
-  findActiveEventsForUser,
-  buildMyRaidsRow,
-  buildMyRaidDetailEmbed,
-} = require("./my-raids");
-const { shapeMyRaidEvents } = require("../../services/raid/schedule/boards/my-raids");
-const RaidEvent = require("../../models/RaidEvent");
-const {
   buildNoticeEmbed,
 } = require("../../utils/raid/common/shared");
 const { t } = require("../../services/i18n");
@@ -367,10 +360,6 @@ function createRaidStatusCommand(deps) {
       isReplyPrivate: () => replyIsPrivate,
     });
 
-    // Local-sync token and personal raid events hydrate after the first render;
-    // their controls appear in this same message when the reads finish.
-    let myRaidsShaped = [];
-
     const { buildComponents } = createRaidStatusComponentLayout({
       ActionRowBuilder,
       StringSelectMenuBuilder,
@@ -392,7 +381,6 @@ function createRaidStatusCommand(deps) {
       buildSoloCompanionButton: syncControls.buildSoloCompanionButton,
       buildRaidFilterRow,
       buildStatusRosterFilterRow,
-      buildMyRaidsRow,
       buildLocalSyncViewRows: buildSyncViewRows,
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
@@ -406,7 +394,6 @@ function createRaidStatusCommand(deps) {
       getFilterRaidId: () => statusState.filterRaidId,
       getRosterFilterEntries: () => statusState.rosterFilterEntries,
       getSelectedRosterIndex: () => statusState.selectedRosterIndex,
-      getMyRaidsShaped: () => myRaidsShaped,
       getBackgroundRefreshing: () => backgroundRefreshing,
     });
 
@@ -467,7 +454,6 @@ function createRaidStatusCommand(deps) {
       formatGold,
       truncateText,
       getAutoManageCooldownMs,
-      buildMyRaidDetailEmbed,
       refreshLocalSyncSnapshot,
       runLocalSyncAction,
       isReplyPrivate: () => replyIsPrivate,
@@ -564,27 +550,19 @@ function createRaidStatusCommand(deps) {
         });
     }
 
-    const extrasStarted = Date.now();
-    const localSyncHydration = statusUserMeta.localSyncEnabled
-      ? syncControls.hydrateLocalSyncResumeUrl(interaction.user)
-      : Promise.resolve();
-    const myRaidsHydration = findActiveEventsForUser({
-      RaidEvent,
-      guildId: interaction.guildId,
-      discordId: interaction.user.id,
-    }).then((events) => {
-      myRaidsShaped = shapeMyRaidEvents(events, interaction.user.id);
-    });
-    void Promise.all([localSyncHydration, myRaidsHydration])
-      .then(() => {
-        console.log(
-          `[raid-status] background extras raids=${myRaidsShaped.length} ms=${Date.now() - extrasStarted}`
-        );
-        return queueBackgroundRender("extras");
-      })
-      .catch((err) => {
-        console.warn("[raid-status] background extras failed:", err?.message || err);
-      });
+    // The Local Sync resume link hydrates after the first render; its controls
+    // appear in this same message when the read finishes.
+    if (statusUserMeta.localSyncEnabled) {
+      const extrasStarted = Date.now();
+      void syncControls.hydrateLocalSyncResumeUrl(interaction.user)
+        .then(() => {
+          console.log(`[raid-status] background extras ms=${Date.now() - extrasStarted}`);
+          return queueBackgroundRender("extras");
+        })
+        .catch((err) => {
+          console.warn("[raid-status] background extras failed:", err?.message || err);
+        });
+    }
   }
 
   return {

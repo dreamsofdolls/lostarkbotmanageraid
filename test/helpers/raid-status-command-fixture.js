@@ -3,7 +3,6 @@
 const discord = require("discord.js");
 const User = require("../../bot/models/user");
 const RosterShare = require("../../bot/models/RosterShare");
-const RaidEvent = require("../../bot/models/RaidEvent");
 const UserBackground = require("../../bot/models/userBackground");
 const common = require("../../bot/utils/raid/common/shared");
 const character = require("../../bot/utils/raid/common/character");
@@ -12,7 +11,6 @@ const character = require("../../bot/utils/raid/common/character");
 function mockStatusSideReads(t) {
   t.mock.method(User, "updateOne", async () => ({ matchedCount: 1 }));
   t.mock.method(RosterShare, "find", () => ({ lean: async () => [] }));
-  t.mock.method(RaidEvent, "find", () => ({ sort() { return this; }, lean: async () => [] }));
   t.mock.method(UserBackground, "findOne", () => ({ select() { return this; }, lean: async () => null }));
 }
 

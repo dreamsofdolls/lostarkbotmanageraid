@@ -102,18 +102,8 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
   );
 });
 
-test("raid-status component routes resolve dynamic my-raids select id", () => {
-  assert.deepEqual(
-    getStatusComponentRoute("status-myraids:select", {
-      myRaidsSelectId: "status-myraids:select",
-    }),
-    {
-      customId: "status-myraids:select",
-      action: STATUS_COMPONENT_ACTION.myRaidsSelect,
-      editDriven: false,
-      redraw: false,
-    },
-  );
+test("raid-status no longer routes the retired my-raids select", () => {
+  assert.equal(STATUS_COMPONENT_ACTION.myRaidsSelect, undefined);
   assert.equal(getStatusComponentRoute("status-myraids:select"), null);
 });
 

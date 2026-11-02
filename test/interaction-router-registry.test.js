@@ -17,9 +17,12 @@ test("interaction router allowlist includes /raid-bg", () => {
   assert.ok(RAID_COMMAND_NAMES.includes("raid-bg"));
 });
 
-test("interaction router allowlist includes /raid-schedule-preview", () => {
-  assert.ok(RAID_COMMAND_NAMES.includes("raid-schedule-preview"));
-  assert.ok(!RAID_COMMAND_NAMES.includes("raid-schedule"));
+test("/raid-schedule-preview is retired: not registered, routed or dispatched", () => {
+  const registeredCommandNames = commands.map((command) => command.toJSON().name);
+
+  assert.ok(!registeredCommandNames.includes("raid-schedule-preview"));
+  assert.ok(!RAID_COMMAND_NAMES.includes("raid-schedule-preview"));
+  assert.ok(!commandsTest.getRaidCommandDispatchNames().includes("raid-schedule-preview"));
 });
 
 test("raid-sync is no longer registered as a standalone slash command", () => {
@@ -46,111 +49,6 @@ test("registered slash commands, router allowlist, and dispatcher stay aligned",
 
   assert.deepEqual(routedCommandNames, registeredCommandNames);
   assert.deepEqual(dispatchedCommandNames, registeredCommandNames);
-});
-
-test("raid-schedule-preview definition derives party size from raid instead of exposing size", () => {
-  const command = commands.find((entry) => entry.toJSON().name === "raid-schedule-preview");
-  assert.ok(command);
-  const json = command.toJSON();
-  const create = json.options.find((option) => option.name === "create");
-  assert.ok(create);
-  const optionNames = create.options.map((option) => option.name);
-  assert.deepEqual(optionNames, [
-    "raid",
-    "mode",
-    "when",
-    "skip_notify",
-    "auto_lock",
-    "title",
-  ]);
-});
-
-test("raid-schedule-preview show exposes an optional action choice (resurface / turnplan)", () => {
-  const command = commands.find((entry) => entry.toJSON().name === "raid-schedule-preview");
-  const json = command.toJSON();
-  const show = json.options.find((option) => option.name === "show");
-  assert.ok(show, "show subcommand exists");
-  const action = (show.options || []).find((option) => option.name === "action");
-  assert.ok(action, "show carries an action option");
-  assert.equal(Boolean(action.required), false, "action is optional (default = resurface)");
-  const values = (action.choices || []).map((choice) => choice.value).sort();
-  assert.deepEqual(values, ["resurface", "turnplan"]);
-});
-
-test("raid-schedule-preview component routes dispatch through rse custom IDs", async () => {
-  let buttonCalls = 0;
-  let selectCalls = 0;
-  const noop = async () => {};
-  const handlers = {
-    handleRaidManagementCommand: noop,
-    handleRaidHelpSelect: noop,
-    handleRaidLanguageSelect: noop,
-    handleRaidSetAutocomplete: noop,
-    handleEditRosterAutocomplete: noop,
-    handleRemoveRosterAutocomplete: noop,
-    handleRaidChannelAutocomplete: noop,
-    handleRaidAutoManageAutocomplete: noop,
-    handleRaidTaskAutocomplete: noop,
-    handleRaidGoldEarnerAutocomplete: noop,
-    handleRaidScheduleButton: async () => { buttonCalls += 1; },
-    handleRaidScheduleSelect: async () => { selectCalls += 1; },
-  };
-  const router = createRaidInteractionRouter({
-    MessageFlags: { Ephemeral: 64 },
-    handlers,
-  });
-
-  await router.handle({
-    isChatInputCommand: () => false,
-    isAutocomplete: () => false,
-    isStringSelectMenu: () => false,
-    isButton: () => true,
-    customId: "rse:join:abcdef123456",
-  });
-  await router.handle({
-    isChatInputCommand: () => false,
-    isAutocomplete: () => false,
-    isStringSelectMenu: () => true,
-    isButton: () => false,
-    customId: "rse:pick:abcdef123456",
-  });
-
-  assert.equal(buttonCalls, 1);
-  assert.equal(selectCalls, 1);
-});
-
-test("raid-schedule-preview routes a User Select (add-member) through rse selects", async () => {
-  let selectCalls = 0;
-  const noop = async () => {};
-  const handlers = {
-    handleRaidManagementCommand: noop,
-    handleRaidHelpSelect: noop,
-    handleRaidLanguageSelect: noop,
-    handleRaidSetAutocomplete: noop,
-    handleEditRosterAutocomplete: noop,
-    handleRemoveRosterAutocomplete: noop,
-    handleRaidChannelAutocomplete: noop,
-    handleRaidAutoManageAutocomplete: noop,
-    handleRaidTaskAutocomplete: noop,
-    handleRaidGoldEarnerAutocomplete: noop,
-    handleRaidScheduleButton: noop,
-    handleRaidScheduleSelect: async () => { selectCalls += 1; },
-  };
-  const router = createRaidInteractionRouter({
-    MessageFlags: { Ephemeral: 64 },
-    handlers,
-  });
-
-  await router.handle({
-    isChatInputCommand: () => false,
-    isAutocomplete: () => false,
-    isStringSelectMenu: () => false,
-    isUserSelectMenu: () => true,
-    isButton: () => false,
-    customId: "rse:adduser:abcdef123456",
-  });
-
-  assert.equal(selectCalls, 1);
 });
 
 test("Local Sync confirmation buttons route globally outside raid-status collectors", async () => {

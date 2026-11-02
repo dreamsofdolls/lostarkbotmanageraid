@@ -6,6 +6,11 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-11-02
 
+### Removed
+- `/raid-schedule-preview` (`create` and `show`) is retired together with its signup boards: the Join/Manage buttons, auto-lock, turn plans and the weekly event purge are gone.
+- `/raid-status` loses the `🗓️ Raid của tôi` dropdown and `/raid-check` loses the `📋` teams dropdown, since both listed signup boards.
+- Help, README and the three locales drop the command. The slash command disappears from Discord after the next `npm run deploy:commands`; buttons on a board already posted stop answering.
+
 ### Changed
 - `/raid-add-roster` picker redesigned: the roster's class icon in the title, a summary line with the 🛡️ support / ⚔️ DPS split, a ✅/⬜ column on the numbered list, and a closing line with the card's close time. One dropdown replaces the per-character toggle buttons: ticking a character flips it between picked and skipped, so the button grid no longer wraps into uneven rows. The source footer is gone.
 - `/raid-edit-roster` picker gets the same look: a ✅ keep / 🆕 add / ➖ remove / ⬜ skip column, "after saving: N chars" with the role split (counting saved characters past the 20 cap that Save keeps), and the flip dropdown. While Bible is unreachable the list no longer marks every saved character 📦.

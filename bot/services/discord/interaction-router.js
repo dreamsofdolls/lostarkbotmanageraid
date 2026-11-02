@@ -191,10 +191,7 @@ function createInteractionRouter({
       return;
     }
 
-    // User Select menus route through the same selectRoutes as
-    // String Select - the add-member flow uses a native user picker. Optional
-    // call so callers/mocks without the method (older tests) stay safe.
-    if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu?.()) {
+    if (interaction.isStringSelectMenu()) {
       // Prefix-match routes, the same shape as buttonRoutes below (the
       // customId can carry dynamic data such as a session ID). First
       // matching prefix wins.

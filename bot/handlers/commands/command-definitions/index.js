@@ -24,7 +24,6 @@ const {
 } = require("./admin");
 const { createRaidTaskCommandDefinition } = require("./task");
 const { createRaidBgCommandDefinition } = require("./background");
-const { createRaidScheduleCommandDefinition } = require("./schedule");
 const { createRaidLogCommandDefinition } = require("./public-log");
 
 function createRaidCommandDefinitions({
@@ -52,7 +51,6 @@ function createRaidCommandDefinitions({
     createRaidBgCommandDefinition(),
     createRaidAuctionCommandDefinition(),
     createRaidLogCommandDefinition(),
-    createRaidScheduleCommandDefinition(),
   ];
 }
 

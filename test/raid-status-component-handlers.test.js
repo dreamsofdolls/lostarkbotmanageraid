@@ -131,7 +131,6 @@ function createHandlerHarness(overrides = {}) {
     formatGold,
     truncateText,
     getAutoManageCooldownMs: () => 0,
-    buildMyRaidDetailEmbed: () => ({}),
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
     isReplyPrivate: overrides.isReplyPrivate || (() => true),
   });

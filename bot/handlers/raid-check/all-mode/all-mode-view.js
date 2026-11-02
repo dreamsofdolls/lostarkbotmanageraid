@@ -23,7 +23,7 @@ const {
  *
  * @param {object} deps Discord builders, i18n helpers and session inputs.
  * @param {object} deps.state Mutable session state (filters, view, page,
- *   background flags, teams snapshot); read at call time, never cached.
+ *   background flags); read at call time, never cached.
  * @param {() => number | null} deps.currentAbsoluteIndex Resolves the page
  *   index currently shown to the user.
  * @returns {{ buildComponents: (disabled: boolean) => Array<object> }} Row
@@ -45,7 +45,6 @@ function createAllModeViewBuilders({
   computePendingAggregate,
   getRaidsForCharacter,
   buildPaginationRow,
-  teamsView,
   state,
   currentAbsoluteIndex,
 }) {
@@ -178,21 +177,12 @@ function createAllModeViewBuilders({
   };
 
   const buildComponents = (disabled) => {
-    const { filterUserId, teamsSnapshot } = state;
     const rows = [buildControlRow(disabled), buildFilterRow(disabled)];
-    if (filterUserId !== null) {
+    if (state.filterUserId !== null) {
       rows.push(buildRosterFilterRow(disabled));
     }
     rows.push(buildRaidFilterRow(disabled));
     rows.push(buildStatusFilterRow(disabled));
-    rows.push(
-      ...teamsView.buildTeamsRows({
-        shapedEvents: teamsSnapshot,
-        maxRows: 5 - rows.length,
-        disabled,
-        lang,
-      })
-    );
     return rows;
   };
 

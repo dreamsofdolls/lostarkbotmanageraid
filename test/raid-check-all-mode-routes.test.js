@@ -45,18 +45,9 @@ test("raid-check all-mode routes pagination and roster refresh", () => {
   });
 });
 
-test("raid-check all-mode routes team selects only when prefix is supplied", () => {
+test("raid-check all-mode no longer routes the retired teams select", () => {
+  assert.equal(RAID_CHECK_ALL_COMPONENT_ACTION.teamsSelect, undefined);
   assert.equal(getRaidCheckAllComponentRoute("raid-check-all-teams:0"), null);
-  assert.deepEqual(
-    getRaidCheckAllComponentRoute("raid-check-all-teams:0", {
-      teamsSelectPrefix: "raid-check-all-teams:",
-    }),
-    {
-      customId: "raid-check-all-teams:0",
-      action: RAID_CHECK_ALL_COMPONENT_ACTION.teamsSelect,
-      updatesMainMessage: false,
-    },
-  );
 });
 
 test("raid-check all-mode routes ignore non-owned component ids", () => {

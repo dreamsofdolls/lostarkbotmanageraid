@@ -82,7 +82,6 @@ test("raid-status hides Solo Companion on shared pages and keeps every Discord r
     buildSoloCompanionButton: controls.buildSoloCompanionButton,
     buildRaidFilterRow: () => null,
     buildStatusRosterFilterRow: () => null,
-    buildMyRaidsRow: () => null,
     getAccounts: () => accounts,
     getCurrentPage: () => 0,
     getCurrentLocalPage: () => 0,
@@ -94,7 +93,6 @@ test("raid-status hides Solo Companion on shared pages and keeps every Discord r
     getFilterRaidId: () => null,
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
-    getMyRaidsShaped: () => [],
     getBackgroundRefreshing: () => false,
   });
 
@@ -204,7 +202,6 @@ test("local-sync mode splits in-Discord actions from the web companion buttons",
     buildSoloCompanionButton: controls.buildSoloCompanionButton,
     buildRaidFilterRow: () => null,
     buildStatusRosterFilterRow: () => new ActionRowBuilder().addComponents(makeButton("status-filter:roster")),
-    buildMyRaidsRow: () => null,
     getAccounts: () => [{ accountName: "Main" }, { accountName: "Alt" }],
     getCurrentPage: () => 0,
     getCurrentLocalPage: () => 0,
@@ -216,7 +213,6 @@ test("local-sync mode splits in-Discord actions from the web companion buttons",
     getFilterRaidId: () => null,
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
-    getMyRaidsShaped: () => [],
     getBackgroundRefreshing: () => false,
   });
 
@@ -293,7 +289,6 @@ test("bible auto-sync mode keeps its single button row", () => {
     buildSoloCompanionButton: controls.buildSoloCompanionButton,
     buildRaidFilterRow: () => null,
     buildStatusRosterFilterRow: () => new ActionRowBuilder().addComponents(makeButton("status-filter:roster")),
-    buildMyRaidsRow: () => null,
     getAccounts: () => [{ accountName: "Main" }, { accountName: "Alt" }],
     getCurrentPage: () => 0,
     getCurrentLocalPage: () => 0,
@@ -305,7 +300,6 @@ test("bible auto-sync mode keeps its single button row", () => {
     getFilterRaidId: () => null,
     getRosterFilterEntries: () => [],
     getSelectedRosterIndex: () => null,
-    getMyRaidsShaped: () => [],
     getBackgroundRefreshing: () => false,
   });
 

@@ -172,7 +172,6 @@ const FAILURE_KEYS = [
   "local-sync-discord.stateDescriptions.failed",
   "local-sync-discord.stateDescriptions.failedLocalOff",
   "local-sync-discord.stateDescriptions.failedBibleOff",
-  "raid-schedule.notice.showpickDeniedDescription",
   "raid-add-roster.expired.description",
   "raid-add-roster.expired.staleSessionDescription",
   "raid-add-roster.persistFail.description",

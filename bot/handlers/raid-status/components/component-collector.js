@@ -10,7 +10,6 @@ const {
 const {
   getNextSharedTaskTransitionMs,
 } = require("../../../utils/raid/tasks/shared-tasks");
-const { MY_RAIDS_SELECT_ID } = require("../my-raids");
 const {
   STATUS_COMPONENT_ACTION,
   getStatusComponentRoute,
@@ -101,9 +100,7 @@ function attachRaidStatusComponentCollector({
   };
 
   async function routeOwnerComponent(component) {
-    const route = getStatusComponentRoute(component.customId || "", {
-      myRaidsSelectId: MY_RAIDS_SELECT_ID,
-    });
+    const route = getStatusComponentRoute(component.customId || "");
     if (!route) return;
 
     if (route.editDriven) {

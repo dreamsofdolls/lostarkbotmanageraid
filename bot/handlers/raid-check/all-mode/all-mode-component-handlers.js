@@ -2,7 +2,7 @@
 
 /**
  * Collector handlers for one /raid-check all-mode session: selector updates,
- * pagination, manual roster refresh and the teams select. All handlers mutate
+ * pagination and manual roster refresh. All handlers mutate
  * the shared mutable `state` and re-render through the supplied builders.
  */
 
@@ -80,7 +80,6 @@ function createAllModeComponentHandlers({
   interaction,
   pagesData,
   state,
-  teamsView,
   runManualRosterRefresh,
   applyUserFilter,
   recomputeFilteredPages,
@@ -192,10 +191,6 @@ function createAllModeComponentHandlers({
           }),
         }).catch(() => {});
       }
-    },
-    [RAID_CHECK_ALL_COMPONENT_ACTION.teamsSelect]: async (component) => {
-      const eventId = firstSelectValue(component);
-      await teamsView.handleRaidCheckTeamsSelect(component, eventId, lang);
     },
   };
 }

@@ -2,14 +2,10 @@ const {
   AttachmentBuilder,
   EmbedBuilder,
   StringSelectMenuBuilder,
-  UserSelectMenuBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   MessageFlags,
   PermissionFlagsBits,
 } = require("discord.js");
@@ -59,9 +55,6 @@ const { createRaidLogCommand } = require("./handlers/raid/log");
 const { createRaidLogCapture } = require("./services/raid-log/capture");
 const { createRaidLogCatalog } = require("./services/raid-log/catalog");
 const { createRecentRaidLogs } = require("./services/raid-log/recent");
-const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
-// Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
-const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/view/board");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
 const { createRaidCommandDefinitions } = require("./handlers/commands/command-definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
@@ -91,10 +84,8 @@ const {
 const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
 const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor/channel-monitor");
 const { createRaidSchedulerService } = require("./services/raid/schedulers/schedulers");
-const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/lifecycle/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
 const { createInFlightLoader } = require("./utils/async/in-flight-loader");
-const RaidEvent = require("./models/RaidEvent");
 
 const bibleLimiter = new BibleRequestLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
@@ -441,8 +432,8 @@ const {
 });
 
 // /raid-set comes before everything that writes raid progress through it:
-// the /raid-status Local Sync view, the Local Sync console, /raid-schedule
-// and the raid channel monitor.
+// the /raid-status Local Sync view, the Local Sync console and the raid
+// channel monitor.
 const {
   handleRaidSetAutocomplete,
   handleRaidSetCommand,
@@ -557,10 +548,6 @@ const {
   raidCheckSyncLimiter,
   discordUserLimiter,
   buildAutoManageSyncReportEmbed,
-  // raid-schedule bridge for the "📋 Đội đã xếp" dropdown (teams-view.js).
-  RaidEvent,
-  buildScheduleEmbed,
-  buildTurnPlanEmbed,
 });
 
 const {
@@ -603,40 +590,6 @@ function applyLocalSyncPreviewJob(jobId, discordId) {
   });
 }
 
-const raidScheduleCommandHandlers = createRaidScheduleCommand({
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  UserSelectMenuBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  MessageFlags,
-  UI,
-  User,
-  GuildConfig,
-  RaidEvent,
-  isManagerId,
-  applyRaidSetBatchForDiscordId,
-});
-const {
-  handleRaidScheduleCommand,
-  handleRaidScheduleButton,
-  handleRaidScheduleSelect,
-} = raidScheduleCommandHandlers;
-
-const { startRaidScheduleAutoLockScheduler } = createRaidScheduleAutoLockService({
-  RaidEvent,
-  GuildConfig,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  UI,
-  boardPayload: raidScheduleCommandHandlers.boardPayload,
-});
 
 // Normalizes a guild's announcement settings. The channel monitor, the
 // schedulers and /raid-announce and /raid-channel all read it.
@@ -918,7 +871,6 @@ const RAID_COMMAND_HANDLERS = Object.freeze({
   "raid-task": handleRaidTaskCommand,
   "raid-auction": handleRaidAuctionCommand,
   "raid-log": handleRaidLogCommand,
-  "raid-schedule-preview": handleRaidScheduleCommand,
 });
 
 function getRaidCommandDispatchNames() {
@@ -946,8 +898,6 @@ module.exports = {
   handleRaidAutoManageAutocomplete,
   handleRaidTaskAutocomplete,
   handleRaidTaskButton,
-  handleRaidScheduleButton,
-  handleRaidScheduleSelect,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   handleAddRosterButton,
@@ -965,7 +915,6 @@ module.exports = {
   startMaintenanceScheduler,
   startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
-  startRaidScheduleAutoLockScheduler,
   parseRaidMessage,
   handleStuckNudgeButton,
   __test: {

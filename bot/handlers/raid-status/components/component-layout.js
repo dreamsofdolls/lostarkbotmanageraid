@@ -21,7 +21,6 @@ function createRaidStatusComponentLayout({
   buildSoloCompanionButton,
   buildRaidFilterRow,
   buildStatusRosterFilterRow,
-  buildMyRaidsRow,
   buildLocalSyncViewRows,
   getAccounts,
   getCurrentPage,
@@ -35,7 +34,6 @@ function createRaidStatusComponentLayout({
   getFilterRaidId,
   getRosterFilterEntries,
   getSelectedRosterIndex,
-  getMyRaidsShaped,
   getBackgroundRefreshing,
 }) {
   const getRowComponentCount = (row) => {
@@ -228,19 +226,6 @@ function createRaidStatusComponentLayout({
     }));
   };
 
-  const addMyRaidsRow = (rows, disabled) => {
-    const shapedEvents = getMyRaidsShaped();
-    if (shapedEvents.length === 0 || rows.length >= 5) return;
-    rows.push(buildMyRaidsRow({
-      ActionRowBuilder,
-      StringSelectMenuBuilder,
-      truncateText,
-      shapedEvents,
-      disabled,
-      lang,
-    }));
-  };
-
   const specializedViewRowsByName = new Map([
     ["task", addTaskViewRows],
     ["gold", addGoldViewRows],
@@ -280,7 +265,6 @@ function createRaidStatusComponentLayout({
     rows.push(buildViewToggleRow(disabled));
     addRosterFilterRow(rows, disabled);
     addRaidFilterRow(rows, disabled);
-    addMyRaidsRow(rows, disabled);
     return rows;
   };
 

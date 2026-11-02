@@ -35,7 +35,6 @@ const {
   startMaintenanceScheduler,
   startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
-  startRaidScheduleAutoLockScheduler,
 } = raidCommands;
 const User = require("./bot/models/user");
 const GuildConfig = require("./bot/models/guildConfig");
@@ -187,9 +186,6 @@ async function startBot() {
     // of AUTO_MANAGE_DAILY_DISABLED so player-tracked chores do not remain
     // completed beyond their scheduled reset when Bible sync is off.
     startSideTaskResetScheduler();
-    // /raid-schedule auto-lock. Per-event autoLockAtStart controls whether
-    // a board locks when its startAt has passed.
-    startRaidScheduleAutoLockScheduler(readyClient);
   }
 
   client.once(Events.ClientReady, (readyClient) => {

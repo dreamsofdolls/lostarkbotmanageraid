@@ -8,7 +8,6 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   soloCompanion: "soloCompanion",
   rosterRefresh: "rosterRefresh",
   sync: "sync",
-  myRaidsSelect: "myRaidsSelect",
   raidFilter: "raidFilter",
   rosterFilter: "rosterFilter",
   viewToggle: "viewToggle",
@@ -129,16 +128,8 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
 
 const ROUTES_BY_CUSTOM_ID = new Map(STATUS_COMPONENT_ROUTES.map((route) => [route.customId, route]));
 
-function getStatusComponentRoute(customId, { myRaidsSelectId = "" } = {}) {
+function getStatusComponentRoute(customId) {
   const id = String(customId || "");
-  if (id && id === myRaidsSelectId) {
-    return Object.freeze({
-      customId: id,
-      action: STATUS_COMPONENT_ACTION.myRaidsSelect,
-      editDriven: false,
-      redraw: false,
-    });
-  }
   if (id.startsWith("status-gold:replace:")) {
     return Object.freeze({
       customId: id,

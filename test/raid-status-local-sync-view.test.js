@@ -182,7 +182,6 @@ function createHarness(overrides = {}) {
     formatGold,
     truncateText,
     getAutoManageCooldownMs: () => 0,
-    buildMyRaidDetailEmbed: () => ({}),
     refreshLocalSyncSnapshot: async (args = {}) => {
       calls.refresh.push(args);
       return makeSnapshot();
@@ -578,7 +577,6 @@ test("the sync view shows the toggle row plus the console rows only", () => {
     buildSoloCompanionButton: () => null,
     buildRaidFilterRow: () => new ActionRowBuilder(),
     buildStatusRosterFilterRow: () => new ActionRowBuilder(),
-    buildMyRaidsRow: () => new ActionRowBuilder(),
     buildLocalSyncViewRows: (disabled) => buildLocalSyncViewRows({
       snapshot,
       disabled,
@@ -591,7 +589,6 @@ test("the sync view shows the toggle row plus the console rows only", () => {
     getRaidDropdownEntries: () => [],
     getTotalRaidPending: () => 0,
     getFilterRaidId: () => null,
-    getMyRaidsShaped: () => [],
   });
 
   const rows = buildComponents(false);
@@ -646,7 +643,6 @@ function syncViewLayout({ soloButton = null, snapshot = makeSnapshot() } = {}) {
     buildSoloCompanionButton: () => soloButton,
     buildRaidFilterRow: () => new ActionRowBuilder(),
     buildStatusRosterFilterRow: () => new ActionRowBuilder(),
-    buildMyRaidsRow: () => new ActionRowBuilder(),
     buildLocalSyncViewRows: (disabled) => buildLocalSyncViewRows({
       snapshot,
       disabled,
@@ -661,7 +657,6 @@ function syncViewLayout({ soloButton = null, snapshot = makeSnapshot() } = {}) {
     getRaidDropdownEntries: () => [],
     getTotalRaidPending: () => 0,
     getFilterRaidId: () => null,
-    getMyRaidsShaped: () => [],
   });
 }
 
