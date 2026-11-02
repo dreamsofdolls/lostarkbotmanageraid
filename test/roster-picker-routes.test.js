@@ -43,3 +43,11 @@ test("roster picker routes parse toggle index and reject bad prefixes/actions", 
   assert.equal(getRosterPickerRoute("edit-roster:toggle:sess1:0", { prefix: "gold-earner" }), null);
   assert.equal(getRosterPickerRoute("gold-earner:nope:sess1", { prefix: "gold-earner" }), null);
 });
+
+test("roster picker routes parse the dropdown pick action", () => {
+  assert.deepEqual(getRosterPickerRoute("add-roster:pick:abc", { prefix: "add-roster" }), {
+    prefix: "add-roster",
+    action: "pick",
+    sessionId: "abc",
+  });
+});

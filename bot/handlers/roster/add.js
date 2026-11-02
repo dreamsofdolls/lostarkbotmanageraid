@@ -273,8 +273,8 @@ function createAddRosterCommand({
   }
 
   async function handleAddRosterButton(interaction) {
-    // CustomId shape: `add-roster:<action>:<sessionId>` for confirm/cancel,
-    // `add-roster:toggle:<sessionId>:<charIndex>` for per-char toggle.
+    // CustomId shape: `add-roster:<action>:<sessionId>` for confirm/cancel
+    // buttons and the `pick` character dropdown.
     const context = await loadRosterPickerButtonContext({
       interaction,
       prefix: "add-roster",

@@ -219,6 +219,41 @@ test("Local Sync roster selects route through the exported console handler", asy
   assert.equal(typeof commandModule.handleLocalSyncRosterSelect, "function");
 });
 
+test("roster picker selects route to the roster component handlers", async () => {
+  const calls = { add: 0, edit: 0 };
+  const noop = async () => {};
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers: {
+      handleRaidManagementCommand: noop,
+      handleRaidHelpSelect: noop,
+      handleRaidLanguageSelect: noop,
+      handleRaidSetAutocomplete: noop,
+      handleEditRosterAutocomplete: noop,
+      handleRemoveRosterAutocomplete: noop,
+      handleRaidChannelAutocomplete: noop,
+      handleRaidAutoManageAutocomplete: noop,
+      handleRaidTaskAutocomplete: noop,
+      handleRaidGoldEarnerAutocomplete: noop,
+      handleAddRosterButton: async () => { calls.add += 1; },
+      handleEditRosterButton: async () => { calls.edit += 1; },
+    },
+  });
+  const selectInteraction = (customId) => ({
+    id: customId,
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => true,
+    isButton: () => false,
+    customId,
+  });
+
+  await router.handle(selectInteraction("add-roster:pick:s"));
+  await router.handle(selectInteraction("edit-roster:pick:s"));
+
+  assert.deepEqual(calls, { add: 1, edit: 1 });
+});
+
 test("the generic error reply reads the user's language through the passed UserModel", async (t) => {
   t.mock.method(console, "error", () => {});
   const { clearUserLanguageCache, t: translate } = require("../bot/services/i18n");

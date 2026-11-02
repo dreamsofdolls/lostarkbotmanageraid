@@ -112,6 +112,40 @@ async function handleRosterPickerToggle({
   });
 }
 
+/**
+ * Flip every character a dropdown submit picked. Values are option indexes
+ * as strings; repeats and indexes outside the session (a card drawn for an
+ * older session state) are ignored.
+ * @param {{chars: object[], selectedIndices: Set<number>}} session
+ * @param {string[]} values
+ * @returns {boolean} whether any character flipped
+ */
+function flipRosterPickerIndices(session, values) {
+  const indexes = new Set(
+    (values || [])
+      .map((value) => Number(value))
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < session.chars.length)
+  );
+  for (const index of indexes) toggleRosterPickerIndex(session, index);
+  return indexes.size > 0;
+}
+
+async function handleRosterPickerPick({
+  interaction,
+  session,
+  buildSelectionEmbed,
+  buildSelectionComponents,
+}) {
+  if (!flipRosterPickerIndices(session, interaction.values)) {
+    await interaction.deferUpdate().catch(() => {});
+    return;
+  }
+  await interaction.update({
+    embeds: [buildSelectionEmbed(session)],
+    components: buildSelectionComponents(session),
+  });
+}
+
 async function handleRosterPickerCancel({
   interaction,
   sessions,
@@ -126,6 +160,13 @@ async function handleRosterPickerCancel({
   });
 }
 
+// Actions that redraw or close the picker; confirm is left to the caller.
+const NAVIGATION_HANDLERS = Object.freeze({
+  toggle: handleRosterPickerToggle,
+  pick: handleRosterPickerPick,
+  cancel: handleRosterPickerCancel,
+});
+
 async function handleRosterPickerNavigationAction({
   interaction,
   context,
@@ -134,30 +175,20 @@ async function handleRosterPickerNavigationAction({
   buildSelectionComponents,
   buildCancelledEmbed,
 }) {
-  const { action, route, sessionId, session } = context;
-  if (action === "toggle") {
-    await handleRosterPickerToggle({
-      interaction,
-      session,
-      charIndex: route?.index,
-      buildSelectionEmbed,
-      buildSelectionComponents,
-    });
-    return true;
-  }
-
-  if (action === "cancel") {
-    await handleRosterPickerCancel({
-      interaction,
-      sessions,
-      sessionId,
-      session,
-      buildCancelledEmbed,
-    });
-    return true;
-  }
-
-  return false;
+  const handler = NAVIGATION_HANDLERS[context.action];
+  if (!handler) return false;
+  const { route, sessionId, session } = context;
+  await handler({
+    interaction,
+    sessions,
+    sessionId,
+    session,
+    charIndex: route?.index,
+    buildSelectionEmbed,
+    buildSelectionComponents,
+    buildCancelledEmbed,
+  });
+  return true;
 }
 
 /**
@@ -239,6 +270,7 @@ function selectedRosterPickerChars(session) {
 }
 
 module.exports = {
+  flipRosterPickerIndices,
   loadRosterPickerButtonContext,
   handleRosterPickerNavigationAction,
   guardPickerConfirm,

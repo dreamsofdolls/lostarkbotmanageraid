@@ -69,6 +69,48 @@ function buildTogglePickerComponents(options) {
   ];
 }
 
+const SELECT_OPTION_TEXT_MAX = 100;
+
+function clipOptionText(value) {
+  const text = String(value || "");
+  return text.length > SELECT_OPTION_TEXT_MAX ? `${text.slice(0, SELECT_OPTION_TEXT_MAX - 3)}...` : text;
+}
+
+/**
+ * A roster picker driven by one multi-select: no option is pre-selected, so
+ * the closed menu always shows the placeholder, and every option picked on
+ * submit flips that character. Confirm/Cancel keep their own row.
+ * @param {object} options
+ * @param {object} options.session - picker session with `sessionId` and `chars`
+ * @param {Function} options.StringSelectMenuBuilder
+ * @param {string} options.customIdPrefix - e.g. "add-roster"
+ * @param {string} options.placeholder
+ * @param {(character: object, index: number) => {label: string, description: string, emoji?: object}} options.describeOption
+ * @returns {object[]} two action rows: the select, then Confirm/Cancel
+ */
+function buildFlipPickerComponents(options) {
+  const { session, ActionRowBuilder, StringSelectMenuBuilder, customIdPrefix, placeholder, describeOption } = options;
+  const selectOptions = session.chars.map((character, index) => {
+    const { label, description, emoji } = describeOption(character, index);
+    return {
+      label: clipOptionText(label),
+      description: clipOptionText(description),
+      value: String(index),
+      ...(emoji ? { emoji } : {}),
+    };
+  });
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`${customIdPrefix}:pick:${session.sessionId}`)
+    .setPlaceholder(placeholder)
+    .setMinValues(1)
+    .setMaxValues(selectOptions.length)
+    .addOptions(selectOptions);
+  return [
+    new ActionRowBuilder().addComponents(select),
+    buildConfirmCancelRow(options),
+  ];
+}
+
 function resolveAdminMention(getPrimaryManagerId) {
   const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
   return id ? `<@${id}>` : "admin";
@@ -136,6 +178,7 @@ async function authorizePickerSession({
 
 module.exports = {
   newPickerSessionId,
+  buildFlipPickerComponents,
   buildTogglePickerComponents,
   resolveAdminMention,
   clearPickerSession,

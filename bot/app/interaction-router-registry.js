@@ -77,6 +77,10 @@ function createRaidInteractionRouter({
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
       { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },
+      // The roster pickers' character dropdown; their Save/Cancel buttons
+      // share the same handler through buttonRoutes below.
+      { prefix: "add-roster:", handle: handlers.handleAddRosterButton },
+      { prefix: "edit-roster:", handle: handlers.handleEditRosterButton },
     ],
     buttonRoutes: [
       { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },

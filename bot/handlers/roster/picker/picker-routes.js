@@ -2,6 +2,8 @@
 
 const ROSTER_PICKER_ACTION = Object.freeze({
   toggle: "toggle",
+  // The roster commands' dropdown: every picked option flips that character.
+  pick: "pick",
   cancel: "cancel",
   confirm: "confirm",
 });
