@@ -1,22 +1,46 @@
 "use strict";
 
-const { buildTogglePickerComponents } = require("../../../utils/raid/roster-picker");
+const { buildFlipPickerComponents } = require("../../../utils/raid/roster-picker");
 const { t } = require("../../../services/i18n");
+const { getClassEmoji } = require("../../../models/Class");
+const { parseCustomEmoji } = require("../../../utils/discord/emoji");
 const {
   buildPickerClosedEmbed,
+  countRoles,
   formatClassIcon,
+  formatPickerCloseTime,
   formatSavedCharacterLine,
+  resolveRosterIcon,
 } = require("../picker/render");
 
-const CHECK_ICON = "\u2705";
-const UNCHECK_ICON = "\u2b1c";
 const NEW_TAG = "\u{1f195}";
-const STALE_TAG = "\u{1f4e6}";
 
-function tagFor(character) {
-  if (character.savedKey && !character.inBible) return STALE_TAG;
-  if (!character.savedKey && character.inBible) return NEW_TAG;
-  return "";
+const NAME_FORMAT = Object.freeze({
+  bold: (name) => `**${name}**`,
+  plain: (name) => name,
+  struck: (name) => `~~${name}~~`,
+});
+
+// How each picker state reads, keyed by `<saved|new>:<on|off>`. A saved
+// character switched off is the one Save removes, so its line drops CP and
+// says so; a Bible-only character keeps its "new on Bible" tail either way.
+const EDIT_PICKER_STATE = Object.freeze({
+  "saved:on": { glyph: "\u2705", name: NAME_FORMAT.bold, showCp: true, tailKey: null, optionKey: "optionKept", labelTag: "" },
+  "saved:off": { glyph: "\u2796", name: NAME_FORMAT.struck, showCp: false, tailKey: "tailRemove", optionKey: "optionRemoving", labelTag: "" },
+  "new:on": { glyph: NEW_TAG, name: NAME_FORMAT.bold, showCp: true, tailKey: "tailNew", optionKey: "optionAdding", labelTag: ` ${NEW_TAG}` },
+  "new:off": { glyph: "\u2b1c", name: NAME_FORMAT.plain, showCp: true, tailKey: "tailNew", optionKey: "optionNotAdded", labelTag: ` ${NEW_TAG}` },
+});
+
+function editStateOf(session, character, index) {
+  const origin = character.savedKey ? "saved" : "new";
+  const toggle = session.selectedIndices.has(index) ? "on" : "off";
+  return EDIT_PICKER_STATE[`${origin}:${toggle}`];
+}
+
+// A saved character Bible no longer lists. While the Bible fetch failed every
+// saved character reads that way, and the \u26a0\ufe0f Bible line already says why.
+function isStaleOnBible(session, character) {
+  return Boolean(character.savedKey && !character.inBible && !session.bibleError);
 }
 
 function createEditRosterRenderers({
@@ -24,106 +48,90 @@ function createEditRosterRenderers({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   UI,
   pickerMaxOptions,
-  buttonsPerRow,
 }) {
+  function formatPickerLine(session, character, index) {
+    const lang = session.lang;
+    const state = editStateOf(session, character, index);
+    const cp = state.showCp ? ` \u00b7 CP \`${character.combatScore || "?"}\`` : "";
+    const tail = state.tailKey ? t(`raid-edit-roster.picker.${state.tailKey}`, lang) : "";
+    const stale = isStaleOnBible(session, character) ? t("raid-edit-roster.picker.tailStale", lang) : "";
+    return `${state.glyph} **${index + 1}.** ${formatClassIcon(character.className)} ${state.name(character.charName)} \u00b7 \`${character.itemLevel}\`${cp}${tail}${stale}`;
+  }
+
+  // Warnings shown above the close line, each only when it applies.
+  function buildWarningLines(session) {
+    const lang = session.lang;
+    const iconWarn = UI.icons.warn;
+    return [
+      session.bibleError
+        ? t("raid-edit-roster.picker.bibleOffline", lang, { iconWarn, error: session.bibleError })
+        : "",
+      session.excludedSavedCount > 0
+        ? t("raid-edit-roster.picker.excludedSaved", lang, { iconWarn, cap: pickerMaxOptions, count: session.excludedSavedCount })
+        : "",
+      session.excludedBibleOnlyCount > 0
+        ? t("raid-edit-roster.picker.excludedBibleOnly", lang, { iconWarn, cap: pickerMaxOptions, count: session.excludedBibleOnlyCount })
+        : "",
+    ].filter(Boolean);
+  }
+
   function buildSelectionEmbed(session) {
     const lang = session.lang;
-    const lines = session.chars.map((character, index) => {
-      const cp = character.combatScore || "?";
-      const tag = tagFor(character);
-      const tagSuffix = tag ? ` \u00b7 ${tag}` : "";
-      return `**${index + 1}.** ${character.charName} \u00b7 ${character.className} \u00b7 iLvl \`${character.itemLevel}\` \u00b7 CP \`${cp}\`${tagSuffix}`;
-    });
+    // Save keeps the saved characters beyond the picker cap, so they count
+    // toward what the roster holds afterwards.
+    const keptClasses = [
+      ...session.chars.filter((_, index) => session.selectedIndices.has(index)).map((c) => c.className),
+      ...(session.preservedSavedClasses || []),
+    ];
+    const { supports, dps } = countRoles(keptClasses);
+    const savedChars = session.chars
+      .filter((c) => c.savedKey)
+      .map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
 
     const desc = [
-      t("raid-edit-roster.picker.rosterLine", lang, { accountName: session.accountName }),
-      t("raid-edit-roster.picker.headerLine", lang),
-      "",
-      ...lines,
-      "",
-      t("raid-edit-roster.picker.selectingLine", lang, {
-        selected: session.selectedIndices.size,
-        total: session.chars.length,
+      t("raid-edit-roster.picker.summary", lang, {
+        selected: session.selectedIndices.size + (session.preservedSavedKeys?.size || 0),
+        supports,
+        dps,
       }),
+      ...session.chars.map((character, index) => formatPickerLine(session, character, index)),
+      "",
+      ...buildWarningLines(session),
+      t("raid-edit-roster.picker.closeLine", lang, { closeTime: formatPickerCloseTime(session.expiresAt) }),
     ];
 
-    if (session.bibleError) {
-      desc.push("");
-      desc.push(
-        t("raid-edit-roster.picker.bibleOffline", lang, {
-          iconWarn: UI.icons.warn,
-          error: session.bibleError,
-        })
-      );
-    } else {
-      desc.push(
-        t("raid-edit-roster.picker.legend", lang, {
-          iconInfo: UI.icons.info,
-          newTag: NEW_TAG,
-          staleTag: STALE_TAG,
-        })
-      );
-    }
-
-    if (session.excludedSavedCount > 0) {
-      desc.push("");
-      desc.push(
-        t("raid-edit-roster.picker.excludedSaved", lang, {
-          iconWarn: UI.icons.warn,
-          cap: pickerMaxOptions,
-          count: session.excludedSavedCount,
-        })
-      );
-    }
-
-    if (session.excludedBibleOnlyCount > 0) {
-      desc.push("");
-      desc.push(
-        t("raid-edit-roster.picker.excludedBibleOnly", lang, {
-          iconWarn: UI.icons.warn,
-          count: session.excludedBibleOnlyCount,
-          cap: pickerMaxOptions,
-        })
-      );
-    }
-
-    desc.push(t("raid-edit-roster.picker.footerHint", lang, { iconInfo: UI.icons.info }));
-
     return new EmbedBuilder()
-      .setTitle(
-        t("raid-edit-roster.picker.title", lang, {
-          iconFolder: UI.icons.folder,
-          accountName: session.accountName,
-        })
-      )
+      .setTitle(t("raid-edit-roster.picker.title", lang, {
+        rosterIcon: resolveRosterIcon(session.accountName, savedChars),
+        rosterName: session.accountName,
+      }))
       .setDescription(desc.join("\n").slice(0, 4000))
-      .setColor(UI.colors.neutral)
-      .setFooter({ text: t("raid-edit-roster.picker.footerText", lang) });
+      .setColor(UI.colors.progress);
   }
 
   function buildSelectionComponents(session) {
-    return buildTogglePickerComponents({
+    return buildFlipPickerComponents({
       session,
       ActionRowBuilder,
+      StringSelectMenuBuilder,
       ButtonBuilder,
       ButtonStyle,
-      buttonsPerRow,
       customIdPrefix: "edit-roster",
+      placeholder: t("raid-edit-roster.picker.placeholder", session.lang),
       confirmLabel: t("raid-edit-roster.picker.confirmLabel", session.lang, {
         count: session.selectedIndices.size,
       }),
       confirmDisabled: session.selectedIndices.size === 0,
       cancelLabel: t("raid-edit-roster.picker.cancelLabel", session.lang),
-      describeButton(character, index) {
-        const isSelected = session.selectedIndices.has(index);
-        const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-        const tag = tagFor(character);
-        const tagSuffix = tag ? ` ${tag}` : "";
+      describeOption(character, index) {
+        const state = editStateOf(session, character, index);
         return {
-          selected: isSelected,
-          label: `${marker} ${index + 1}. ${character.charName}${tagSuffix}`,
+          label: `${index + 1}. ${character.charName}${state.labelTag}`,
+          description: t(`raid-edit-roster.picker.${state.optionKey}`, session.lang),
+          emoji: parseCustomEmoji(getClassEmoji(character.className)),
         };
       },
     });
@@ -220,6 +228,5 @@ function createEditRosterRenderers({
 
 module.exports = {
   NEW_TAG,
-  STALE_TAG,
   createEditRosterRenderers,
 };

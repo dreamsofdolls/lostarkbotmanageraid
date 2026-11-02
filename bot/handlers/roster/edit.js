@@ -33,7 +33,6 @@ const {
 const {
   SESSION_TTL_MS,
   PICKER_MAX_OPTIONS,
-  BUTTONS_PER_ROW,
 } = require("./picker/constants");
 
 function createEditRosterCommand({
@@ -41,6 +40,7 @@ function createEditRosterCommand({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   MessageFlags,
   UI,
   User,
@@ -70,9 +70,9 @@ function createEditRosterCommand({
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
     UI,
     pickerMaxOptions: PICKER_MAX_OPTIONS,
-    buttonsPerRow: BUTTONS_PER_ROW,
   });
 
   const buildEditRosterPickerChars = (savedChars, bibleChars, cap) =>
@@ -223,6 +223,11 @@ function createEditRosterCommand({
       excludedBibleOnlyCount,
       excludedSavedCount,
       preservedSavedKeys: excludedSavedKeys,
+      // Classes of the saved characters beyond the cap, which Save keeps:
+      // the card's 🛡️/⚔️ split counts them.
+      preservedSavedClasses: savedChars
+        .filter((character) => excludedSavedKeys.has(normalizeName(character.name)))
+        .map((character) => character.class),
       chars: displayChars.map((character) => ({
         charName: character.charName,
         className: character.className,
@@ -232,6 +237,7 @@ function createEditRosterCommand({
         inBible: character.inBible,
       })),
       selectedIndices,
+      expiresAt: Date.now() + SESSION_TTL_MS,
       expireTimer: null,
     };
     sessions.set(sessionId, session);

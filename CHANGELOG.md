@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - `/raid-add-roster` picker redesigned: the roster's class icon in the title, a summary line with the 🛡️ support / ⚔️ DPS split, a ✅/⬜ column on the numbered list, and a closing line with the card's close time. One dropdown replaces the per-character toggle buttons: ticking a character flips it between picked and skipped, so the button grid no longer wraps into uneven rows. The source footer is gone.
+- `/raid-edit-roster` picker gets the same look: a ✅ keep / 🆕 add / ➖ remove / ⬜ skip column, "after saving: N chars" with the role split (counting saved characters past the 20 cap that Save keeps), and the flip dropdown. While Bible is unreachable the list no longer marks every saved character 📦.
 
 ## 2026-10-27
 

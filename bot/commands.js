@@ -368,6 +368,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   MessageFlags,
   UI,
   User,
