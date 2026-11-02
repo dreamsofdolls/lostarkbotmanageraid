@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-02
+
+### Changed
+- `/raid-add-roster` picker redesigned: the roster's class icon in the title, a summary line with the 🛡️ support / ⚔️ DPS split, a ✅/⬜ column on the numbered list, and a closing line with the card's close time. One dropdown replaces the per-character toggle buttons: ticking a character flips it between picked and skipped, so the button grid no longer wraps into uneven rows. The source footer is gone.
+
 ## 2026-10-27
 
 ### Added

@@ -38,6 +38,7 @@ function createAddRosterCommand({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   MessageFlags,
   UI,
   User,
@@ -74,6 +75,7 @@ function createAddRosterCommand({
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
     UI,
     t,
   });

@@ -304,12 +304,14 @@ const {
   handleAddRosterButton,
 } = createAddRosterCommand({
   EmbedBuilder,
-  // /raid-add-roster picker = per-char toggle buttons + Confirm/Cancel,
-  // no StringSelectMenu (the dropdown was visually noisy when
-  // default-selected and got replaced with toggle buttons).
+  // /raid-add-roster picker = one flip dropdown + Save/Cancel buttons. The
+  // dropdown pre-selects nothing: an earlier dropdown that pre-selected every
+  // pick read as noise once closed, so the closed menu now shows only its
+  // placeholder and the card lists the picks.
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   MessageFlags,
   UI,
   User,

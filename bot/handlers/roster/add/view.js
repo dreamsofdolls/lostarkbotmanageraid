@@ -1,20 +1,33 @@
 "use strict";
 
 const {
-  buildTogglePickerComponents,
+  buildFlipPickerComponents,
 } = require("../../../utils/raid/roster-picker");
 const { getClassEmoji } = require("../../../models/Class");
 const { parseCustomEmoji } = require("../../../utils/discord/emoji");
-const { BUTTONS_PER_ROW } = require("../picker/constants");
 const {
   buildPickerClosedEmbed,
+  countRoles,
   formatClassIcon,
+  formatPickerCloseTime,
   formatSavedCharacterLine,
+  resolveRosterIcon,
 } = require("../picker/render");
 const { BIBLE_ORIGIN, BIBLE_REGION } = require("../../../services/bible-endpoint");
 
-const CHECK_ICON = "\u2705";
-const UNCHECK_ICON = "\u2b1c";
+// How a picked or skipped character reads on the card and in the dropdown.
+const PICKER_STATE = Object.freeze({
+  picked: { glyph: "\u2705", bold: true, optionKey: "optionSelected" },
+  skipped: { glyph: "\u2b1c", bold: false, optionKey: "optionSkipped" },
+});
+
+function pickerStateOf(session, index) {
+  return session.selectedIndices.has(index) ? PICKER_STATE.picked : PICKER_STATE.skipped;
+}
+
+function toIconCandidates(chars) {
+  return chars.map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
+}
 
 function buildSeedRosterLink(seedCharName) {
   return `${BIBLE_ORIGIN}/character/${BIBLE_REGION}/${encodeURIComponent(seedCharName)}/roster`;
@@ -25,73 +38,69 @@ function createAddRosterViewBuilders({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
   UI,
   t,
 }) {
   function buildSelectionEmbed(session) {
     const lang = session.lang;
-    const link = buildSeedRosterLink(session.seedCharName);
-    const lines = session.chars.map((c, i) => {
-      const cp = c.combatScore || "?";
-      return `**${i + 1}.** ${formatClassIcon(c.className)} ${c.charName} \u00b7 iLvl \`${c.itemLevel}\` \u00b7 CP \`${cp}\``;
+    const pickedChars = session.chars.filter((_, index) => session.selectedIndices.has(index));
+    const { supports, dps } = countRoles(pickedChars.map((c) => c.className));
+    const lines = session.chars.map((c, index) => {
+      const state = pickerStateOf(session, index);
+      const name = state.bold ? `**${c.charName}**` : c.charName;
+      return `${state.glyph} **${index + 1}.** ${formatClassIcon(c.className)} ${name} \u00b7 \`${c.itemLevel}\` \u00b7 CP \`${c.combatScore || "?"}\``;
     });
+    const managerLine = session.actingForOther
+      ? [t("raid-add-roster.picker.managerHelping", lang, {
+        iconInfo: UI.icons.info,
+        callerId: session.callerId,
+        targetId: session.targetId,
+      })]
+      : [];
 
     const desc = [
-      t("raid-add-roster.picker.rosterLine", lang, {
-        seedName: session.seedCharName,
-        link,
+      t("raid-add-roster.picker.summary", lang, {
+        selected: pickedChars.length,
+        total: session.chars.length,
+        supports,
+        dps,
       }),
-      t("raid-add-roster.picker.foundLine", lang, { count: session.chars.length }),
-      "",
       ...lines,
       "",
-      t("raid-add-roster.picker.selectingLine", lang, {
-        selected: session.selectedIndices.size,
-        total: session.chars.length,
-      }),
+      ...managerLine,
+      t("raid-add-roster.picker.closeLine", lang, { closeTime: formatPickerCloseTime(session.expiresAt) }),
     ];
 
-    if (session.actingForOther) {
-      desc.push("");
-      desc.push(
-        t("raid-add-roster.picker.managerHelping", lang, {
-          iconInfo: UI.icons.info,
-          callerId: session.callerId,
-          targetId: session.targetId,
-        })
-      );
-    }
-
     return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.picker.title", lang, { iconRoster: UI.icons.roster }))
+      .setTitle(t("raid-add-roster.picker.title", lang, {
+        rosterIcon: resolveRosterIcon(session.seedCharName, toIconCandidates(session.chars)),
+        rosterName: session.seedCharName,
+      }))
+      .setURL(buildSeedRosterLink(session.seedCharName))
       .setDescription(desc.join("\n").slice(0, 4000))
-      .setColor(UI.colors.neutral)
-      .setFooter({ text: t("raid-add-roster.picker.footerText", lang) });
+      .setColor(UI.colors.neutral);
   }
 
   function buildSelectionComponents(session) {
-    return buildTogglePickerComponents({
+    return buildFlipPickerComponents({
       session,
       ActionRowBuilder,
+      StringSelectMenuBuilder,
       ButtonBuilder,
       ButtonStyle,
-      buttonsPerRow: BUTTONS_PER_ROW,
       customIdPrefix: "add-roster",
+      placeholder: t("raid-add-roster.picker.placeholder", session.lang),
       confirmLabel: t("raid-add-roster.picker.confirmLabel", session.lang, {
         count: session.selectedIndices.size,
       }),
       confirmDisabled: session.selectedIndices.size === 0,
       cancelLabel: t("raid-add-roster.picker.cancelLabel", session.lang),
-      describeButton(c, index) {
-        const isSelected = session.selectedIndices.has(index);
-        const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-        // The class icon rides on the button; a class without a known
-        // icon keeps its name in the label instead.
-        const emoji = parseCustomEmoji(getClassEmoji(c.className));
+      describeOption(c, index) {
         return {
-          selected: isSelected,
-          label: emoji ? `${marker} ${c.charName}` : `${marker} ${c.charName} (${c.className})`,
-          emoji,
+          label: `${index + 1}. ${c.charName}`,
+          description: t(`raid-add-roster.picker.${pickerStateOf(session, index).optionKey}`, session.lang),
+          emoji: parseCustomEmoji(getClassEmoji(c.className)),
         };
       },
     });

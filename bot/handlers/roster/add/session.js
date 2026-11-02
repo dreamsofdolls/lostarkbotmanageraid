@@ -1,6 +1,6 @@
 "use strict";
 
-const { PICKER_MAX_OPTIONS } = require("../picker/constants");
+const { PICKER_MAX_OPTIONS, SESSION_TTL_MS } = require("../picker/constants");
 
 function buildBibleNameSet(rosterCharacters, normalizeName) {
   return new Set(rosterCharacters.map((character) => normalizeName(character.charName)));
@@ -52,6 +52,7 @@ function buildAddRosterSession({
   rosterCharacters,
   bibleNameSet,
   parseCombatScore,
+  now = Date.now(),
 }) {
   const sortedChars = sortRosterCharacters(rosterCharacters, { parseCombatScore });
   const displayChars = sortedChars.slice(0, PICKER_MAX_OPTIONS);
@@ -70,6 +71,8 @@ function buildAddRosterSession({
       bibleNames: bibleNameSet,
       chars: displayChars.map(toSessionCharacter),
       selectedIndices,
+      // The card shows this as its close time; the timer in add.js uses the same TTL.
+      expiresAt: now + SESSION_TTL_MS,
       expireTimer: null,
     },
   };

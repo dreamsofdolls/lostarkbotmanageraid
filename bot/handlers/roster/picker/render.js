@@ -124,9 +124,21 @@ function chunkLinesIntoFields(lines, name, limit = FIELD_VALUE_LIMIT) {
   }));
 }
 
+/**
+ * A picker's close time as a Discord short-time timestamp. The clock-time
+ * form reads the same in every client language, unlike the relative form,
+ * and Discord renders it in the viewer's own time zone.
+ * @param {number} expiresAt - epoch milliseconds
+ * @returns {string} e.g. "<t:1800000000:t>"
+ */
+function formatPickerCloseTime(expiresAt) {
+  return `<t:${Math.floor(expiresAt / 1000)}:t>`;
+}
+
 module.exports = {
   ROSTER_ICON_UNKNOWN,
   buildPickerClosedEmbed,
+  formatPickerCloseTime,
   chunkLinesIntoFields,
   countRoles,
   formatClassIcon,
