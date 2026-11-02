@@ -134,3 +134,60 @@ test("raid-add roster saved embed reports target DM failure for manager flow", (
 
   assert.ok(calls.some((call) => call.key === "raid-add-roster.saved.dmDisabled"));
 });
+
+function savedCharacter(name, className) {
+  return { name, class: className, itemLevel: 1700, combatScore: "4000" };
+}
+
+test("raid-add roster saved card splits a 20-character roster and drops the source footer", (t) => {
+  CLASS_EMOJI_MAP.Artist = "<:yinyangshi_a3f9b2:1234567890123456789>";
+  t.after(() => { CLASS_EMOJI_MAP.Artist = ""; });
+  const builders = makeLocaleBuilders();
+  const characters = Array.from({ length: 20 }, (_, index) => savedCharacter(`Characterno${index}`, "Artist"));
+  const embed = builders.buildSavedEmbed(
+    pickerSession({ seedCharName: "Characterno0" }),
+    { accountName: "Characterno0", characters },
+  ).toJSON();
+
+  assert.ok(embed.title.startsWith("📥 Đã lưu roster · <:yinyangshi_a3f9b2:1234567890123456789> Characterno0"));
+  assert.equal(embed.url, buildSeedRosterLink("Characterno0"));
+  assert.equal(embed.description.split("\n")[0], "Artist theo dõi **20** char · 🛡️ 20 · ⚔️ 0");
+  assert.ok(embed.fields.length >= 2);
+  for (const field of embed.fields) assert.ok(field.value.length <= 1024);
+  assert.equal(embed.fields[1].name, "\u200b");
+  assert.equal(embed.fields.flatMap((field) => field.value.split("\n")).length, 20);
+  assert.equal(embed.footer.text, "Sửa sau bằng /raid-edit-roster");
+  assert.equal(embed.timestamp, undefined);
+});
+
+test("raid-add roster closed cards carry the roster icon and no footer", () => {
+  const builders = makeLocaleBuilders();
+  const session = pickerSession({
+    seedCharName: "Spindazz",
+    chars: [{ charName: "Spindazz", className: "Slayer", itemLevel: 1700, combatScore: "1" }],
+  });
+
+  const expired = builders.buildExpiredEmbed(session).toJSON();
+  assert.equal(expired.title, "⏳ Hết giờ · ❓ Spindazz");
+  assert.equal(expired.url, buildSeedRosterLink("Spindazz"));
+  assert.equal(expired.footer, undefined);
+  const cancelled = builders.buildCancelledEmbed(session).toJSON();
+  assert.equal(cancelled.title, "✖️ Đã huỷ · ❓ Spindazz");
+  assert.equal(cancelled.footer, undefined);
+});
+
+test("raid-add target DM lists commands in a field and drops the footer", () => {
+  const builders = makeLocaleBuilders();
+  const embed = builders.buildTargetDMEmbed(
+    pickerSession({ callerId: "manager-1" }),
+    { accountName: "Qiylyn", characters: [savedCharacter("Qiylyn", "Bard")] },
+    "Guild",
+    "vi",
+  ).toJSON();
+
+  assert.equal(embed.title, "📥 Roster mới cho cậu · ❓ Qiylyn");
+  assert.match(embed.description, /Tớ đang theo dõi \*\*1\*\* char · 🛡️ 1 · ⚔️ 0/);
+  assert.ok(embed.fields.some((field) => field.name === "Lệnh hay dùng"));
+  assert.equal(embed.footer, undefined);
+  assert.equal(embed.timestamp, undefined);
+});

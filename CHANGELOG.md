@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed
 - `/raid-add-roster` picker redesigned: the roster's class icon in the title, a summary line with the 🛡️ support / ⚔️ DPS split, a ✅/⬜ column on the numbered list, and a closing line with the card's close time. One dropdown replaces the per-character toggle buttons: ticking a character flips it between picked and skipped, so the button grid no longer wraps into uneven rows. The source footer is gone.
 - `/raid-edit-roster` picker gets the same look: a ✅ keep / 🆕 add / ➖ remove / ⬜ skip column, "after saving: N chars" with the role split (counting saved characters past the 20 cap that Save keeps), and the flip dropdown. While Bible is unreachable the list no longer marks every saved character 📦.
+- The cards that follow both pickers match them: expired and cancelled cards carry the roster's class icon and name in the title, the saved cards lead with the character count and role split, and the DM a member gets when a manager adds their roster lists the commands to use next. A long roster's character list now continues into a second field instead of being cut off at Discord's 1024-character limit. The "Source: lostark.bible" footer and the timestamp are gone from all of them.
 
 ## 2026-10-27
 

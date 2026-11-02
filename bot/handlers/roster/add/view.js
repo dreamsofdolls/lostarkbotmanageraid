@@ -7,6 +7,7 @@ const { getClassEmoji } = require("../../../models/Class");
 const { parseCustomEmoji } = require("../../../utils/discord/emoji");
 const {
   buildPickerClosedEmbed,
+  chunkLinesIntoFields,
   countRoles,
   formatClassIcon,
   formatPickerCloseTime,
@@ -28,6 +29,17 @@ function pickerStateOf(session, index) {
 function toIconCandidates(chars) {
   return chars.map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
 }
+
+function toSavedIconCandidates(characters) {
+  return characters.map((c) => ({ name: c.name, className: c.class, combatScore: c.combatScore }));
+}
+
+// The saved card's line about the target's DM, keyed by delivery outcome.
+const DM_STATUS_KEY = Object.freeze({
+  delivered: "dmDelivered",
+  "dms-disabled": "dmDisabled",
+  error: "dmError",
+});
 
 function buildSeedRosterLink(seedCharName) {
   return `${BIBLE_ORIGIN}/character/${BIBLE_REGION}/${encodeURIComponent(seedCharName)}/roster`;
@@ -114,11 +126,11 @@ function createAddRosterViewBuilders({
       keyPrefix: "raid-add-roster",
       state,
       lang: session.lang,
-      vars: {
-        seedName: session.seedCharName,
-        link: buildSeedRosterLink(session.seedCharName),
+      titleVars: {
+        rosterIcon: resolveRosterIcon(session.seedCharName, toIconCandidates(session.chars || [])),
+        rosterName: session.seedCharName,
       },
-      withFooter: true,
+      url: buildSeedRosterLink(session.seedCharName),
     });
   }
 
@@ -130,90 +142,77 @@ function createAddRosterViewBuilders({
     return buildClosedEmbed(session, "cancelled");
   }
 
+  // Title, role split and chunked character list shared by the saved card
+  // and the target's DM, both drawn from the roster as saved.
+  function describeSavedRoster(savedAccount, lang, keyPrefix) {
+    const characters = savedAccount.characters;
+    const { supports, dps } = countRoles(characters.map((character) => character.class));
+    const title = t(`${keyPrefix}.title`, lang, {
+      rosterIcon: resolveRosterIcon(savedAccount.accountName, toSavedIconCandidates(characters)),
+      rosterName: savedAccount.accountName,
+    });
+    const fields = chunkLinesIntoFields(
+      characters.map((character) => formatSavedCharacterLine(character)),
+      t(`${keyPrefix}.charactersField`, lang, { count: characters.length })
+    );
+    return { title, fields, roleVars: { count: characters.length, supports, dps } };
+  }
+
+  function buildDmStatusLine(session, dmDelivery, lang) {
+    const status = dmDelivery?.delivered ? "delivered" : dmDelivery?.reason;
+    const key = DM_STATUS_KEY[status];
+    return key
+      ? [t(`raid-add-roster.saved.${key}`, lang, { iconWarn: UI.icons.warn, targetId: session.targetId })]
+      : [];
+  }
+
   function buildSavedEmbed(session, savedAccount, dmDelivery = null) {
     const lang = session.lang;
-    const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map((character) => formatSavedCharacterLine(character));
-    const descriptionLines = [
-      t("raid-add-roster.saved.rosterLine", lang, {
-        accountName: savedAccount.accountName,
-        link,
-      }),
-      t("raid-add-roster.saved.savedLine", lang, {
-        count: savedAccount.characters.length,
-      }),
-    ];
-    if (session.actingForOther) {
-      descriptionLines.push(
+    const { title, fields, roleVars } = describeSavedRoster(savedAccount, lang, "raid-add-roster.saved");
+    const managerLines = session.actingForOther
+      ? [
         t("raid-add-roster.saved.managerHelpingLine", lang, {
           iconInfo: UI.icons.info,
           callerId: session.callerId,
           targetId: session.targetId,
-        })
-      );
-      if (dmDelivery?.delivered) {
-        descriptionLines.push(
-          t("raid-add-roster.saved.dmDelivered", lang, { targetId: session.targetId })
-        );
-      } else if (dmDelivery?.reason === "dms-disabled") {
-        descriptionLines.push(
-          t("raid-add-roster.saved.dmDisabled", lang, {
-            iconWarn: UI.icons.warn,
-            targetId: session.targetId,
-          })
-        );
-      } else if (dmDelivery?.reason === "error") {
-        descriptionLines.push(
-          t("raid-add-roster.saved.dmError", lang, {
-            iconWarn: UI.icons.warn,
-            targetId: session.targetId,
-          })
-        );
-      }
-    }
-    return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.saved.title", lang, { iconRoster: UI.icons.roster }))
-      .setDescription(descriptionLines.join("\n"))
-      .addFields({
-        name: t("raid-add-roster.saved.charactersField", lang, {
-          count: savedAccount.characters.length,
         }),
-        value: summaryLines.join("\n").slice(0, 1024),
-        inline: false,
-      })
+        ...buildDmStatusLine(session, dmDelivery, lang),
+      ]
+      : [];
+    return new EmbedBuilder()
+      .setTitle(title)
+      .setURL(buildSeedRosterLink(session.seedCharName))
+      .setDescription([t("raid-add-roster.saved.savedLine", lang, roleVars), ...managerLines].join("\n"))
+      .addFields(fields)
       .setColor(UI.colors.success)
-      .setFooter({ text: t("raid-add-roster.saved.footerText", lang) })
-      .setTimestamp();
+      .setFooter({ text: t("raid-add-roster.saved.footerText", lang) });
   }
 
   function buildTargetDMEmbed(session, savedAccount, guildName, targetLang) {
     const lang = targetLang;
-    const link = buildSeedRosterLink(session.seedCharName);
-    const summaryLines = savedAccount.characters.map((character) => formatSavedCharacterLine(character));
+    const { title, fields, roleVars } = describeSavedRoster(savedAccount, lang, "raid-add-roster.targetDM");
     const guildLine = guildName
       ? t("raid-add-roster.targetDM.guildLine", lang, { guildName })
       : "";
     return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.targetDM.title", lang, { iconRoster: UI.icons.roster }))
+      .setTitle(title)
+      .setURL(buildSeedRosterLink(session.seedCharName))
       .setDescription(
         t("raid-add-roster.targetDM.description", lang, {
           callerId: session.callerId,
           guildLine,
-          accountName: savedAccount.accountName,
-          link,
-          count: savedAccount.characters.length,
+          ...roleVars,
         })
       )
-      .addFields({
-        name: t("raid-add-roster.targetDM.charactersField", lang, {
-          count: savedAccount.characters.length,
-        }),
-        value: summaryLines.join("\n").slice(0, 1024),
-        inline: false,
-      })
-      .setColor(UI.colors.success)
-      .setFooter({ text: t("raid-add-roster.targetDM.footerText", lang) })
-      .setTimestamp();
+      .addFields(
+        ...fields,
+        {
+          name: t("raid-add-roster.targetDM.commandsField", lang),
+          value: t("raid-add-roster.targetDM.commandsValue", lang),
+          inline: false,
+        }
+      )
+      .setColor(UI.colors.success);
   }
 
   return {

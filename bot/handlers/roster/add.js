@@ -395,6 +395,7 @@ function createAddRosterCommand({
         pingContent = t("raid-add-roster.saved.managerPing", targetLang, {
           targetId: session.targetId,
           callerId: session.callerId,
+          rosterName: savedAccount.accountName,
         });
       }
       await interaction.editReply({

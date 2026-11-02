@@ -244,3 +244,23 @@ test("edit roster render disables confirm when no chars are selected", () => {
 
   assert.equal(rows.at(-1).components[0].data.disabled, true);
 });
+
+test("edit roster saved card leads with the count line", (t) => {
+  CLASS_EMOJI_MAP.Paladin = "<:pal:1>";
+  t.after(() => { CLASS_EMOJI_MAP.Paladin = ""; });
+  const { buildSavedEmbed } = createRenderers();
+  const embed = buildSavedEmbed({ lang: "vi", accountName: "Alpha" }, {
+    added: ["Zerk"],
+    removed: [],
+    kept: ["Alpha"],
+    finalChars: [
+      { name: "Alpha", class: "Paladin", itemLevel: 1750, combatScore: "5000" },
+      { name: "Zerk", class: "Berserker", itemLevel: 1700, combatScore: "4000" },
+    ],
+  }).data;
+
+  assert.equal(embed.title, "✏️ Đã cập nhật roster · <:pal:1> Alpha");
+  assert.equal(embed.description.split("\n")[0], "Roster còn **2** char · 🛡️ 1 · ⚔️ 1");
+  assert.equal(embed.footer, undefined);
+  assert.equal(embed.timestamp, undefined);
+});

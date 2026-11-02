@@ -66,3 +66,22 @@ test("chunkLinesIntoFields keeps every line whole under the limit", () => {
 test("chunkLinesIntoFields returns no field for no lines", () => {
   assert.deepEqual(chunkLinesIntoFields([], "Character (0)"), []);
 });
+
+test("buildPickerClosedEmbed merges title vars and keeps the gold-earner shape", () => {
+  const { EmbedBuilder } = require("discord.js");
+  const { t } = require("../bot/services/i18n");
+  const { buildPickerClosedEmbed } = require("../bot/handlers/roster/picker/render");
+  const UI = { colors: { muted: 1 }, icons: { warn: "[warn]", info: "[info]" } };
+
+  const gold = buildPickerClosedEmbed({
+    EmbedBuilder, UI, t, keyPrefix: "raid-gold-earner", state: "expired", lang: "vi", vars: { accountName: "A" },
+  }).toJSON();
+  assert.equal(gold.title, t("raid-gold-earner.expired.title", "vi", { iconWarn: "[warn]" }));
+
+  const roster = buildPickerClosedEmbed({
+    EmbedBuilder, UI, t, keyPrefix: "raid-add-roster", state: "cancelled", lang: "vi",
+    titleVars: { rosterIcon: "❓", rosterName: "A" }, url: "https://example.test/a",
+  }).toJSON();
+  assert.equal(roster.title, "✖️ Đã huỷ · ❓ A");
+  assert.equal(roster.url, "https://example.test/a");
+});

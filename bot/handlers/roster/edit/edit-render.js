@@ -6,6 +6,7 @@ const { getClassEmoji } = require("../../../models/Class");
 const { parseCustomEmoji } = require("../../../utils/discord/emoji");
 const {
   buildPickerClosedEmbed,
+  chunkLinesIntoFields,
   countRoles,
   formatClassIcon,
   formatPickerCloseTime,
@@ -41,6 +42,13 @@ function editStateOf(session, character, index) {
 // saved character reads that way, and the \u26a0\ufe0f Bible line already says why.
 function isStaleOnBible(session, character) {
   return Boolean(character.savedKey && !character.inBible && !session.bibleError);
+}
+
+// The roster's saved characters, the source of its title icon.
+function savedIconCandidates(session) {
+  return (session.chars || [])
+    .filter((c) => c.savedKey)
+    .map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
 }
 
 function createEditRosterRenderers({
@@ -87,9 +95,6 @@ function createEditRosterRenderers({
       ...(session.preservedSavedClasses || []),
     ];
     const { supports, dps } = countRoles(keptClasses);
-    const savedChars = session.chars
-      .filter((c) => c.savedKey)
-      .map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
 
     const desc = [
       t("raid-edit-roster.picker.summary", lang, {
@@ -105,7 +110,7 @@ function createEditRosterRenderers({
 
     return new EmbedBuilder()
       .setTitle(t("raid-edit-roster.picker.title", lang, {
-        rosterIcon: resolveRosterIcon(session.accountName, savedChars),
+        rosterIcon: resolveRosterIcon(session.accountName, savedIconCandidates(session)),
         rosterName: session.accountName,
       }))
       .setDescription(desc.join("\n").slice(0, 4000))
@@ -145,8 +150,10 @@ function createEditRosterRenderers({
       keyPrefix: "raid-edit-roster",
       state,
       lang: session.lang,
-      vars: { accountName: session.accountName },
-      withFooter: true,
+      titleVars: {
+        rosterIcon: resolveRosterIcon(session.accountName, savedIconCandidates(session)),
+        rosterName: session.accountName,
+      },
     });
   }
 
@@ -186,35 +193,30 @@ function createEditRosterRenderers({
       ? changeParts.join(" \u00b7 ")
       : t(`raid-edit-roster.saved.changes.${kept.length ? "refreshed" : "none"}`, lang);
 
-    const embed = new EmbedBuilder()
-      .setTitle(t("raid-edit-roster.saved.title", lang, { iconFolder: UI.icons.folder }))
-      .setDescription(
-        [
-          t("raid-edit-roster.saved.rosterLine", lang, { accountName: session.accountName }),
-          changeLine,
-        ].join("\n")
+    const { supports, dps } = countRoles(finalChars.map((character) => character.class));
+    const removedLines = removed
+      .map((character) => `${formatClassIcon(character.class)} ~~${character.name}~~ \u00b7 \`${character.itemLevel}\``);
+
+    return new EmbedBuilder()
+      .setTitle(t("raid-edit-roster.saved.title", lang, {
+        rosterIcon: resolveRosterIcon(
+          session.accountName,
+          finalChars.map((c) => ({ name: c.name, className: c.class, combatScore: c.combatScore }))
+        ),
+        rosterName: session.accountName,
+      }))
+      .setDescription([
+        t("raid-edit-roster.saved.countLine", lang, { count: finalChars.length, supports, dps }),
+        changeLine,
+      ].join("\n"))
+      .addFields(
+        ...chunkLinesIntoFields(
+          lines.length ? lines : [t("raid-edit-roster.saved.charactersEmpty", lang)],
+          t("raid-edit-roster.saved.charactersField", lang, { count: finalChars.length })
+        ),
+        ...chunkLinesIntoFields(removedLines, t("raid-edit-roster.saved.removedField", lang))
       )
-      .addFields({
-        name: t("raid-edit-roster.saved.charactersField", lang, { count: finalChars.length }),
-        value:
-          lines.join("\n").slice(0, 1024) ||
-          t("raid-edit-roster.saved.charactersEmpty", lang),
-        inline: false,
-      })
-      .setColor(UI.colors.success)
-      .setFooter({ text: t("raid-edit-roster.saved.footerText", lang) })
-      .setTimestamp();
-    if (removed.length) {
-      embed.addFields({
-        name: t("raid-edit-roster.saved.removedField", lang),
-        value: removed
-          .map((character) => `${formatClassIcon(character.class)} ~~${character.name}~~ \u00b7 \`${character.itemLevel}\``)
-          .join("\n")
-          .slice(0, 1024),
-        inline: false,
-      });
-    }
-    return embed;
+      .setColor(UI.colors.success);
   }
 
   return {

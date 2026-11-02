@@ -19,6 +19,8 @@ const CONTINUATION_FIELD_NAME = "​";
  * @param {"expired"|"cancelled"} args.state
  * @param {string} args.lang
  * @param {object} [args.vars] - description variables
+ * @param {object} [args.titleVars] - extra title variables, such as the roster icon and name
+ * @param {string} [args.url] - link for the title
  * @param {boolean} [args.withFooter=false] - add the footerText line
  * @returns {object} the embed
  */
@@ -30,15 +32,18 @@ function buildPickerClosedEmbed({
   state,
   lang,
   vars = {},
+  titleVars = {},
+  url = "",
   withFooter = false,
 }) {
-  const titleVars = state === "expired"
+  const stateIconVars = state === "expired"
     ? { iconWarn: UI.icons.warn }
     : { iconInfo: UI.icons.info };
   const embed = new EmbedBuilder()
-    .setTitle(t(`${keyPrefix}.${state}.title`, lang, titleVars))
+    .setTitle(t(`${keyPrefix}.${state}.title`, lang, { ...stateIconVars, ...titleVars }))
     .setDescription(t(`${keyPrefix}.${state}.description`, lang, vars))
     .setColor(UI.colors.muted);
+  if (url) embed.setURL(url);
   if (withFooter) embed.setFooter({ text: t(`${keyPrefix}.${state}.footerText`, lang) });
   return embed;
 }
