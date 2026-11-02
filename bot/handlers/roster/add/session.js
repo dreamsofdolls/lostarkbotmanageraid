@@ -52,7 +52,6 @@ function buildAddRosterSession({
   rosterCharacters,
   bibleNameSet,
   parseCombatScore,
-  now = Date.now(),
 }) {
   const sortedChars = sortRosterCharacters(rosterCharacters, { parseCombatScore });
   const displayChars = sortedChars.slice(0, PICKER_MAX_OPTIONS);
@@ -72,7 +71,7 @@ function buildAddRosterSession({
       chars: displayChars.map(toSessionCharacter),
       selectedIndices,
       // The card shows this as its close time; the timer in add.js uses the same TTL.
-      expiresAt: now + SESSION_TTL_MS,
+      expiresAt: Date.now() + SESSION_TTL_MS,
       expireTimer: null,
     },
   };

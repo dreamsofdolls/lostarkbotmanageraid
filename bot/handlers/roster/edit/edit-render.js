@@ -40,7 +40,7 @@ function editStateOf(session, character, index) {
 }
 
 // A saved character Bible no longer lists. While the Bible fetch failed every
-// saved character reads that way, and the \u26a0\ufe0f Bible line already says why.
+// saved character reads that way, and the Bible warning line already says why.
 function isStaleOnBible(session, character) {
   return Boolean(character.savedKey && !character.inBible && !session.bibleError);
 }
@@ -230,7 +230,6 @@ function createEditRosterRenderers({
 }
 
 module.exports = {
-  NEW_TAG,
   createEditRosterRenderers,
   sessionTitleVars,
 };

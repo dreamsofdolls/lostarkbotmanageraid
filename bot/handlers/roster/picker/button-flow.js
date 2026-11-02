@@ -83,35 +83,6 @@ async function loadRosterPickerButtonContext({
   return { handled: false, route, action, sessionId, session };
 }
 
-function toggleRosterPickerIndex(session, charIndex) {
-  if (!Number.isInteger(charIndex) || charIndex < 0 || charIndex >= session.chars.length) {
-    return false;
-  }
-  if (session.selectedIndices.has(charIndex)) {
-    session.selectedIndices.delete(charIndex);
-  } else {
-    session.selectedIndices.add(charIndex);
-  }
-  return true;
-}
-
-async function handleRosterPickerToggle({
-  interaction,
-  session,
-  charIndex,
-  buildSelectionEmbed,
-  buildSelectionComponents,
-}) {
-  if (!toggleRosterPickerIndex(session, charIndex)) {
-    await interaction.deferUpdate().catch(() => {});
-    return;
-  }
-  await interaction.update({
-    embeds: [buildSelectionEmbed(session)],
-    components: buildSelectionComponents(session),
-  });
-}
-
 /**
  * Flip every character a dropdown submit picked. Values are option indexes
  * as strings; repeats and indexes outside the session (a card drawn for an
@@ -126,7 +97,10 @@ function flipRosterPickerIndices(session, values) {
       .map((value) => Number(value))
       .filter((index) => Number.isInteger(index) && index >= 0 && index < session.chars.length)
   );
-  for (const index of indexes) toggleRosterPickerIndex(session, index);
+  for (const index of indexes) {
+    if (session.selectedIndices.has(index)) session.selectedIndices.delete(index);
+    else session.selectedIndices.add(index);
+  }
   return indexes.size > 0;
 }
 
@@ -162,7 +136,6 @@ async function handleRosterPickerCancel({
 
 // Actions that redraw or close the picker; confirm is left to the caller.
 const NAVIGATION_HANDLERS = Object.freeze({
-  toggle: handleRosterPickerToggle,
   pick: handleRosterPickerPick,
   cancel: handleRosterPickerCancel,
 });
@@ -177,13 +150,12 @@ async function handleRosterPickerNavigationAction({
 }) {
   const handler = NAVIGATION_HANDLERS[context.action];
   if (!handler) return false;
-  const { route, sessionId, session } = context;
+  const { sessionId, session } = context;
   await handler({
     interaction,
     sessions,
     sessionId,
     session,
-    charIndex: route?.index,
     buildSelectionEmbed,
     buildSelectionComponents,
     buildCancelledEmbed,

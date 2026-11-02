@@ -10,6 +10,7 @@ const {
 
 const ROSTER_ICON_UNKNOWN = "❓";
 const FIELD_VALUE_LIMIT = 1024;
+// A zero-width space: Discord requires a non-empty field name.
 const CONTINUATION_FIELD_NAME = "​";
 
 /**

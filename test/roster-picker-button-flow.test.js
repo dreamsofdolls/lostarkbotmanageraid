@@ -76,47 +76,28 @@ test("roster picker button context replies to stale sessions", async () => {
   assert.equal(interaction.replies[0].embeds[0].title, "stale.title");
 });
 
-test("roster picker navigation routes toggles and defers stale indexes", async () => {
+test("roster picker navigation defers a pick of stale indexes without redrawing", async () => {
   const session = {
     sessionId: "sess",
-    chars: [{ charName: "A" }, { charName: "B" }],
+    chars: [{ charName: "A" }],
     selectedIndices: new Set([0]),
   };
-  const interaction = makeInteraction("add-roster:toggle:sess:1");
+  const interaction = makeInteraction("add-roster:pick:sess");
+  interaction.values = ["5"];
 
   const handled = await handleRosterPickerNavigationAction({
     interaction,
-    context: {
-      action: "toggle",
-      route: { index: 1 },
-      sessionId: "sess",
-      session,
-    },
-    sessions: new Map([["sess", session]]),
-    buildSelectionEmbed: (s) => ({ selected: [...s.selectedIndices] }),
-    buildSelectionComponents: () => ["components"],
-    buildCancelledEmbed: () => ({}),
-  });
-
-  assert.equal(handled, true);
-  assert.deepEqual([...session.selectedIndices].sort(), [0, 1]);
-  assert.equal(interaction.updates.length, 1);
-
-  await handleRosterPickerNavigationAction({
-    interaction,
-    context: {
-      action: "toggle",
-      route: { index: 99 },
-      sessionId: "sess",
-      session,
-    },
+    context: { action: "pick", sessionId: "sess", session },
     sessions: new Map([["sess", session]]),
     buildSelectionEmbed: () => ({}),
     buildSelectionComponents: () => [],
     buildCancelledEmbed: () => ({}),
   });
 
+  assert.equal(handled, true);
   assert.equal(interaction.deferred, 1);
+  assert.equal(interaction.updates.length, 0);
+  assert.deepEqual([...session.selectedIndices], [0]);
 });
 
 test("roster picker navigation clears cancelled sessions and ignores confirm", async () => {

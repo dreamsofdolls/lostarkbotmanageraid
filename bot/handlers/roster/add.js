@@ -243,7 +243,7 @@ function createAddRosterCommand({
     const sessionId = newPickerSessionId();
     // Default selection: every char shown. Matches Traine's intent
     // ("user này chơi toàn bộ"). Users with alts they don't play
-    // toggle them off via the per-char buttons before confirming.
+    // untick them in the dropdown before saving.
     const { session, truncated, sortedCount } = buildAddRosterSession({
       sessionId,
       callerId,
