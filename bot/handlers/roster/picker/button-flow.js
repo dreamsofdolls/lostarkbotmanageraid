@@ -241,7 +241,7 @@ async function guardPickerConfirm({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
-          title: t(`${keyPrefix}.confirm.capExceededTitle`, session.lang),
+          title: t(`${keyPrefix}.confirm.capExceededTitle`, session.lang, { cap: maxChars }),
           description: t(`${keyPrefix}.confirm.capExceededDescription`, session.lang, {
             cap: maxChars,
             count: selectedChars.length,

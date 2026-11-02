@@ -12,6 +12,7 @@ const {
   formatPickerCloseTime,
   formatSavedCharacterLine,
   resolveRosterIcon,
+  resolveSavedRosterIcon,
 } = require("../picker/render");
 
 const NEW_TAG = "\u{1f195}";
@@ -44,11 +45,20 @@ function isStaleOnBible(session, character) {
   return Boolean(character.savedKey && !character.inBible && !session.bibleError);
 }
 
-// The roster's saved characters, the source of its title icon.
-function savedIconCandidates(session) {
-  return (session.chars || [])
+/**
+ * The roster icon and name an edit session's titles carry, iconed from the
+ * roster's saved characters.
+ * @param {{accountName: string, chars?: object[]}} session
+ * @returns {{rosterIcon: string, rosterName: string}}
+ */
+function sessionTitleVars(session) {
+  const candidates = (session.chars || [])
     .filter((c) => c.savedKey)
     .map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
+  return {
+    rosterIcon: resolveRosterIcon(session.accountName, candidates),
+    rosterName: session.accountName,
+  };
 }
 
 function createEditRosterRenderers({
@@ -109,10 +119,7 @@ function createEditRosterRenderers({
     ];
 
     return new EmbedBuilder()
-      .setTitle(t("raid-edit-roster.picker.title", lang, {
-        rosterIcon: resolveRosterIcon(session.accountName, savedIconCandidates(session)),
-        rosterName: session.accountName,
-      }))
+      .setTitle(t("raid-edit-roster.picker.title", lang, sessionTitleVars(session)))
       .setDescription(desc.join("\n").slice(0, 4000))
       .setColor(UI.colors.progress);
   }
@@ -150,10 +157,7 @@ function createEditRosterRenderers({
       keyPrefix: "raid-edit-roster",
       state,
       lang: session.lang,
-      titleVars: {
-        rosterIcon: resolveRosterIcon(session.accountName, savedIconCandidates(session)),
-        rosterName: session.accountName,
-      },
+      titleVars: sessionTitleVars(session),
     });
   }
 
@@ -199,10 +203,7 @@ function createEditRosterRenderers({
 
     return new EmbedBuilder()
       .setTitle(t("raid-edit-roster.saved.title", lang, {
-        rosterIcon: resolveRosterIcon(
-          session.accountName,
-          finalChars.map((c) => ({ name: c.name, className: c.class, combatScore: c.combatScore }))
-        ),
+        rosterIcon: resolveSavedRosterIcon(session.accountName, finalChars),
         rosterName: session.accountName,
       }))
       .setDescription([
@@ -231,4 +232,5 @@ function createEditRosterRenderers({
 module.exports = {
   NEW_TAG,
   createEditRosterRenderers,
+  sessionTitleVars,
 };

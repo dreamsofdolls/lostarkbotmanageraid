@@ -1,13 +1,36 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const { EmbedBuilder, MessageFlags } = require("discord.js");
 const {
   flipRosterPickerIndices,
+  guardPickerConfirm,
   handleRosterPickerNavigationAction,
   loadRosterPickerButtonContext,
   selectedRosterPickerChars,
 } = require("../bot/handlers/roster/picker/button-flow");
 const { buildFlipPickerComponents } = require("../bot/utils/raid/roster-picker");
+const { buildNoticeEmbed } = require("../bot/utils/raid/common/shared");
+const { t } = require("../bot/services/i18n");
+
+test("guardPickerConfirm names the cap in the over-cap notice title", async () => {
+  const interaction = makeInteraction("add-roster:confirm:s");
+  const result = await guardPickerConfirm({
+    interaction,
+    session: { lang: "vi", chars: [{ charName: "A" }, { charName: "B" }], selectedIndices: new Set([0, 1]) },
+    sessions: new Map(),
+    sessionId: "s",
+    EmbedBuilder,
+    MessageFlags,
+    t,
+    buildNoticeEmbed,
+    maxChars: 1,
+    keyPrefix: "raid-add-roster",
+  });
+
+  assert.equal(result.handled, true);
+  assert.equal(interaction.replies[0].embeds[0].toJSON().title, "⚠️ Quá 1 char");
+});
 
 function makeInteraction(customId, userId = "user-1") {
   return {

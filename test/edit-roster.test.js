@@ -769,8 +769,31 @@ test("edit-roster Confirm on a roster removed meanwhile shows the not-found noti
   });
 
   const embed = edits.at(-1).embeds[0].toJSON();
-  assert.equal(embed.title.includes(t("raid-edit-roster.notice.notFoundTitle", "en")), true);
+  assert.equal(
+    embed.title,
+    `⚠️ ${t("raid-edit-roster.notice.notFoundTitle", "en", { rosterIcon: "❓", rosterName: "Alpha" })}`
+  );
   assert.doesNotMatch(embed.description, /không còn tồn tại/);
+});
+
+test("edit not-found notice shows the question mark", async () => {
+  clearUserLanguageCache();
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Perfectwings", characters: [] }],
+  });
+  const edits = [];
+
+  await factory.handleEditRosterCommand({
+    user: { id: "user-1" },
+    options: { getString: () => "Perfectwing" },
+    deferReply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  const embed = edits[0].embeds[0].toJSON();
+  assert.ok(embed.title.endsWith("Không thấy roster · ❓ Perfectwing"), embed.title);
 });
 
 test("persistEditedRoster: throws when user doc disappeared entirely", async () => {

@@ -29,7 +29,24 @@ const {
 } = require("./edit/edit-persistence");
 const {
   createEditRosterRenderers,
+  sessionTitleVars,
 } = require("./edit/edit-render");
+const { ROSTER_ICON_UNKNOWN } = require("./picker/render");
+
+// A roster the user does not have, or one with no characters left, has no
+// class to show, so its notices carry the unknown icon.
+function unknownRosterVars(rosterName) {
+  return { rosterIcon: ROSTER_ICON_UNKNOWN, rosterName };
+}
+
+function notFoundNotice(rosterName, lang) {
+  const vars = unknownRosterVars(rosterName);
+  return {
+    type: "warn",
+    title: t("raid-edit-roster.notice.notFoundTitle", lang, vars),
+    description: t("raid-edit-roster.notice.notFoundDescription", lang, vars),
+  };
+}
 const {
   SESSION_TTL_MS,
   PICKER_MAX_OPTIONS,
@@ -153,15 +170,7 @@ function createEditRosterCommand({
     const targetAccount = findAccountByName(userDoc, rosterArg, normalizeName);
     if (!targetAccount) {
       await interaction.editReply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-edit-roster.notice.notFoundTitle", lang),
-            description: t("raid-edit-roster.notice.notFoundDescription", lang, {
-              rosterName: rosterArg,
-            }),
-          }),
-        ],
+        embeds: [buildNoticeEmbed(EmbedBuilder, notFoundNotice(rosterArg, lang))],
       });
       return;
     }
@@ -186,15 +195,14 @@ function createEditRosterCommand({
     } = buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
 
     if (merged.length === 0) {
+      const vars = unknownRosterVars(targetAccount.accountName);
       await interaction.editReply({
         content: null,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: t("raid-edit-roster.notice.emptyMergedTitle", lang),
-            description: t("raid-edit-roster.notice.emptyMergedDescription", lang, {
-              accountName: targetAccount.accountName,
-            }),
+            title: t("raid-edit-roster.notice.emptyMergedTitle", lang, vars),
+            description: t("raid-edit-roster.notice.emptyMergedDescription", lang, vars),
           }),
         ],
       });
@@ -314,16 +322,10 @@ function createEditRosterCommand({
       console.error("[edit-roster] persist failed:", err);
       // A roster removed while the picker was open is not a save failure.
       const notice = err?.code === "ROSTER_NOT_FOUND"
-        ? {
-          type: "warn",
-          title: t("raid-edit-roster.notice.notFoundTitle", session.lang),
-          description: t("raid-edit-roster.notice.notFoundDescription", session.lang, {
-            rosterName: session.accountName,
-          }),
-        }
+        ? notFoundNotice(session.accountName, session.lang)
         : {
           type: "error",
-          title: t("raid-edit-roster.persistFail.title", session.lang),
+          title: t("raid-edit-roster.persistFail.title", session.lang, sessionTitleVars(session)),
           description: t("raid-edit-roster.persistFail.description", session.lang, {
             error: err?.message || err,
             adminMention,

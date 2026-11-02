@@ -23,12 +23,15 @@ function findSeedOrSelectionAccount({ accounts, normalizedSeed, rosterNameSet, n
   });
 }
 
-function createDuplicateRosterError(accountName) {
+// The colliding account's characters ride along so the notice can show
+// that roster's class icon without another read.
+function createDuplicateRosterError(accountName, characters = []) {
   const err = new Error(
     `Roster already saved under account '${accountName}' by a concurrent /raid-add-roster session.`
   );
   err.code = "RACE_DUP_ROSTER";
   err.collidingAccountName = accountName;
+  err.collidingCharacters = characters;
   return err;
 }
 
@@ -101,7 +104,7 @@ function createAddRosterPersistence({
         getCharacterName,
       });
       if (collidingAccount) {
-        throw createDuplicateRosterError(collidingAccount.accountName);
+        throw createDuplicateRosterError(collidingAccount.accountName, collidingAccount.characters);
       }
 
       const account = appendAddRosterAccount({ userDoc, session });

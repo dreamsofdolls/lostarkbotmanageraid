@@ -13,6 +13,7 @@ const {
   formatPickerCloseTime,
   formatSavedCharacterLine,
   resolveRosterIcon,
+  resolveSavedRosterIcon,
 } = require("../picker/render");
 const { BIBLE_ORIGIN, BIBLE_REGION } = require("../../../services/bible-endpoint");
 
@@ -26,12 +27,19 @@ function pickerStateOf(session, index) {
   return session.selectedIndices.has(index) ? PICKER_STATE.picked : PICKER_STATE.skipped;
 }
 
-function toIconCandidates(chars) {
-  return chars.map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
-}
-
-function toSavedIconCandidates(characters) {
-  return characters.map((c) => ({ name: c.name, className: c.class, combatScore: c.combatScore }));
+/**
+ * The roster icon and name an add session's titles carry: the seed's roster,
+ * iconed from the characters Bible returned.
+ * @param {{seedCharName: string, chars?: object[]}} session
+ * @returns {{rosterIcon: string, rosterName: string}}
+ */
+function sessionTitleVars(session) {
+  const candidates = (session.chars || [])
+    .map((c) => ({ name: c.charName, className: c.className, combatScore: c.combatScore }));
+  return {
+    rosterIcon: resolveRosterIcon(session.seedCharName, candidates),
+    rosterName: session.seedCharName,
+  };
 }
 
 // The saved card's line about the target's DM, keyed by delivery outcome.
@@ -85,10 +93,7 @@ function createAddRosterViewBuilders({
     ];
 
     return new EmbedBuilder()
-      .setTitle(t("raid-add-roster.picker.title", lang, {
-        rosterIcon: resolveRosterIcon(session.seedCharName, toIconCandidates(session.chars)),
-        rosterName: session.seedCharName,
-      }))
+      .setTitle(t("raid-add-roster.picker.title", lang, sessionTitleVars(session)))
       .setURL(buildSeedRosterLink(session.seedCharName))
       .setDescription(desc.join("\n").slice(0, 4000))
       .setColor(UI.colors.neutral);
@@ -126,10 +131,7 @@ function createAddRosterViewBuilders({
       keyPrefix: "raid-add-roster",
       state,
       lang: session.lang,
-      titleVars: {
-        rosterIcon: resolveRosterIcon(session.seedCharName, toIconCandidates(session.chars || [])),
-        rosterName: session.seedCharName,
-      },
+      titleVars: sessionTitleVars(session),
       url: buildSeedRosterLink(session.seedCharName),
     });
   }
@@ -148,7 +150,7 @@ function createAddRosterViewBuilders({
     const characters = savedAccount.characters;
     const { supports, dps } = countRoles(characters.map((character) => character.class));
     const title = t(`${keyPrefix}.title`, lang, {
-      rosterIcon: resolveRosterIcon(savedAccount.accountName, toSavedIconCandidates(characters)),
+      rosterIcon: resolveSavedRosterIcon(savedAccount.accountName, characters),
       rosterName: savedAccount.accountName,
     });
     const fields = chunkLinesIntoFields(
@@ -229,4 +231,5 @@ function createAddRosterViewBuilders({
 module.exports = {
   buildSeedRosterLink,
   createAddRosterViewBuilders,
+  sessionTitleVars,
 };

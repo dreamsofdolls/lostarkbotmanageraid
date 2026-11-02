@@ -15,7 +15,12 @@ const {
 } = require("./picker/button-flow");
 const {
   createAddRosterViewBuilders,
+  sessionTitleVars,
 } = require("./add/view");
+const {
+  ROSTER_ICON_UNKNOWN,
+  resolveSavedRosterIcon,
+} = require("./picker/render");
 const {
   createAddRosterPersistence,
 } = require("./add/persistence");
@@ -57,6 +62,17 @@ function createAddRosterCommand({
 }) {
   const adminMention = resolveAdminMention(getPrimaryManagerId);
   const replyNotice = (interaction, notice) => replySharedNotice(interaction, EmbedBuilder, notice);
+  // Replaces a deferred reply or the open picker with one notice.
+  const editNotice = (interaction, notice) => interaction.editReply({
+    content: null,
+    components: [],
+    embeds: [buildNoticeEmbed(EmbedBuilder, notice)],
+  });
+  // Title and body vars of a notice about a saved account.
+  const savedAccountVars = (accountName, characters) => ({
+    rosterIcon: resolveSavedRosterIcon(accountName, characters),
+    rosterName: accountName,
+  });
   // Module-level cache: sessionId -> session state. Lives in process
   // Sessions are memory-only and are discarded on restart. Users can reopen
   // the picker with /raid-add-roster. Random session IDs allow concurrent
@@ -154,12 +170,11 @@ function createAddRosterCommand({
         getCharacterName,
       });
       if (matched) {
+        const vars = savedAccountVars(matched.accountName, matched.characters);
         await replyNotice(interaction, {
           type: "warn",
-          title: t("raid-add-roster.duplicate.preFetchTitle", lang),
-          description: t("raid-add-roster.duplicate.preFetchDescription", lang, {
-            accountName: matched.accountName,
-          }),
+          title: t("raid-add-roster.duplicate.preFetchTitle", lang, vars),
+          description: t("raid-add-roster.duplicate.preFetchDescription", lang, vars),
         });
         return;
       }
@@ -169,22 +184,25 @@ function createAddRosterCommand({
     // new rosters being onboarded, and the target of a Manager add can check
     // the roster saved for them.
     await interaction.deferReply();
+    // Nothing is known about the seed's class before Bible answers.
+    const seedVars = { rosterIcon: ROSTER_ICON_UNKNOWN, rosterName: seedCharName };
     let rosterCharacters;
     try {
       rosterCharacters = await fetchRosterCharacters(seedCharName);
     } catch (error) {
-      await interaction.editReply(
-        t("raid-add-roster.fetch.failed", lang, {
-          iconWarn: UI.icons.warn,
-          error: formatBibleError(error, lang),
-        })
-      );
+      await editNotice(interaction, {
+        type: "error",
+        title: t("raid-add-roster.fetch.failedTitle", lang, seedVars),
+        description: t("raid-add-roster.fetch.failed", lang, { error: formatBibleError(error, lang) }),
+      });
       return;
     }
     if (rosterCharacters.length === 0) {
-      await interaction.editReply(
-        t("raid-add-roster.fetch.empty", lang, { iconWarn: UI.icons.warn })
-      );
+      await editNotice(interaction, {
+        type: "warn",
+        title: t("raid-add-roster.fetch.emptyTitle", lang, seedVars),
+        description: t("raid-add-roster.fetch.empty", lang, seedVars),
+      });
       return;
     }
 
@@ -212,17 +230,11 @@ function createAddRosterCommand({
         getCharacterName,
       });
       if (collidingAccount) {
-        await interaction.editReply({
-          content: null,
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-add-roster.duplicate.postFetchTitle", lang),
-              description: t("raid-add-roster.duplicate.postFetchDescription", lang, {
-                accountName: collidingAccount.accountName,
-              }),
-            }),
-          ],
+        const vars = savedAccountVars(collidingAccount.accountName, collidingAccount.characters);
+        await editNotice(interaction, {
+          type: "warn",
+          title: t("raid-add-roster.duplicate.postFetchTitle", lang, vars),
+          description: t("raid-add-roster.duplicate.postFetchDescription", lang, vars),
         });
         return;
       }
@@ -331,35 +343,22 @@ function createAddRosterCommand({
           console.warn(
             `[add-roster] race-detected duplicate roster: ${err.collidingAccountName}`
           );
-          await interaction.editReply({
-            content: null,
-            components: [],
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "warn",
-                title: t("raid-add-roster.duplicate.raceTitle", session.lang),
-                description: t("raid-add-roster.duplicate.raceDescription", session.lang, {
-                  accountName: err.collidingAccountName,
-                }),
-              }),
-            ],
+          const vars = savedAccountVars(err.collidingAccountName, err.collidingCharacters);
+          await editNotice(interaction, {
+            type: "warn",
+            title: t("raid-add-roster.duplicate.raceTitle", session.lang, vars),
+            description: t("raid-add-roster.duplicate.raceDescription", session.lang, vars),
           });
           return;
         }
         console.error(`[add-roster] persist failed:`, err);
-        await interaction.editReply({
-          content: null,
-          components: [],
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "error",
-              title: t("raid-add-roster.persistFail.title", session.lang),
-              description: t("raid-add-roster.persistFail.description", session.lang, {
-                error: err?.message || err,
-                adminMention,
-              }),
-            }),
-          ],
+        await editNotice(interaction, {
+          type: "error",
+          title: t("raid-add-roster.persistFail.title", session.lang, sessionTitleVars(session)),
+          description: t("raid-add-roster.persistFail.description", session.lang, {
+            error: err?.message || err,
+            adminMention,
+          }),
         });
         return;
       }

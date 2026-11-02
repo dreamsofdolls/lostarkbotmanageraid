@@ -24,6 +24,24 @@ const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass
 const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
 const { clearUserLanguageCache, t } = require("../bot/services/i18n");
 const { createBibleHttpError } = require("../bot/services/auto-manage/bible/rate-limit");
+const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
+
+function withClassEmoji(t, entries) {
+  const previous = Object.fromEntries(Object.keys(entries).map((key) => [key, CLASS_EMOJI_MAP[key]]));
+  Object.assign(CLASS_EMOJI_MAP, entries);
+  t.after(() => Object.assign(CLASS_EMOJI_MAP, previous));
+}
+
+// A self-add command interaction that records every reply and edit payload.
+function commandInteraction(seed, captured) {
+  return {
+    user: { id: "user-1" },
+    options: { getString: () => seed, getUser: () => null },
+    async reply(payload) { captured.push(payload); },
+    async deferReply() {},
+    async editReply(payload) { captured.push(payload); },
+  };
+}
 
 // In-memory User model stub. findOne returns either a "live" doc (with
 // .save) or .lean() returns the plain JSON. save() persists back into
@@ -150,15 +168,92 @@ test("handleAddRosterCommand names a Bible rate limit and keeps an unknown error
       },
       async reply() {},
       async deferReply() {},
-      async editReply(content) {
-        replies.push(content);
+      async editReply(payload) {
+        replies.push(payload.embeds[0].toJSON().description);
       },
     });
   }
 
   assert.ok(replies[0].includes(t("common.bibleError.rateLimit", "vi")), replies[0]);
   assert.equal(replies[0].includes("HTTP 429"), false);
-  assert.ok(replies[1].endsWith("`fetch failed`"), replies[1]);
+  assert.ok(replies[1].includes("`fetch failed`"), replies[1]);
+});
+
+test("add pre-fetch duplicate names the saved roster with its class icon", async (t) => {
+  clearUserLanguageCache();
+  withClassEmoji(t, { Sharpshooter: "<:x:1>" });
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Perfectwings", characters: [savedCharacter("Perfectwings", { class: "Sharpshooter" })] }],
+  });
+  const replies = [];
+
+  await factory.handleAddRosterCommand(commandInteraction("Perfectwings", replies));
+
+  const embed = replies[0].embeds[0].toJSON();
+  assert.equal(embed.title, "⚠️ Roster đã có sẵn · <:x:1> Perfectwings");
+  const nextSteps = embed.description.split("\n\n")[1].split("\n");
+  assert.equal(nextSteps[0], "• Sửa char: `/raid-edit-roster` rồi chọn **Perfectwings**");
+  assert.equal(nextSteps[1], "• Làm lại từ đầu: `/raid-remove-roster` → `/raid-add-roster`");
+});
+
+test("add fetch failure is a notice embed with the question mark icon", async () => {
+  clearUserLanguageCache();
+  const { factory } = makeFactory({
+    fetchRosterCharacters: async () => { throw new TypeError("fetch failed"); },
+  });
+  const edits = [];
+
+  await factory.handleAddRosterCommand(commandInteraction("Spindazz", edits));
+
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].content, null);
+  assert.equal(edits[0].embeds.length, 1);
+  const embed = edits[0].embeds[0].toJSON();
+  assert.ok(embed.title.endsWith("Chưa lấy được roster · ❓ Spindazz"), embed.title);
+});
+
+test("add fetch with no roster is a warn notice naming the seed", async () => {
+  clearUserLanguageCache();
+  const { factory } = makeFactory({ fetchRosterCharacters: async () => [] });
+  const edits = [];
+
+  await factory.handleAddRosterCommand(commandInteraction("Spindazz", edits));
+
+  assert.equal(edits[0].content, null);
+  const embed = edits[0].embeds[0].toJSON();
+  assert.equal(embed.title, "⚠️ Không thấy roster · ❓ Spindazz");
+  assert.ok(embed.description.includes("**Spindazz**"), embed.description);
+});
+
+test("add race duplicate uses the colliding account's characters for the icon", async (t) => {
+  clearUserLanguageCache();
+  withClassEmoji(t, { Sharpshooter: "<:x:1>" });
+  const { factory, docs } = makeFactory();
+  // Another picker saved this Bible roster as "Perfectwings" before Confirm.
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Perfectwings", characters: [savedCharacter("Perfectwings", { class: "Sharpshooter" })] }],
+  });
+  factory.__test.sessions.set("sess-test", {
+    ...makeSession({ seedCharName: "Wingsalt", bibleNames: ["Wingsalt", "Perfectwings"] }),
+    lang: "vi",
+    chars: [{ charName: "Wingsalt", className: "Bard", itemLevel: 1700, combatScore: "80000" }],
+    selectedIndices: new Set([0]),
+  });
+  const edits = [];
+
+  await factory.handleAddRosterButton({
+    user: { id: "user-1" },
+    customId: "add-roster:confirm:sess-test",
+    deferUpdate: async () => {},
+    reply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  const embed = edits.at(-1).embeds[0].toJSON();
+  assert.equal(embed.title, "⚠️ Card khác vừa lưu trước · <:x:1> Perfectwings");
 });
 
 test("handleAddRosterCommand hands its Bible roster names to the Confirm race guard", async () => {
@@ -197,6 +292,7 @@ test("handleAddRosterCommand hands its Bible roster names to the Confirm race gu
     (err) => {
       assert.equal(err.code, "RACE_DUP_ROSTER");
       assert.equal(err.collidingAccountName, "Alpha");
+      assert.deepEqual(err.collidingCharacters.map((character) => character.name), ["Alpha"]);
       return true;
     }
   );

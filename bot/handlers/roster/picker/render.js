@@ -1,7 +1,12 @@
 "use strict";
 
 const { getClassEmoji, isSupportClass } = require("../../../models/Class");
-const { normalizeName, parseCombatScore } = require("../../../utils/raid/common/shared");
+const {
+  getCharacterClass,
+  getCharacterName,
+  normalizeName,
+  parseCombatScore,
+} = require("../../../utils/raid/common/shared");
 
 const ROSTER_ICON_UNKNOWN = "❓";
 const FIELD_VALUE_LIMIT = 1024;
@@ -89,6 +94,20 @@ function resolveRosterIcon(rosterName, characters) {
 }
 
 /**
+ * The title icon of a saved account, read from its stored characters.
+ * @param {string} accountName
+ * @param {object[]} characters - stored character records (name/class)
+ * @returns {string} a class emoji, or ROSTER_ICON_UNKNOWN when none resolves
+ */
+function resolveSavedRosterIcon(accountName, characters) {
+  return resolveRosterIcon(accountName, (characters || []).map((character) => ({
+    name: getCharacterName(character),
+    className: getCharacterClass(character),
+    combatScore: character.combatScore,
+  })));
+}
+
+/**
  * Support and DPS counts for a set of classes, the 🛡️/⚔️ split the raid
  * dropdowns already use.
  * @param {string[]} classNames
@@ -149,4 +168,5 @@ module.exports = {
   formatClassIcon,
   formatSavedCharacterLine,
   resolveRosterIcon,
+  resolveSavedRosterIcon,
 };
