@@ -1,6 +1,6 @@
 "use strict";
 
-const { RAID_REQUIREMENTS, isGoldBound } = require("../../../domain/raid-catalog");
+const { RAID_REQUIREMENTS, isGoldBound, raidModeSortRank } = require("../../../domain/raid-catalog");
 const { normalizeName, toModeKey, toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
@@ -19,6 +19,8 @@ const {
 } = require("../../../utils/raid/common/character");
 
 const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
+const GOLD_RECEIVE_AUTO = "auto";
+const MODE_CANCEL = "cancel";
 
 // Persist a gold override onto a single assigned-raid entry. assignedRaids
 // subdocs use a strict:false Mongoose subschema, and `goldOverride` is a
@@ -31,8 +33,7 @@ const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
 // carries the field through to the DB.
 function writeAssignedRaidOverride(target, raidKey, overrideValue) {
   if (!target.assignedRaids) target.assignedRaids = {};
-  const current = target.assignedRaids[raidKey];
-  const plain = current ? current.toObject() : {};
+  const plain = toPlainAssignedRaid(target.assignedRaids[raidKey]);
   delete plain.goldDisabled;
   delete plain.goldForced;
   if (overrideValue) plain.goldOverride = overrideValue;
@@ -72,6 +73,154 @@ function parseGoldModeValue(value) {
     targetCharName,
     raidKey,
     modeKey,
+  };
+}
+
+/**
+ * Parse the multi-select difficulty values (`raidKey::modeKey` or
+ * `raidKey::cancel`) into one decision per raid. Several modes of one raid
+ * keep the highest-ranked one; a cancel applies only when no mode of that raid
+ * was picked.
+ * @param {string[]} values - submitted select values
+ * @returns {{decisions: Map<string, {modeKey: string}|{cancel: true}>, collapsed: Array<{raidKey: string, keptModeKey: string, droppedModeKeys: string[]}>, invalid: boolean}}
+ *   invalid (with no decisions) when any value is malformed or unknown
+ */
+function parseGoldModeValues(values) {
+  const rejected = { decisions: new Map(), collapsed: [], invalid: true };
+  const picks = new Map();
+  for (const value of Array.isArray(values) ? values : []) {
+    const parts = String(value).split("::");
+    if (parts.length !== 2) return rejected;
+    const [raidKey, modeKey] = parts;
+    const isCancel = modeKey === MODE_CANCEL;
+    if (!VALID_RAID_KEYS.has(raidKey)) return rejected;
+    if (!isCancel && !RAID_REQUIREMENTS[raidKey].modes?.[modeKey]) return rejected;
+    const pick = picks.get(raidKey) || { modeKeys: [], cancel: false };
+    if (isCancel) pick.cancel = true;
+    else if (!pick.modeKeys.includes(modeKey)) pick.modeKeys.push(modeKey);
+    picks.set(raidKey, pick);
+  }
+  if (picks.size === 0) return rejected;
+
+  const decisions = new Map();
+  const collapsed = [];
+  for (const [raidKey, pick] of picks) {
+    if (pick.modeKeys.length === 0) {
+      decisions.set(raidKey, { cancel: true });
+      continue;
+    }
+    const ranked = [...pick.modeKeys]
+      .sort((a, b) => raidModeSortRank(raidKey, b) - raidModeSortRank(raidKey, a));
+    decisions.set(raidKey, { modeKey: ranked[0] });
+    if (ranked.length > 1) {
+      collapsed.push({ raidKey, keptModeKey: ranked[0], droppedModeKeys: ranked.slice(1) });
+    }
+  }
+  return { decisions, collapsed, invalid: false };
+}
+
+/**
+ * Apply one raid decision to a character, mutating its assigned raid. A raid
+ * with no clears this week changes at once; one with clears queues the change
+ * for the next reset; picking the current mode while a change is queued
+ * cancels it.
+ * @param {object} character - character document or plain object
+ * @param {string} raidKey - catalog raid key
+ * @param {{modeKey: string}|{cancel: true}} decision - from parseGoldModeValues
+ * @returns {"immediate"|"deferred"|"cancelled"|"noop"|"ineligible"} outcome
+ */
+function applyModeDecision(character, raidKey, decision) {
+  if (!character.assignedRaids) character.assignedRaids = {};
+  const raidData = character.assignedRaids[raidKey] || {};
+  const plain = toPlainAssignedRaid(raidData);
+  const writePlain = (outcome) => {
+    character.assignedRaids[raidKey] = plain;
+    return outcome;
+  };
+  const cancelPending = () => {
+    if (!plain.pendingModeKey) return "noop";
+    delete plain.pendingModeKey;
+    return writePlain("cancelled");
+  };
+
+  if (decision?.cancel) return cancelPending();
+
+  const modeKey = decision?.modeKey;
+  const requirement = getRequirementFor(raidKey, modeKey);
+  if (!requirement || (Number(character.itemLevel) || 0) < requirement.minItemLevel) {
+    return "ineligible";
+  }
+
+  const currentMode = getRaidModeKey(raidKey, raidData, character);
+  if (getCompletedGateKeys(raidData).length === 0) {
+    if (modeKey === currentMode && !plain.pendingModeKey) return "noop";
+    character.assignedRaids[raidKey] = setAssignedRaidMode(plain, raidKey, modeKey);
+    return "immediate";
+  }
+  if (modeKey === currentMode) return cancelPending();
+  if (plain.pendingModeKey === modeKey) return "noop";
+  plain.pendingModeKey = modeKey;
+  return writePlain("deferred");
+}
+
+/**
+ * Parse the gold-set select values: raid keys (at most the per-character cap)
+ * or the auto option, which wins over any raid ticked with it.
+ * @param {string[]} values - submitted select values
+ * @returns {{kind: "auto"}|{kind: "set", raidKeys: string[]}|{kind: "invalid"}}
+ */
+function parseGoldReceiveValues(values) {
+  const list = Array.isArray(values) ? values.map(String) : [];
+  if (list.includes(GOLD_RECEIVE_AUTO)) return { kind: "auto" };
+  const raidKeys = [...new Set(list)];
+  const valid = raidKeys.length > 0
+    && raidKeys.length <= GOLD_RAID_CAP_PER_CHARACTER
+    && raidKeys.every((raidKey) => VALID_RAID_KEYS.has(raidKey));
+  return valid ? { kind: "set", raidKeys } : { kind: "invalid" };
+}
+
+function receivingRaidKeys(character) {
+  return getStatusRaidsForCharacter(character)
+    .filter((raid) => raid.goldReceives)
+    .map((raid) => raid.raidKey);
+}
+
+/**
+ * Apply a gold set to a character. A set includes the ticked raids and
+ * excludes every other raid the character's card shows; auto removes every
+ * override. Raids are written only when their override actually changes.
+ * @param {object} character - character document or plain object
+ * @param {{kind: "auto"}|{kind: "set", raidKeys: string[]}} receive - from parseGoldReceiveValues
+ * @returns {{changed: boolean, before: string[], after: string[], skipped: string[]}}
+ *   receiving raid keys before/after, and ticked raids the character lacks
+ */
+function applyGoldReceive(character, receive) {
+  if (!character.assignedRaids) character.assignedRaids = {};
+  const statusRaids = getStatusRaidsForCharacter(character);
+  const before = statusRaids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey);
+  const statusKeys = new Set(statusRaids.map((raid) => raid.raidKey));
+  const isAuto = receive?.kind === GOLD_RECEIVE_AUTO;
+  const ticked = new Set(isAuto ? [] : receive?.raidKeys || []);
+
+  // Catalog keys rather than Object.keys: a Mongoose subdoc exposes internals.
+  const targets = isAuto
+    ? [...VALID_RAID_KEYS]
+      .filter((raidKey) => character.assignedRaids[raidKey])
+      .map((raidKey) => [raidKey, null])
+    : statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : "exclude"]);
+
+  let changed = false;
+  for (const [raidKey, override] of targets) {
+    if (getGoldOverride(character.assignedRaids[raidKey]) === override) continue;
+    writeAssignedRaidOverride(character, raidKey, override);
+    changed = true;
+  }
+
+  return {
+    changed,
+    before,
+    after: receivingRaidKeys(character),
+    skipped: [...ticked].filter((raidKey) => !statusKeys.has(raidKey)),
   };
 }
 
@@ -265,39 +414,8 @@ async function setParsedGoldRaidMode(options) {
     { ...options, saveRolloverAlone: true },
     ({ character: target }) => {
       touchedTarget = true;
-      const itemLevel = Number(target?.itemLevel) || 0;
-      if (itemLevel < requirement.minItemLevel) {
-        outcome = "ineligible";
-        return false;
-      }
-
-      const raidData = target.assignedRaids[raidKey] || {};
-      const currentMode = getRaidModeKey(raidKey, raidData, target);
-      const hasRun = getCompletedGateKeys(raidData).length > 0;
-      const plain = toPlainAssignedRaid(raidData);
-
-      if (!hasRun) {
-        if (modeKey === currentMode && !plain.pendingModeKey) {
-          outcome = "noop";
-          return false;
-        }
-        target.assignedRaids[raidKey] = setAssignedRaidMode(plain, raidKey, modeKey);
-        outcome = "immediate";
-      } else if (modeKey === currentMode) {
-        if (!plain.pendingModeKey) {
-          outcome = "noop";
-          return false;
-        }
-        delete plain.pendingModeKey;
-        target.assignedRaids[raidKey] = plain;
-        outcome = "cancelled";
-      } else {
-        plain.pendingModeKey = modeKey;
-        target.assignedRaids[raidKey] = plain;
-        outcome = "deferred";
-      }
-
-      return true;
+      outcome = applyModeDecision(target, raidKey, { modeKey });
+      return outcome !== "ineligible" && outcome !== "noop";
     }
   );
 
@@ -311,6 +429,12 @@ async function setParsedGoldRaidMode(options) {
 }
 
 module.exports = {
+  GOLD_RECEIVE_AUTO,
+  MODE_CANCEL,
+  applyGoldReceive,
+  applyModeDecision,
+  parseGoldModeValues,
+  parseGoldReceiveValues,
   parseGoldModeValue,
   parseGoldToggleValue,
   setParsedGoldRaidMode,
