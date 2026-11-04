@@ -70,6 +70,18 @@ function normalizeRaidChannelContent(content) {
     .trim();
 }
 
+// Directive mixes a message may not combine, in the order they are reported:
+// the first rule that matches is the error the poster sees.
+const DIRECTIVE_REJECTIONS = Object.freeze([
+  { when: (p) => p.lateRaids.length > 0, error: (p) => ({ error: "raid-after-mode", raids: [...new Set(p.lateRaids)] }) },
+  { when: (p) => p.diffSet.size > 1, error: (p) => ({ error: "multi-difficulty", difficulties: [...p.diffSet] }) },
+  { when: (p) => p.gateSet.size > 1, error: (p) => ({ error: "multi-gate", gates: [...p.gateSet] }) },
+  { when: (p) => p.actionSet.size > 1, error: () => ({ error: "done-with-reset" }) },
+  { when: (p) => p.action === "reset" && p.diffSet.size > 0, error: () => ({ error: "reset-with-difficulty" }) },
+  { when: (p) => p.action === "reset" && p.gateSet.size > 0, error: () => ({ error: "reset-with-gate" }) },
+  { when: (p) => p.action === "done" && p.diffSet.size > 0, error: () => ({ error: "done-with-difficulty" }) },
+]);
+
 /**
  * Parse a raid monitor message into a raid-set intent.
  * @param {string} content
@@ -139,23 +151,12 @@ function parseRaidMessage(content) {
   }
 
   if (leftover.length === 0) return null;
-  if (lateRaids.length > 0) {
-    return { error: "raid-after-mode", raids: [...new Set(lateRaids)] };
-  }
-  if (diffSet.size > 1) return { error: "multi-difficulty", difficulties: [...diffSet] };
-  if (gateSet.size > 1) return { error: "multi-gate", gates: [...gateSet] };
-
-  if (actionSet.size > 1) return { error: "done-with-reset" };
-
   const action = [...actionSet][0] || null;
-  if (action === "reset") {
-    if (diffSet.size > 0) return { error: "reset-with-difficulty" };
-    if (gateSet.size > 0) return { error: "reset-with-gate" };
-  } else if (action === "done") {
-    if (diffSet.size > 0) return { error: "done-with-difficulty" };
-  } else if (diffSet.size === 0) {
-    return null;
-  }
+  const parsed = { lateRaids, diffSet, gateSet, actionSet, action };
+  const rejection = DIRECTIVE_REJECTIONS.find((rule) => rule.when(parsed));
+  if (rejection) return rejection.error(parsed);
+  // With no action, only a difficulty makes the message a clear.
+  if (!action && diffSet.size === 0) return null;
 
   const raidKeys = [...raidSet];
   return {

@@ -18,6 +18,10 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Help shows both maintenance times. The daily and weekly reset stay at 17:00 VN.
 - Chaos Gate / Field Boss windows, their `/raid-task` shared tasks and the T-5 world-event reminder follow US Eastern time (ET) in place of a fixed UTC-4, so in US winter time they open at 23:00 VN instead of 22:00 VN.
 
+### Changed (internal)
+- The raid-channel parser reads its directive conflicts (raid after mode, two difficulties, two gates, done with reset, reset or done with a difficulty, reset with a gate) from one ordered rules list instead of an if chain. Checked against 9,296 messages before and after: same result for every one. No behavior change.
+- The interaction router picks the handler per interaction kind from one table, and select, modal and button routes share one first-prefix-wins lookup. New tests pin the routing of each kind. No behavior change.
+
 ## 2026-11-02
 
 ### Removed

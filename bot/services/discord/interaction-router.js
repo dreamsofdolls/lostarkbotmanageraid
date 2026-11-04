@@ -171,56 +171,44 @@ function createInteractionRouter({
     }
   }
 
+  // Component customIds carry dynamic data after a fixed prefix (for example
+  // `raid-check:<action>:<raidKey>`). The first matching prefix wins, so the
+  // order of each route list matters.
+  async function dispatchByPrefix(routes, interaction) {
+    const route = routes.find((entry) => interaction.customId.startsWith(entry.prefix));
+    if (route) await route.handle(interaction);
+  }
+
+  async function dispatchAutocomplete(interaction) {
+    const handler = autocompleteHandlers[interaction.commandName];
+    if (handler) {
+      await handler(interaction);
+      return;
+    }
+    // Unknown autocomplete: respond with empty suggestions so the Discord
+    // client doesn't show a perpetual spinner. Swallow any failure - the
+    // user already sees no suggestions either way.
+    await interaction.respond([]).catch(() => {});
+  }
+
+  // One entry per interaction kind, checked in order. `isModalSubmit` is an
+  // optional call because test doubles of other kinds may not define it.
+  const INTERACTION_DISPATCH = [
+    {
+      is: (interaction) => interaction.isChatInputCommand(),
+      run: async (interaction) => {
+        if (allowedCommandSet.has(interaction.commandName)) await handleSlashCommand(interaction);
+      },
+    },
+    { is: (interaction) => interaction.isAutocomplete(), run: dispatchAutocomplete },
+    { is: (interaction) => interaction.isStringSelectMenu(), run: (interaction) => dispatchByPrefix(selectRoutes, interaction) },
+    { is: (interaction) => interaction.isModalSubmit?.(), run: (interaction) => dispatchByPrefix(modalRoutes, interaction) },
+    { is: (interaction) => interaction.isButton(), run: (interaction) => dispatchByPrefix(buttonRoutes, interaction) },
+  ];
+
   async function dispatch(interaction) {
-    if (interaction.isChatInputCommand()) {
-      if (!allowedCommandSet.has(interaction.commandName)) return;
-      await handleSlashCommand(interaction);
-      return;
-    }
-
-    if (interaction.isAutocomplete()) {
-      const handler = autocompleteHandlers[interaction.commandName];
-      if (handler) {
-        await handler(interaction);
-      } else {
-        // Unknown autocomplete: respond with empty suggestions so the
-        // Discord client doesn't show a perpetual spinner. Swallow any
-        // failure - the user already sees no suggestions either way.
-        await interaction.respond([]).catch(() => {});
-      }
-      return;
-    }
-
-    if (interaction.isStringSelectMenu()) {
-      // Prefix-match routes, the same shape as buttonRoutes below (the
-      // customId can carry dynamic data such as a session ID). First
-      // matching prefix wins.
-      for (const route of selectRoutes) {
-        if (interaction.customId.startsWith(route.prefix)) {
-          await route.handle(interaction);
-          return;
-        }
-      }
-      return;
-    }
-
-    if (interaction.isModalSubmit?.()) {
-      const route = modalRoutes.find(entry => interaction.customId.startsWith(entry.prefix));
-      if (route) await route.handle(interaction);
-      return;
-    }
-
-    if (interaction.isButton()) {
-      // Prefix-match: button customIds in this bot follow
-      // `raid-check:<action>:<raidKey>` and similar shapes. First
-      // matching prefix wins; order in `buttonRoutes` matters.
-      for (const route of buttonRoutes) {
-        if (interaction.customId.startsWith(route.prefix)) {
-          await route.handle(interaction);
-          return;
-        }
-      }
-    }
+    const entry = INTERACTION_DISPATCH.find(({ is }) => is(interaction));
+    if (entry) await entry.run(interaction);
   }
 
   async function handleError(error, interaction) {

@@ -305,3 +305,66 @@ test("interaction router dispatches the same interaction ID once per process", a
   assert.match(capture.warnings[0], /duplicate in-process dispatch ignored/);
   assert.match(capture.warnings[0], /interactionId=interaction-3/);
 });
+
+function createKindInteraction(kind, { id, customId = "", commandName = "raid-status", respond } = {}) {
+  return {
+    ...createChatInteraction({ id, commandName }),
+    customId,
+    isChatInputCommand: () => kind === "chat",
+    isAutocomplete: () => kind === "autocomplete",
+    isStringSelectMenu: () => kind === "select",
+    isModalSubmit: () => kind === "modal",
+    isButton: () => kind === "button",
+    respond: respond || (async () => {}),
+  };
+}
+
+function createRoutingRouter(calls) {
+  const route = (prefix, name = prefix) => ({ prefix, handle: async () => calls.push(name) });
+  return createInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    allowedCommands: ["raid-status"],
+    handleSlashCommand: async (interaction) => calls.push(`slash:${interaction.commandName}`),
+    autocompleteHandlers: { "raid-set": async () => calls.push("auto:raid-set") },
+    selectRoutes: [route("sel:"), route("sel:a", "sel-a")],
+    buttonRoutes: [route("btn", "btn-any"), route("btn-a:")],
+    modalRoutes: [route("modal:")],
+    instanceIdentity: "test",
+    log: createLogCapture().log,
+  });
+}
+
+test("interaction router sends each interaction kind to its own handler, first matching prefix winning", async () => {
+  const calls = [];
+  const router = createRoutingRouter(calls);
+  await router.handle(createKindInteraction("chat", { id: "kind-1" }));
+  await router.handle(createKindInteraction("chat", { id: "kind-2", commandName: "not-allowed" }));
+  await router.handle(createKindInteraction("autocomplete", { id: "kind-3", commandName: "raid-set" }));
+  await router.handle(createKindInteraction("select", { id: "kind-4", customId: "sel:a:1" }));
+  await router.handle(createKindInteraction("modal", { id: "kind-5", customId: "modal:9" }));
+  await router.handle(createKindInteraction("button", { id: "kind-6", customId: "btn-a:2" }));
+  await router.handle(createKindInteraction("button", { id: "kind-7", customId: "zzz" }));
+  assert.deepEqual(calls, ["slash:raid-status", "auto:raid-set", "sel:", "modal:", "btn-any"]);
+});
+
+test("interaction router answers an unknown autocomplete with no suggestions", async () => {
+  const calls = [];
+  const responses = [];
+  const router = createRoutingRouter(calls);
+  await router.handle(createKindInteraction("autocomplete", {
+    id: "kind-8",
+    commandName: "unknown",
+    respond: async (choices) => responses.push(choices),
+  }));
+  assert.deepEqual(responses, [[]]);
+  assert.deepEqual(calls, []);
+});
+
+test("interaction router routes a button whose interaction has no isModalSubmit", async () => {
+  const calls = [];
+  const router = createRoutingRouter(calls);
+  const { isModalSubmit, ...button } = createKindInteraction("button", { id: "kind-9", customId: "btn-a:1" });
+  assert.equal(typeof isModalSubmit, "function");
+  await router.handle(button);
+  assert.deepEqual(calls, ["btn-any"]);
+});
