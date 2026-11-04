@@ -146,17 +146,14 @@ test("a failed Discord edit releases the slot for the latest payload and later r
   assert.deepEqual(f.edits.map(payload => payload.embeds[0].card), ["recovered", "later"]);
 });
 
-test("expiry supersedes a waiting replacement prompt and prevents later writes", async () => {
+test("expiry is written once and prevents later writes", async () => {
   const f = heldDiscordFixture();
   const first = f.redraw();
   await f.entered;
-  const prompt = f.redraw.show({ embeds: [{ card: "replacement prompt" }], components: [{ disabled: false }] });
   const expired = { embeds: [{ card: "expired" }], components: [{ disabled: true }], attachments: [] };
   const last = f.redraw.finish(expired);
   assert.equal(f.redraw.finish({}), last, "expiry is written once");
-  assert.equal(await prompt, false);
   assert.equal(await f.redraw(), false);
-  assert.equal(await f.redraw.show({}), false);
   f.finish();
   await first;
   assert.equal(await last, true);

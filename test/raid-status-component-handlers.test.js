@@ -32,7 +32,6 @@ const {
 const {
   getTargetResetKey,
 } = require("../bot/services/raid/schedulers/weekly-reset");
-const { subdocAssignedRaid } = require("./helpers/assigned-raid-subdoc");
 
 class FakeEmbedBuilder {
   setColor(value) {
@@ -56,17 +55,28 @@ class FakeEmbedBuilder {
   }
 }
 
-function getSelectCustomId(row) {
-  const select = row?.components?.[0];
-  return select?.data?.custom_id || select?.data?.customId || select?.customId || "";
-}
-
 // The shares owner-1 still has with the viewer, as getAccessibleAccounts
 // returns them: none once revoked, one view entry once downgraded.
 const NO_SHARES = async () => [];
 const VIEW_SHARE_OF_OWNER_1 = async () => [
   { ownerDiscordId: "owner-1", accessLevel: "view", isOwn: false },
 ];
+
+// The gold dropdowns act on the characters selected on the card; each entry
+// carries the status raids the card rendered, so the gold set pre-ticked
+// there is Act 4 · Kazeros · Serca.
+function goldSelectionEntry(name, itemLevel = 1720) {
+  return {
+    name,
+    itemLevel,
+    raids: [
+      { raidKey: "armoche", goldReceives: true },
+      { raidKey: "kazeros", goldReceives: true },
+      { raidKey: "serca", goldReceives: true },
+      { raidKey: "horizon", goldReceives: false },
+    ],
+  };
+}
 
 function createHandlerHarness(overrides = {}) {
   const taskFilters = new Map();
@@ -133,6 +143,7 @@ function createHandlerHarness(overrides = {}) {
     getAutoManageCooldownMs: () => 0,
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
     isReplyPrivate: overrides.isReplyPrivate || (() => true),
+    getGoldSelection: overrides.getGoldSelection || (() => [goldSelectionEntry("Goldie")]),
   });
 
   return { handlers, session, taskFilters, goldFilters, get reloadCount() { return reloadCount; } };
@@ -441,132 +452,209 @@ test("raid-status component handlers update filter and task view state", async (
   await handlers[STATUS_COMPONENT_ACTION.viewToggle]({ values: ["gold"] });
   assert.equal(session.currentView, "gold");
 
-  await handlers[STATUS_COMPONENT_ACTION.goldCharFilter]({ values: ["Goldie"] });
+  await handlers[STATUS_COMPONENT_ACTION.goldChars]({ values: ["Goldie"] });
   assert.deepEqual(goldFilters.get(session.currentPage), ["Goldie"]);
 });
 
-test("raid-status component handlers persist gold toggle and request redraw", async () => {
-  let saved = 0;
-  let markedPath = "";
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1700,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "normal",
-                G1: { difficulty: "Level 1", completedDate: 1 },
-                G2: { difficulty: "Level 1", completedDate: 1 },
-              }),
-            },
-          },
-        ],
-      },
-    ],
-    markModified(path) {
-      markedPath = path;
-    },
-    async save() {
-      saved += 1;
-    },
-  };
-  const harness = createHandlerHarness({
-    User: {
-      async findOne(query) {
-        assert.deepEqual(query, { discordId: "viewer" });
-        return doc;
-      },
-    },
-  });
-  let followUpPayload = null;
+test("goldChars stores every picked name and redraws without writing", async () => {
+  // A User without findOne makes any write attempt throw.
+  const { handlers, session, goldFilters } = createHandlerHarness({ User: {} });
 
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    async followUp(payload) {
-      followUpPayload = payload;
-    },
-  });
+  const result = await handlers[STATUS_COMPONENT_ACTION.goldChars]({ values: ["Goldie", "Silver"] });
 
   assert.deepEqual(result, { redraw: true });
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
-  assert.equal(markedPath, "accounts");
-  assert.equal(saved, 1);
-  assert.equal(harness.reloadCount, 1);
-  // The title is a variant pool, so assert the rendered line came from that
-  // pool rather than freezing one phrasing - the point is that the gold-toggle
-  // key was used, not which of its wordings the picker landed on.
-  // The rendered title carries a status-icon prefix, so match on containment
-  // like the original assertion did - just against every variant, since the
-  // point is that the gold-toggle key was used, not which wording was picked.
-  const goldToggleTitle = followUpPayload.embeds[0].title;
-  assert.ok(
-    TRANSLATIONS.vi["raid-status"].goldView.toggleSuccessTitle.variants.some((variant) =>
-      goldToggleTitle.includes(variant),
-    ),
-    `unexpected title: ${goldToggleTitle}`,
-  );
+  assert.deepEqual(goldFilters.get(session.currentPage), ["Goldie", "Silver"]);
 });
 
-test("raid-status component handlers persist gold mode and request redraw", async () => {
-  let saved = 0;
-  let markedPath = "";
+function goldRosterDoc(characters) {
   const doc = {
+    saves: 0,
     weeklyResetKey: getTargetResetKey(),
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1720,
-            assignedRaids: {
-              armoche: {
-                modeKey: "normal",
-                G1: { difficulty: "Normal", completedDate: 1 },
-                G2: { difficulty: "Normal", completedDate: null },
-              },
-            },
-          },
-        ],
-      },
-    ],
+    accounts: [{ accountName: "Roster B", characters }],
     markModified(path) {
-      markedPath = path;
+      doc.markedPath = path;
     },
     async save() {
-      saved += 1;
+      doc.saves += 1;
     },
   };
+  return doc;
+}
+
+function ownerUserModel(doc) {
+  return {
+    async findOne(query) {
+      assert.deepEqual(query, { discordId: "viewer" });
+      return doc;
+    },
+  };
+}
+
+function collectFollowUps(values) {
+  const followUps = [];
+  return {
+    followUps,
+    component: {
+      values,
+      async followUp(payload) {
+        followUps.push(payload);
+      },
+    },
+  };
+}
+
+test("goldReceive applies the ticked set to every selected character and posts one summary", async () => {
+  const doc = goldRosterDoc([
+    { name: "Goldie", itemLevel: 1720, assignedRaids: {} },
+    { name: "Silver", itemLevel: 1720, assignedRaids: {} },
+  ]);
+  const harness = createHandlerHarness({
+    User: ownerUserModel(doc),
+    getGoldSelection: () => [goldSelectionEntry("Goldie"), goldSelectionEntry("Silver")],
+  });
+  const { followUps, component } = collectFollowUps(["armoche", "kazeros"]);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
+
+  assert.deepEqual(result, { redraw: true });
+  for (const character of doc.accounts[0].characters) {
+    assert.equal(character.assignedRaids.armoche.goldOverride, "include", character.name);
+    assert.equal(character.assignedRaids.kazeros.goldOverride, "include", character.name);
+    assert.equal(character.assignedRaids.serca.goldOverride, "exclude", character.name);
+  }
+  assert.equal(doc.markedPath, "accounts");
+  assert.equal(doc.saves, 1);
+  assert.equal(harness.reloadCount, 1);
+  assert.equal(followUps.length, 1);
+  assert.equal(followUps[0].flags, 64);
+  assert.match(followUps[0].embeds[0].title, /Gold nhận đổi xong cho 2 con/);
+});
+
+test("goldReceive with the pre-ticked set unchanged saves nothing and posts nothing", async () => {
+  let queried = false;
   const harness = createHandlerHarness({
     User: {
-      async findOne(query) {
-        assert.deepEqual(query, { discordId: "viewer" });
-        return doc;
+      async findOne() {
+        queried = true;
+        return null;
       },
     },
   });
-  let followUpPayload = null;
+  const { followUps, component } = collectFollowUps(["serca", "armoche", "kazeros"]);
 
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode]({
-    values: ["Goldie::armoche::hard"],
-    async followUp(payload) {
-      followUpPayload = payload;
-    },
-  });
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
 
   assert.deepEqual(result, { redraw: true });
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.modeKey, "normal");
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.pendingModeKey, "hard");
-  assert.equal(markedPath, "accounts");
-  assert.equal(saved, 1);
-  assert.equal(harness.reloadCount, 1);
-  assert.ok(followUpPayload, "expected success follow-up for mode change");
-  assert.equal(followUpPayload.flags, 64);
-  assert.doesNotMatch(followUpPayload.embeds[0].title, /raid-status\.goldView/);
+  assert.equal(queried, false);
+  assert.equal(harness.reloadCount, 0);
+  assert.equal(followUps.length, 0);
+});
+
+test("goldReceive auto resets the selected characters", async () => {
+  const doc = goldRosterDoc([
+    {
+      name: "Goldie",
+      itemLevel: 1720,
+      assignedRaids: {
+        armoche: { modeKey: "hard", goldOverride: "exclude" },
+        kazeros: { modeKey: "normal", goldOverride: "include" },
+      },
+    },
+  ]);
+  const harness = createHandlerHarness({ User: ownerUserModel(doc) });
+  const { followUps, component } = collectFollowUps(["auto", "kazeros"]);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
+
+  assert.deepEqual(result, { redraw: true });
+  const { assignedRaids } = doc.accounts[0].characters[0];
+  assert.ok(!assignedRaids.armoche.goldOverride);
+  assert.ok(!assignedRaids.kazeros.goldOverride);
+  assert.equal(doc.saves, 1);
+  assert.equal(followUps.length, 1);
+  assert.match(followUps[0].embeds[0].title, /Artist tự chọn gold lại cho 1 con/);
+  // Raids ticked together with auto are named as ignored.
+  assert.match(followUps[0].embeds[0].description, /bỏ qua/);
+});
+
+test("goldMode applies picks to all selected characters and posts one summary", async () => {
+  const doc = goldRosterDoc([
+    {
+      name: "Goldie",
+      itemLevel: 1720,
+      assignedRaids: {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: 1 },
+          G2: { difficulty: "Normal", completedDate: null },
+        },
+      },
+    },
+    { name: "Silver", itemLevel: 1725, assignedRaids: { armoche: { modeKey: "normal" } } },
+  ]);
+  const reloadedDocs = [];
+  const harness = createHandlerHarness({
+    User: ownerUserModel(doc),
+    getGoldSelection: () => [goldSelectionEntry("Goldie"), goldSelectionEntry("Silver", 1725)],
+    async reloadViewerAccounts(nextOwnDoc) {
+      reloadedDocs.push(nextOwnDoc);
+    },
+  });
+  const { followUps, component } = collectFollowUps(["armoche::hard"]);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode](component);
+
+  assert.deepEqual(result, { redraw: true });
+  const [goldie, silver] = doc.accounts[0].characters;
+  assert.equal(goldie.assignedRaids.armoche.modeKey, "normal");
+  assert.equal(goldie.assignedRaids.armoche.pendingModeKey, "hard");
+  assert.equal(silver.assignedRaids.armoche.modeKey, "hard");
+  assert.equal(doc.markedPath, "accounts");
+  assert.equal(doc.saves, 1);
+  // The viewer's own saved document feeds the reload instead of a second read.
+  assert.equal(reloadedDocs.length, 1);
+  assert.equal(reloadedDocs[0], doc);
+  assert.equal(followUps.length, 1);
+  assert.equal(followUps[0].flags, 64);
+  assert.match(followUps[0].embeds[0].title, /Đổi độ khó xong cho 2 con/);
+});
+
+test("old-format values write nothing", async () => {
+  let queried = false;
+  const harness = createHandlerHarness({
+    User: {
+      async findOne() {
+        queried = true;
+        return null;
+      },
+    },
+  });
+  for (const [action, values] of [
+    [STATUS_COMPONENT_ACTION.goldMode, ["Goldie::armoche::hard"]],
+    [STATUS_COMPONENT_ACTION.goldReceive, ["Goldie::horizon"]],
+  ]) {
+    const { followUps, component } = collectFollowUps(values);
+    assert.deepEqual(await harness.handlers[action](component), { redraw: false }, action);
+    assert.equal(followUps.length, 0, action);
+  }
+  assert.equal(queried, false);
+});
+
+test("goldReceive warns once when the save fails and still redraws", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const harness = createHandlerHarness({
+    User: ownerUserModel(goldRosterDoc([{ name: "Goldie", itemLevel: 1720, assignedRaids: {} }])),
+    saveWithRetry: async () => {
+      throw new Error("write conflict");
+    },
+  });
+  const { followUps, component } = collectFollowUps(["armoche"]);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(followUps.length, 1);
+  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.bulkSaveFailedTitle));
 });
 
 test("raid-status component handlers reject gold mode writes on view-only shares", async () => {
@@ -593,7 +681,7 @@ test("raid-status component handlers reject gold mode writes on view-only shares
   const followUps = [];
 
   const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode]({
-    values: ["Goldie::armoche::hard"],
+    values: ["armoche::hard"],
     async followUp(payload) {
       followUps.push(payload);
     },
@@ -624,8 +712,8 @@ function staleEditShareSession() {
 
 for (const [action, value] of [
   [STATUS_COMPONENT_ACTION.taskToggle, "Aki::side-1"],
-  [STATUS_COMPONENT_ACTION.goldToggle, "Goldie::horizon"],
-  [STATUS_COMPONENT_ACTION.goldMode, "Goldie::armoche::hard"],
+  [STATUS_COMPONENT_ACTION.goldReceive, "armoche"],
+  [STATUS_COMPONENT_ACTION.goldMode, "armoche::hard"],
 ]) {
   test(`raid-status ${action} re-checks a share revoked after the card opened`, async () => {
     let queried = false;
@@ -652,7 +740,7 @@ for (const [action, value] of [
   });
 }
 
-test("raid-status gold toggle shows the view-only notice and warns once when the share lookup fails", async (t) => {
+test("raid-status gold set shows the view-only notice and warns once when the share lookup fails", async (t) => {
   const warn = t.mock.method(console, "warn", () => {});
   let noticePayload = null;
   const harness = createHandlerHarness({
@@ -663,8 +751,8 @@ test("raid-status gold toggle shows the view-only notice and warns once when the
     },
   });
 
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive]({
+    values: ["armoche"],
     async followUp(payload) {
       noticePayload = payload;
     },
@@ -682,7 +770,7 @@ test("raid-status gold toggle shows the view-only notice and warns once when the
 
 // The real share lookup: the share document stays when the owner leaves the
 // manager list, but the lookup no longer returns an entry for that owner.
-test("raid-status gold toggle says the share was removed when its owner is no longer a manager", async () => {
+test("raid-status gold set says the share was removed when its owner is no longer a manager", async () => {
   let noticePayload = null;
   const harness = createHandlerHarness({
     session: staleEditShareSession(),
@@ -701,8 +789,8 @@ test("raid-status gold toggle says the share was removed when its owner is no lo
     }),
   });
 
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive]({
+    values: ["armoche"],
     async followUp(payload) {
       noticePayload = payload;
     },
@@ -714,226 +802,40 @@ test("raid-status gold toggle says the share was removed when its owner is no lo
   assert.equal(noticePayload.embeds[0].description, shareRevokedDescription.replace("{owner}", "Mira"));
 });
 
-// Opens the replace prompt on a live share, then the owner cuts the share
-// before the pick arrives; getAccessibleAccountsFn says how.
-async function pickReplacementAfterShareIsCut(getAccessibleAccountsFn) {
-  let saved = 0;
-  let shareIsLive = true;
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1730,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "hard",
-                G1: { difficulty: "Level 2", completedDate: null },
-                G2: { difficulty: "Level 2", completedDate: null },
-              }),
-            },
-          },
-        ],
+// The click-time share check passes, then the owner revokes the share before
+// the writer's own check on its save attempt.
+for (const [action, value] of [
+  [STATUS_COMPONENT_ACTION.goldReceive, "armoche"],
+  [STATUS_COMPONENT_ACTION.goldMode, "armoche::hard"],
+]) {
+  test(`raid-status ${action} says the share was removed when the save is refused`, async () => {
+    let checks = 0;
+    const doc = goldRosterDoc([{ name: "Goldie", itemLevel: 1720, assignedRaids: {} }]);
+    const harness = createHandlerHarness({
+      session: staleEditShareSession(),
+      canEditAccountFn: async () => ++checks === 1,
+      getAccessibleAccountsFn: NO_SHARES,
+      User: {
+        async findOne() {
+          return doc;
+        },
       },
-    ],
-    markModified() {},
-    async save() {
-      saved += 1;
-    },
-  };
-  let promptPayload = null;
-  let noticePayload = null;
-  const harness = createHandlerHarness({
-    session: staleEditShareSession(),
-    canEditAccountFn: async () => shareIsLive,
-    getAccessibleAccountsFn,
-    User: {
-      async findOne(query) {
-        assert.deepEqual(query, { discordId: "owner-1" });
-        return doc;
-      },
-    },
-    interaction: {
-      async editReply(payload) {
-        promptPayload = payload;
-      },
-    },
-  });
+    });
+    const { followUps, component } = collectFollowUps([value]);
 
-  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    user: { id: "viewer" },
-  });
-  assert.equal(promptPayload.components.length, 1);
+    const result = await harness.handlers[action](component);
 
-  shareIsLive = false;
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
-    customId: getSelectCustomId(promptPayload.components[0]),
-    user: { id: "viewer" },
-    values: ["armoche"],
-    async followUp(payload) {
-      noticePayload = payload;
-    },
+    assert.deepEqual(result, { redraw: false });
+    assert.equal(doc.saves, 0);
+    // The click-time check and the writer's; the writer's refusal needs no third.
+    assert.equal(checks, 2);
+    assert.equal(followUps.length, 1);
+    assert.equal(
+      followUps[0].embeds[0].description,
+      TRANSLATIONS.vi["raid-status"].goldView.shareRevokedDescription.replace("{owner}", "Mira"),
+    );
   });
-
-  assert.deepEqual(result, { redraw: true });
-  assert.equal(saved, 0);
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, undefined);
-  return noticePayload.embeds[0];
 }
-
-test("raid-status gold replacement says the share was removed when it is revoked while the prompt was open", async () => {
-  const notice = await pickReplacementAfterShareIsCut(NO_SHARES);
-
-  const { shareRevokedDescription } = TRANSLATIONS.vi["raid-status"].goldView;
-  assert.ok(notice.title.includes(TRANSLATIONS.vi["raid-task"].shareRevoked.title));
-  assert.equal(notice.description, shareRevokedDescription.replace("{owner}", "Mira"));
-});
-
-test("raid-status gold replacement says the share is view-only when it is downgraded while the prompt was open", async () => {
-  const notice = await pickReplacementAfterShareIsCut(VIEW_SHARE_OF_OWNER_1);
-
-  assert.equal(
-    notice.description,
-    TRANSLATIONS.vi["raid-status"].goldView.shareViewOnlyDescription.replace("{owner}", "Mira"),
-  );
-});
-
-test("raid-status gold replacement says the share was removed when the save is refused", async () => {
-  let promptPayload = null;
-  let noticePayload = null;
-  let saved = 0;
-  // Live until the pick arrives; then the click-time check passes and the
-  // writer's check fails.
-  let pickChecks = null;
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1730,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "hard",
-                G1: { difficulty: "Level 2", completedDate: null },
-                G2: { difficulty: "Level 2", completedDate: null },
-              }),
-            },
-          },
-        ],
-      },
-    ],
-    markModified() {},
-    async save() {
-      saved += 1;
-    },
-  };
-  const harness = createHandlerHarness({
-    session: staleEditShareSession(),
-    canEditAccountFn: async () => pickChecks === null || ++pickChecks === 1,
-    getAccessibleAccountsFn: NO_SHARES,
-    User: {
-      async findOne() {
-        return doc;
-      },
-    },
-    interaction: {
-      async editReply(payload) {
-        promptPayload = payload;
-      },
-    },
-  });
-
-  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    user: { id: "viewer" },
-  });
-  pickChecks = 0;
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
-    customId: getSelectCustomId(promptPayload.components[0]),
-    user: { id: "viewer" },
-    values: ["armoche"],
-    async followUp(payload) {
-      noticePayload = payload;
-    },
-  });
-
-  assert.deepEqual(result, { redraw: true });
-  assert.equal(saved, 0);
-  // The click-time check and the writer's; the writer's refusal needs no third.
-  assert.equal(pickChecks, 2);
-  assert.equal(
-    noticePayload.embeds[0].description,
-    TRANSLATIONS.vi["raid-status"].goldView.shareRevokedDescription.replace("{owner}", "Mira"),
-  );
-});
-
-test("raid-status gold replacement keeps the generic warning when the save itself fails", async () => {
-  let promptPayload = null;
-  let noticePayload = null;
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1730,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "hard",
-                G1: { difficulty: "Level 2", completedDate: null },
-                G2: { difficulty: "Level 2", completedDate: null },
-              }),
-            },
-          },
-        ],
-      },
-    ],
-    markModified() {},
-    async save() {
-      throw new Error("disk full");
-    },
-  };
-  const harness = createHandlerHarness({
-    session: staleEditShareSession(),
-    canEditAccountFn: async () => true,
-    getAccessibleAccountsFn: async () => assert.fail("a live share needs no share lookup"),
-    User: {
-      async findOne() {
-        return doc;
-      },
-    },
-    interaction: {
-      async editReply(payload) {
-        promptPayload = payload;
-      },
-    },
-  });
-
-  await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    user: { id: "viewer" },
-  });
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
-    customId: getSelectCustomId(promptPayload.components[0]),
-    user: { id: "viewer" },
-    values: ["armoche"],
-    async followUp(payload) {
-      noticePayload = payload;
-    },
-  });
-
-  assert.deepEqual(result, { redraw: true });
-  assert.equal(
-    noticePayload.embeds[0].description,
-    TRANSLATIONS.vi["raid-status"].goldView.toggleFailedDescription,
-  );
-});
 
 test("raid-status roster refresh re-checks a share downgraded after the card opened", async () => {
   let refreshed = false;
@@ -991,162 +893,7 @@ for (const [name, canEditAccountFn, runManualRosterRefresh] of [
   });
 }
 
-test("raid-status component handlers prompt for a gold replacement when locked raid would exceed 3/3", async () => {
-  let saved = 0;
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1730,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "hard",
-                G1: { difficulty: "Level 2", completedDate: null },
-                G2: { difficulty: "Level 2", completedDate: null },
-              }),
-            },
-          },
-        ],
-      },
-    ],
-    markModified(path) {
-      assert.equal(path, "accounts");
-    },
-    async save() {
-      saved += 1;
-    },
-  };
-  const harness = createHandlerHarness({
-    User: {
-      async findOne(query) {
-        assert.deepEqual(query, { discordId: "viewer" });
-        return doc;
-      },
-    },
-    interaction: {
-      async editReply(payload) {
-        promptPayload = payload;
-      },
-    },
-  });
-  let promptPayload = null;
-  let finalPromptPayload = null;
-
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    user: { id: "viewer" },
-  });
-
-  assert.deepEqual(result, { redraw: false });
-  assert.equal(promptPayload.components.length, 1);
-  assert.match(promptPayload.embeds[0].title, /3\/3/);
-  assert.equal(saved, 0);
-  assert.equal(harness.reloadCount, 0);
-
-  const selectId = getSelectCustomId(promptPayload.components[0]);
-  const replaceResult = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
-    customId: selectId,
-    user: { id: "viewer" },
-    values: ["armoche"],
-    async followUp(payload) {
-      finalPromptPayload = payload;
-    },
-  });
-
-  assert.deepEqual(replaceResult, { redraw: true });
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
-  assert.equal(saved, 1);
-  assert.equal(harness.reloadCount, 1);
-  assert.match(finalPromptPayload.embeds[0].title, /Đổi gold nhận xong/);
-});
-
-test("raid-status component handlers pass saved replacement docs into reload before redraw", async () => {
-  let saved = 0;
-  let reloadCount = 0;
-  let reloadedDoc = null;
-  let originalEditPayload = null;
-  const doc = {
-    accounts: [
-      {
-        accountName: "Roster B",
-        characters: [
-          {
-            name: "Goldie",
-            itemLevel: 1730,
-            assignedRaids: {
-              horizon: subdocAssignedRaid({
-                modeKey: "hard",
-                G1: { difficulty: "Level 2", completedDate: null },
-                G2: { difficulty: "Level 2", completedDate: null },
-              }),
-            },
-          },
-        ],
-      },
-    ],
-    markModified(path) {
-      assert.equal(path, "accounts");
-    },
-    async save() {
-      saved += 1;
-    },
-  };
-  const harness = createHandlerHarness({
-    User: {
-      async findOne(query) {
-        assert.deepEqual(query, { discordId: "viewer" });
-        return doc;
-      },
-    },
-    async reloadViewerAccounts(nextOwnDoc) {
-      reloadCount += 1;
-      reloadedDoc = nextOwnDoc;
-    },
-    interaction: {
-      async editReply(payload) {
-        originalEditPayload = payload;
-        promptPayload = payload;
-      },
-    },
-  });
-  let promptPayload = null;
-  let finalEditPayload = null;
-
-  const promptResult = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    user: { id: "viewer" },
-  });
-
-  assert.deepEqual(promptResult, { redraw: false });
-
-  const selectId = getSelectCustomId(promptPayload.components[0]);
-  assert.match(selectId, /^status-gold:replace:/);
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReplace]({
-    customId: selectId,
-    user: { id: "viewer" },
-    values: ["armoche"],
-    async followUp(payload) {
-      finalEditPayload = payload;
-    },
-  });
-
-  assert.deepEqual(result, { redraw: true });
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
-  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
-  assert.equal(saved, 1);
-  assert.equal(reloadCount, 1);
-  assert.equal(reloadedDoc, doc);
-  assert.match(originalEditPayload.embeds[0].title, /3\/3/);
-  assert.equal(originalEditPayload.components.length, 1);
-  assert.match(finalEditPayload.embeds[0].title, /Đổi gold nhận xong/);
-});
-
-test("raid-status component handlers warn when gold toggle cannot be saved", async () => {
-  let followUpPayload = null;
+test("goldReceive warns and reloads when the roster is gone from the fresh document", async () => {
   const harness = createHandlerHarness({
     User: {
       async findOne() {
@@ -1154,18 +901,15 @@ test("raid-status component handlers warn when gold toggle cannot be saved", asy
       },
     },
   });
+  const { followUps, component } = collectFollowUps(["armoche"]);
 
-  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
-    values: ["Goldie::horizon"],
-    async followUp(payload) {
-      followUpPayload = payload;
-    },
-  });
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
 
-  assert.deepEqual(result, { redraw: false });
-  assert.equal(harness.reloadCount, 0);
-  assert.ok(followUpPayload, "expected warning follow-up when gold toggle is not saved");
-  assert.equal(followUpPayload.flags, 64);
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(harness.reloadCount, 1);
+  assert.equal(followUps.length, 1);
+  assert.equal(followUps[0].flags, 64);
+  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.bulkSaveFailedTitle));
 });
 
 test("raid-status component handlers show the view-only lock when a task is toggled on a view-only share", async () => {

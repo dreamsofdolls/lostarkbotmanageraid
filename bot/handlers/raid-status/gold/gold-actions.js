@@ -1,7 +1,7 @@
 "use strict";
 
-const { RAID_REQUIREMENTS, isGoldBound, raidModeSortRank } = require("../../../domain/raid-catalog");
-const { normalizeName, toModeKey, toModeLabel } = require("../../../utils/raid/common/shared");
+const { RAID_REQUIREMENTS, raidModeSortRank } = require("../../../domain/raid-catalog");
+const { normalizeName, toModeKey } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
@@ -39,41 +39,6 @@ function writeAssignedRaidOverride(target, raidKey, overrideValue) {
   if (overrideValue) plain.goldOverride = overrideValue;
   else delete plain.goldOverride;
   target.assignedRaids[raidKey] = plain;
-}
-
-function parseGoldToggleValue(value) {
-  if (!value || value === "noop") return { kind: "noop" };
-  const sepIdx = String(value).indexOf("::");
-  const targetCharName = sepIdx > 0 ? String(value).slice(0, sepIdx) : "";
-  const raidKey = sepIdx > 0 ? String(value).slice(sepIdx + 2) : "";
-  if (!targetCharName || !VALID_RAID_KEYS.has(raidKey)) return { kind: "invalid" };
-  return {
-    kind: "single",
-    targetCharName,
-    raidKey,
-  };
-}
-
-function parseGoldModeValue(value) {
-  if (!value || value === "noop") return { kind: "noop" };
-  const parts = String(value).split("::");
-  if (parts.length < 3) return { kind: "invalid" };
-  const modeKey = parts.pop();
-  const raidKey = parts.pop();
-  const targetCharName = parts.join("::");
-  if (
-    !targetCharName ||
-    !VALID_RAID_KEYS.has(raidKey) ||
-    !RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]
-  ) {
-    return { kind: "invalid" };
-  }
-  return {
-    kind: "single",
-    targetCharName,
-    raidKey,
-    modeKey,
-  };
 }
 
 /**
@@ -274,9 +239,9 @@ async function updateGoldWriteTargets(options, applyUpdate) {
       character: account ? findAccountCharacter(account, name) : null,
     }));
 
-    const shouldSave = account
-      ? await applyUpdate({ userDoc: userDocFresh, account, entries })
-      : false;
+    // A roster renamed or removed since the card was drawn still reaches the
+    // writer, with every entry missing, so the caller can name them.
+    const shouldSave = await applyUpdate({ userDoc: userDocFresh, account, entries });
     if (!shouldSave && !saveRollover) return;
 
     markAccountsModified(userDocFresh);
@@ -286,15 +251,6 @@ async function updateGoldWriteTargets(options, applyUpdate) {
   });
 
   return { saved, userDoc: savedUserDoc, denied };
-}
-
-async function updateGoldWriteTarget(options, applyUpdate) {
-  return updateGoldWriteTargets(
-    { ...options, targetCharNames: [options.targetCharName] },
-    ({ userDoc, account, entries }) => (entries[0].character
-      ? applyUpdate({ userDoc, account, character: entries[0].character })
-      : false)
-  );
 }
 
 const CHANGED_MODE_OUTCOMES = new Set(["immediate", "deferred", "cancelled"]);
@@ -383,138 +339,6 @@ async function saveBulkGoldReceive(options) {
   return { ok: update.saved, denied: update.denied, results, userDoc: update.userDoc };
 }
 
-/**
- * Cycle one raid's gold override on the owner's fresh document, rolled into
- * the current week first.
- * @param {object} options - User, saveWithRetry, discordId (roster owner),
- *   targetAccountName, targetCharName, raidKey, and optionally canWrite
- *   (asked before every save attempt)
- * @returns {Promise<{ok: boolean, denied: boolean, override: string|null, disabled: boolean, needsReplacement: boolean, replacement: object|null, targetRaid: object|null}>}
- *   ok is false when nothing was saved; denied is true when canWrite refused
- */
-async function toggleRaidGoldDisabled(options) {
-  const {
-    raidKey,
-  } = options;
-
-  let nextOverride = null;
-  let targetRaid = null;
-  let replacement = null;
-  const update = await updateGoldWriteTarget(options, ({ character: target }) => {
-    const raidData = target.assignedRaids[raidKey] || {};
-    nextOverride = getNextGoldOverride(raidKey, raidData, target);
-    const raids = getStatusRaidsForCharacter(target);
-    targetRaid = summarizeGoldRaidEntry(raids.find((raid) => raid.raidKey === raidKey));
-    replacement = getGoldReplacementRequirement(target, raidKey, nextOverride, raids);
-    if (replacement?.required) return false;
-
-    writeAssignedRaidOverride(target, raidKey, nextOverride);
-    return true;
-  });
-  return {
-    ok: update.saved,
-    denied: update.denied,
-    override: nextOverride,
-    disabled: nextOverride === "exclude",
-    needsReplacement: !!replacement?.required,
-    replacement,
-    targetRaid,
-  };
-}
-
-/**
- * Include one raid and exclude another in a single save, on the owner's
- * fresh document rolled into the current week.
- * @param {object} options - User, saveWithRetry, discordId (roster owner),
- *   targetAccountName, targetCharName, includeRaidKey, excludeRaidKey, and
- *   optionally canWrite (asked before every save attempt)
- * @returns {Promise<{ok: boolean, userDoc?: object|null, denied?: boolean}>}
- *   ok is false when nothing was saved; denied is true when canWrite refused
- */
-async function replaceRaidGoldSelection(options) {
-  const {
-    includeRaidKey,
-    excludeRaidKey,
-  } = options;
-
-  if (!VALID_RAID_KEYS.has(includeRaidKey) || !VALID_RAID_KEYS.has(excludeRaidKey)) {
-    return { ok: false };
-  }
-
-  const update = await updateGoldWriteTarget(options, ({ character: target }) => {
-    writeAssignedRaidOverride(target, includeRaidKey, "include");
-    writeAssignedRaidOverride(target, excludeRaidKey, "exclude");
-    return true;
-  });
-
-  return { ok: update.saved, userDoc: update.userDoc, denied: update.denied };
-}
-
-/**
- * Run toggleRaidGoldDisabled for a parsed dropdown value, turning a thrown
- * save error into ok false.
- * @param {object} options - toggleRaidGoldDisabled's options with parsed
- *   (from parseGoldToggleValue) in place of targetCharName/raidKey
- * @returns {Promise<object>} handled plus toggleRaidGoldDisabled's result
- */
-async function toggleParsedGoldRaid(options) {
-  const { parsed, logger = console } = options;
-  if (parsed?.kind !== "single") return { handled: false, ok: false };
-  try {
-    const result = await toggleRaidGoldDisabled({
-      ...options,
-      targetCharName: parsed.targetCharName,
-      raidKey: parsed.raidKey,
-    });
-    return { handled: true, ...result };
-  } catch (err) {
-    logger.error?.("[raid-status gold toggle] save failed:", err?.message || err);
-    return { handled: true, ok: false, error: err };
-  }
-}
-
-/**
- * Set or defer a raid's mode on the owner's fresh document. This is the one
- * gold write that also saves a week rollover on its own.
- * @param {object} options - User, saveWithRetry, discordId (roster owner),
- *   targetAccountName, targetCharName, raidKey, modeKey, and optionally
- *   canWrite (asked before every save attempt)
- * @returns {Promise<{ok: boolean, outcome: string, raidKey: string, modeKey: string, raidLabel: string, modeLabel: string, userDoc?: object|null}>}
- *   outcome is immediate, deferred, cancelled, noop, ineligible, invalid or denied
- */
-async function setParsedGoldRaidMode(options) {
-  const {
-    raidKey,
-    modeKey,
-  } = options;
-  const modeMeta = RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey];
-  const requirement = getRequirementFor(raidKey, modeKey);
-  const raidLabel = RAID_REQUIREMENTS[raidKey]?.label || raidKey;
-  const modeLabel = modeMeta?.label || toModeLabel(modeKey);
-  if (!VALID_RAID_KEYS.has(raidKey) || !modeMeta || !requirement) {
-    return { ok: false, outcome: "invalid", raidKey, modeKey, raidLabel, modeLabel };
-  }
-
-  let outcome = "noop";
-  let touchedTarget = false;
-  const update = await updateGoldWriteTarget(
-    { ...options, saveRolloverAlone: true },
-    ({ character: target }) => {
-      touchedTarget = true;
-      outcome = applyModeDecision(target, raidKey, { modeKey });
-      return outcome !== "ineligible" && outcome !== "noop";
-    }
-  );
-
-  if (update.denied) outcome = "denied";
-  const ok = touchedTarget
-    && update.saved
-    && outcome !== "ineligible"
-    && outcome !== "invalid"
-    && outcome !== "noop";
-  return { ok, outcome, raidKey, modeKey, raidLabel, modeLabel, userDoc: update.userDoc };
-}
-
 module.exports = {
   GOLD_RECEIVE_AUTO,
   MODE_CANCEL,
@@ -524,13 +348,6 @@ module.exports = {
   parseGoldReceiveValues,
   saveBulkGoldReceive,
   saveBulkRaidModes,
-  parseGoldModeValue,
-  parseGoldToggleValue,
-  setParsedGoldRaidMode,
-  toggleParsedGoldRaid,
-  toggleRaidGoldDisabled,
-  replaceRaidGoldSelection,
-  getNextGoldOverride,
 };
 
 function getRaidModeKey(raidKey, raidData, character) {
@@ -542,46 +359,4 @@ function getRaidModeKey(raidKey, raidData, character) {
   if (RAID_REQUIREMENTS[raidKey]?.modes?.[gateModeKey]) return gateModeKey;
 
   return getBestEligibleModeKey(raidKey, Number(character?.itemLevel) || 0) || "normal";
-}
-
-function getNextGoldOverride(raidKey, raidData, character) {
-  const current = getGoldOverride(raidData);
-  if (current === "include") return "exclude";
-  if (current === "exclude") return null;
-
-  const modeKey = getRaidModeKey(raidKey, raidData, character);
-  return isGoldBound(raidKey, modeKey) ? "include" : "exclude";
-}
-
-function summarizeGoldRaidEntry(raid) {
-  if (!raid) return null;
-  return {
-    raidKey: raid.raidKey,
-    modeKey: raid.modeKey,
-    raidName: raid.raidName,
-    rawTotalGold: raid.rawTotalGold,
-    totalGold: raid.totalGold,
-    goldBound: raid.goldBound,
-    goldSlotRank: raid.goldSlotRank,
-  };
-}
-
-function getGoldReplacementRequirement(character, raidKey, nextOverride, raidEntries) {
-  if (nextOverride !== "include") return { required: false };
-  const raids = Array.isArray(raidEntries) ? raidEntries : getStatusRaidsForCharacter(character);
-  const targetRaid = raids.find((raid) => raid.raidKey === raidKey);
-  if (!targetRaid || targetRaid.goldReceives) return { required: false };
-
-  const receivingRaids = raids.filter((raid) => raid.goldReceives);
-  if (receivingRaids.length < GOLD_RAID_CAP_PER_CHARACTER) {
-    return { required: false };
-  }
-
-  return {
-    required: true,
-    cap: GOLD_RAID_CAP_PER_CHARACTER,
-    targetCharName: character?.name || character?.charName || "",
-    targetRaid: summarizeGoldRaidEntry(targetRaid),
-    options: receivingRaids.map(summarizeGoldRaidEntry),
-  };
 }

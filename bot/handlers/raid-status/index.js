@@ -245,6 +245,7 @@ function createRaidStatusCommand(deps) {
       buildGoldCharsRow,
       buildGoldModeRow,
       buildGoldReceiveRow,
+      selectedGoldEntries,
     } = createRaidStatusGoldUi({
       EmbedBuilder,
       ActionRowBuilder,
@@ -457,6 +458,7 @@ function createRaidStatusCommand(deps) {
       refreshLocalSyncSnapshot,
       runLocalSyncAction,
       isReplyPrivate: () => replyIsPrivate,
+      getGoldSelection: selectedGoldEntries,
     });
 
     const message = messageFromEdit?.createMessageComponentCollector

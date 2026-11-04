@@ -38,7 +38,7 @@ test("raid-status component routes resolve edit-driven controls", () => {
   );
   assert.equal(getStatusComponentRoute("status:prev").editDriven, true);
   assert.equal(getStatusComponentRoute("status-filter:roster").editDriven, true);
-  assert.equal(getStatusComponentRoute("status-gold:toggle").editDriven, true);
+  assert.equal(getStatusComponentRoute("status-gold:receive").editDriven, true);
   assert.equal(getStatusComponentRoute("status:sync").editDriven, false);
   assert.deepEqual(
     getStatusComponentRoute("status:solo-companion"),
@@ -75,12 +75,12 @@ test("raid-status component routes keep task toggle ids on one action", () => {
 
 test("raid-status component routes resolve gold setup dropdowns", () => {
   assert.equal(
-    getStatusComponentRoute("status-gold:char-filter").action,
-    STATUS_COMPONENT_ACTION.goldCharFilter,
+    getStatusComponentRoute("status-gold:chars").action,
+    STATUS_COMPONENT_ACTION.goldChars,
   );
   assert.equal(
-    getStatusComponentRoute("status-gold:toggle").action,
-    STATUS_COMPONENT_ACTION.goldToggle,
+    getStatusComponentRoute("status-gold:receive").action,
+    STATUS_COMPONENT_ACTION.goldReceive,
   );
   assert.deepEqual(
     getStatusComponentRoute("status-gold:mode"),
@@ -91,15 +91,12 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
       redraw: true,
     },
   );
-  assert.deepEqual(
-    getStatusComponentRoute("status-gold:replace:abc123"),
-    {
-      customId: "status-gold:replace:abc123",
-      action: STATUS_COMPONENT_ACTION.goldReplace,
-      editDriven: true,
-      redraw: true,
-    },
-  );
+});
+
+test("raid-status no longer routes the retired gold toggle and replace selects", () => {
+  for (const customId of ["status-gold:toggle", "status-gold:char-filter", "status-gold:replace:abc123"]) {
+    assert.equal(getStatusComponentRoute(customId), null, customId);
+  }
 });
 
 test("raid-status no longer routes the retired my-raids select", () => {

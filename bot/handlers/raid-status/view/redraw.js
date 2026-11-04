@@ -15,8 +15,8 @@
  * @param {() => Promise<object>} deps.buildEmbedAndCanvas
  * @param {(disabled: boolean) => object[]} deps.buildComponents
  * @param {() => boolean} deps.isSessionEnded
- * @returns {Function} redraw(), show(payload), and finish(payload) resolve
- *   true when their payload reached Discord; edit failures reject.
+ * @returns {Function} redraw() and finish(payload) resolve true when their
+ *   payload reached Discord; edit failures reject.
  */
 function createStatusRedraw({ interaction, buildEmbedAndCanvas, buildComponents, isSessionEnded }) {
   let latestTicket = 0;
@@ -65,10 +65,6 @@ function createStatusRedraw({ interaction, buildEmbedAndCanvas, buildComponents,
     return enqueue({ ...payload, components }, ticket);
   }
 
-  redraw.show = payload => {
-    if (finishing || isSessionEnded()) return Promise.resolve(false);
-    return enqueue(payload, ++latestTicket);
-  };
   redraw.finish = payload => {
     if (finishing) return finalEdit;
     finishing = true;

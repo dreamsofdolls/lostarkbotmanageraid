@@ -6,6 +6,12 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-11-04
 
+### Changed
+- `/raid-status` Gold view edits several characters at once: the character dropdown takes several picks (✏️ marks them on the card), and one pick in the gold or difficulty dropdown applies to every selected character in a single save, followed by one summary notice.
+- The gold dropdown sets the whole gold set: tick up to 3 raids, which are then chosen by hand while the character's other raids are left out; "Let Artist choose" returns the selected characters to automatic. Closing it on the pre-ticked set saves nothing.
+- The difficulty dropdown lists "raid → mode" with the item level it needs and how many selected characters qualify; ticking two modes of one raid keeps the higher one. A raid already run this week still switches after the reset.
+- The one-raid gold toggle and its "3/3 slots full, pick one to untick" prompt are gone, and so are the per-change difficulty notices.
+
 ### Fixed
 - Maintenance reminders follow the official "Wednesday 12:00 AM PT" start, so they move with US daylight saving: 14:00 VN in summer, 15:00 VN in winter (from 2026-11-04). The T-3h ... T-1m reminders and the `/raid-announce` next-boundary preview had stayed at 14:00 VN.
 - Help shows both maintenance times. The daily and weekly reset stay at 17:00 VN.

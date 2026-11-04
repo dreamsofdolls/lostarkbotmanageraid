@@ -13,10 +13,9 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   viewToggle: "viewToggle",
   taskCharFilter: "taskCharFilter",
   taskToggle: "taskToggle",
-  goldCharFilter: "goldCharFilter",
+  goldChars: "goldChars",
+  goldReceive: "goldReceive",
   goldMode: "goldMode",
-  goldToggle: "goldToggle",
-  goldReplace: "goldReplace",
   localSyncAction: "localSyncAction",
 });
 
@@ -107,14 +106,14 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
     redraw: true,
   },
   {
-    customId: "status-gold:char-filter",
-    action: STATUS_COMPONENT_ACTION.goldCharFilter,
+    customId: "status-gold:chars",
+    action: STATUS_COMPONENT_ACTION.goldChars,
     editDriven: true,
     redraw: true,
   },
   {
-    customId: "status-gold:toggle",
-    action: STATUS_COMPONENT_ACTION.goldToggle,
+    customId: "status-gold:receive",
+    action: STATUS_COMPONENT_ACTION.goldReceive,
     editDriven: true,
     redraw: true,
   },
@@ -130,14 +129,6 @@ const ROUTES_BY_CUSTOM_ID = new Map(STATUS_COMPONENT_ROUTES.map((route) => [rout
 
 function getStatusComponentRoute(customId) {
   const id = String(customId || "");
-  if (id.startsWith("status-gold:replace:")) {
-    return Object.freeze({
-      customId: id,
-      action: STATUS_COMPONENT_ACTION.goldReplace,
-      editDriven: true,
-      redraw: true,
-    });
-  }
   if (id.startsWith(LOCAL_SYNC_ACTION_PREFIX)) {
     return Object.freeze({
       customId: id,

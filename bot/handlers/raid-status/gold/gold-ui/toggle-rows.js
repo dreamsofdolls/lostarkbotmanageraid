@@ -477,6 +477,7 @@ function createGoldToggleRows({
     buildGoldCharsRow,
     buildGoldModeRow,
     buildGoldReceiveRow,
+    selectedEntries,
   };
 }
 

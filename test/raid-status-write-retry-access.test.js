@@ -9,11 +9,8 @@ const { createStatusComponentRouteHandlers } = require("../bot/handlers/raid-sta
 const { STATUS_COMPONENT_ACTION } = require("../bot/handlers/raid-status/components/component-routes");
 const {
   parseGoldModeValues,
-  replaceRaidGoldSelection,
   saveBulkGoldReceive,
   saveBulkRaidModes,
-  setParsedGoldRaidMode,
-  toggleParsedGoldRaid,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
 const { getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
 const { dailyResetStartMs } = require("../bot/utils/raid/schedule/reset-windows");
@@ -133,22 +130,6 @@ test("a raid-status task toggle retried after the share was downgraded writes no
 
 test("raid-status gold writes retried after the share was revoked commit nothing", async () => {
   const operations = {
-    toggle: (options) => toggleParsedGoldRaid({
-      ...options,
-      parsed: { kind: "single", targetCharName: "Aki", raidKey: "kazeros" },
-    }),
-    mode: (options) => setParsedGoldRaidMode({
-      ...options,
-      targetCharName: "Aki",
-      raidKey: "armoche",
-      modeKey: "hard",
-    }),
-    replace: (options) => replaceRaidGoldSelection({
-      ...options,
-      targetCharName: "Aki",
-      includeRaidKey: "horizon",
-      excludeRaidKey: "armoche",
-    }),
     bulkMode: (options) => saveBulkRaidModes({
       ...options,
       targetCharNames: ["Aki"],
@@ -204,18 +185,28 @@ function makeGoldSelectHandlers({
     getAccessibleAccountsFn,
     formatGold,
     truncateText,
+    // Aki is selected on the card and receives Act 4 and Kazeros gold.
+    getGoldSelection: () => [{
+      name: "Aki",
+      itemLevel: 1720,
+      raids: [
+        { raidKey: "armoche", goldReceives: true },
+        { raidKey: "kazeros", goldReceives: true },
+        { raidKey: "horizon", goldReceives: false },
+      ],
+    }],
   });
 }
 
 const GOLD_SELECTS = {
-  toggle: {
-    action: STATUS_COMPONENT_ACTION.goldToggle,
-    value: "Aki::kazeros",
-    failedNotice: /Couldn't update received gold/,
+  receive: {
+    action: STATUS_COMPONENT_ACTION.goldReceive,
+    value: "horizon",
+    failedNotice: /couldn't save the change/,
   },
   mode: {
     action: STATUS_COMPONENT_ACTION.goldMode,
-    value: "Aki::armoche::hard",
+    value: "armoche::hard",
     failedNotice: /Couldn't save/,
   },
 };

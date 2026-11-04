@@ -94,9 +94,9 @@ function createRaidStatusComponentLayout({
 
     const currentAccount = accounts[currentPage];
     const sharedFrom = currentAccount?._sharedFrom;
-    const goldToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
-    rows.push(buildGoldReceiveRow(goldToggleDisabled));
-    const modeRow = buildGoldModeRow(goldToggleDisabled);
+    const goldWriteDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+    rows.push(buildGoldReceiveRow(goldWriteDisabled));
+    const modeRow = buildGoldModeRow(goldWriteDisabled);
     if (modeRow && rows.length < 5) rows.push(modeRow);
   };
 

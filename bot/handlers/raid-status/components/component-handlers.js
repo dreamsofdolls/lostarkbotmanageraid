@@ -13,17 +13,18 @@ const {
   toggleParsedSideTask,
 } = require("../task/task-actions");
 const {
-  parseGoldModeValue,
-  parseGoldToggleValue,
-  setParsedGoldRaidMode,
-  toggleParsedGoldRaid,
+  GOLD_RECEIVE_AUTO,
+  parseGoldModeValues,
+  parseGoldReceiveValues,
+  saveBulkGoldReceive,
+  saveBulkRaidModes,
 } = require("../gold/gold-actions");
+const { goldReceiveDefaults } = require("../gold/gold-ui/toggle-rows");
 const {
-  createGoldReplacementFlow,
-} = require("../gold/gold-replacement-flow");
-const {
-  localizedRaidLabel,
-} = require("../gold/gold-formatting");
+  buildGoldReceiveSummaryNotice,
+  buildModeSummaryNotice,
+} = require("../gold/gold-summary");
+const { getClassEmoji: defaultGetClassEmoji } = require("../../../models/Class");
 const { createStatusRedraw } = require("../view/redraw");
 const {
   deferEphemeralReply,
@@ -46,10 +47,10 @@ const {
 } = require("../sync/local-sync-view");
 const {
   firstSelectValue,
+  selectValues,
 } = require("../../../utils/discord/component-values");
 const {
   t,
-  tPick,
 } = require("../../../services/i18n");
 const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
 const {
@@ -129,7 +130,8 @@ function buildRosterRefreshFollowupPayload(result, lang) {
  * Build the /raid-status component handlers, keyed by STATUS_COMPONENT_ACTION.
  * @param {object} ctx - session, builders, models and callbacks of one status
  *   session; canEditAccountFn and getAccessibleAccountsFn default to the
- *   access-control lookups and are injectable for tests
+ *   access-control lookups and are injectable for tests; getGoldSelection
+ *   returns the gold view's selected characters with their status raids
  * @returns {Object<string, Function>} handlers that resolve to { redraw }
  */
 function createStatusComponentRouteHandlers(ctx) {
@@ -139,7 +141,6 @@ function createStatusComponentRouteHandlers(ctx) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    StringSelectMenuBuilder,
     UI,
     User,
     saveWithRetry,
@@ -153,8 +154,6 @@ function createStatusComponentRouteHandlers(ctx) {
     runManualStatusSync,
     runManualRosterRefresh,
     formatNextCooldownRemaining,
-    formatGold,
-    truncateText,
     getAutoManageCooldownMs,
     isReplyPrivate,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
@@ -162,6 +161,8 @@ function createStatusComponentRouteHandlers(ctx) {
     getAccessibleAccountsFn = getAccessibleAccounts,
     refreshLocalSyncSnapshot = async () => null,
     runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
+    getGoldSelection = () => [],
+    getClassEmoji = defaultGetClassEmoji,
     // The session's shared redraw (view/redraw.js); built here when not given.
     redrawMessage = createStatusRedraw({
       interaction,
@@ -170,22 +171,6 @@ function createStatusComponentRouteHandlers(ctx) {
       isSessionEnded: () => false,
     }),
   } = ctx;
-  const goldReplacementFlow = createGoldReplacementFlow({
-    EmbedBuilder,
-    ActionRowBuilder,
-    StringSelectMenuBuilder,
-    UI,
-    User,
-    saveWithRetry,
-    discordId,
-    lang,
-    reloadViewerAccounts,
-    formatGold,
-    truncateText,
-    canEditAccountFn,
-    followUpShareRefusal: (component, sharedFrom) => followUpShareRefusal(component, "gold", sharedFrom),
-    showPrompt: redrawMessage.show,
-  });
   let latestViewTicket = 0;
 
   // _sharedFrom was read when /raid-status opened, and the owner can revoke
@@ -250,6 +235,66 @@ function createStatusComponentRouteHandlers(ctx) {
     const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
     if (!sharedFrom) return;
     await followUpShareRefusal(component, "gold", sharedFrom);
+  }
+
+  function goldViewNotice(type, titleKey, descriptionKey) {
+    return {
+      type,
+      title: t(`raid-status.goldView.${titleKey}`, lang),
+      description: t(`raid-status.goldView.${descriptionKey}`, lang),
+    };
+  }
+
+  async function followUpGoldNotice(component, notice) {
+    if (notice) await followUpNotice(component, EmbedBuilder, notice).catch(() => {});
+  }
+
+  // A save, or a selected character gone from the fresh document, leaves the
+  // session snapshot stale. The viewer's own saved document feeds the reload
+  // directly; a shared roster is read again.
+  async function reloadAfterGoldWrite(result, writeDiscordId, isMissing) {
+    if (!result.ok && !result.results.some(isMissing)) return;
+    await reloadViewerAccounts(result.ok && writeDiscordId === discordId ? result.userDoc : null);
+  }
+
+  // The bulk writers load the owner's document fresh, apply to every selected
+  // character and save once. A view-only or revoked share gets the refusal
+  // notice and no redraw; every other outcome redraws, which also clears the
+  // dropdown's client-side ticks.
+  async function runGoldBulkWrite(component, { logLabel, selection, write, onSaveError, summarize }) {
+    const writeContext = await resolveCurrentAccountWriteContext({
+      logLabel,
+      detail: `chars=${selection.length}`,
+    });
+    if (!writeContext) {
+      await followUpGoldShareRefusal(component);
+      return noRedraw();
+    }
+    const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
+
+    let result;
+    try {
+      result = await write({
+        User,
+        saveWithRetry,
+        discordId: writeDiscordId,
+        targetAccountName,
+        canWrite,
+        targetCharNames: selection.map((entry) => entry.name),
+      });
+    } catch (err) {
+      console.warn(`[${logLabel}] save failed:`, err?.message || err);
+      await followUpGoldNotice(component, onSaveError);
+      return redraw();
+    }
+    if (result.denied) {
+      await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
+      return noRedraw();
+    }
+    const { isMissing, notice } = summarize(result);
+    await reloadAfterGoldWrite(result, writeDiscordId, isMissing);
+    await followUpGoldNotice(component, notice);
+    return redraw();
   }
 
   return {
@@ -665,161 +710,73 @@ function createStatusComponentRouteHandlers(ctx) {
       return redraw();
     },
 
-    [STATUS_COMPONENT_ACTION.goldCharFilter]: async (component) => {
-      const picked = firstSelectValue(component, "");
-      if (picked) {
-        session.setGoldCharSelectionForPage(session.currentPage, [picked]);
+    [STATUS_COMPONENT_ACTION.goldChars]: async (component) => {
+      const picked = selectValues(component).filter(Boolean);
+      if (picked.length > 0) {
+        session.setGoldCharSelectionForPage(session.currentPage, picked);
       }
       return redraw();
     },
 
-    [STATUS_COMPONENT_ACTION.goldReplace]: async (component) => {
-      return goldReplacementFlow.complete(component);
+    [STATUS_COMPONENT_ACTION.goldReceive]: async (component) => {
+      const values = selectValues(component);
+      const receive = parseGoldReceiveValues(values);
+      const selection = getGoldSelection();
+      if (receive.kind === "invalid" || selection.length === 0) return noRedraw();
+      // Closing the dropdown on its pre-ticked set must not pin characters
+      // that already receive those raids automatically.
+      if (receive.kind !== GOLD_RECEIVE_AUTO
+        && sameRaidKeySet(receive.raidKeys, goldReceiveDefaults(selection))) {
+        return redraw();
+      }
+
+      const isMissing = (entry) => entry.status === "missing";
+      return runGoldBulkWrite(component, {
+        logLabel: "raid-status gold receive",
+        selection,
+        write: (target) => saveBulkGoldReceive({ ...target, receive }),
+        onSaveError: goldViewNotice("warn", "bulkSaveFailedTitle", "bulkSaveFailedDescription"),
+        summarize: (result) => ({
+          isMissing,
+          notice: buildGoldReceiveSummaryNotice({
+            result,
+            receive,
+            ignoredTicks: receive.kind === GOLD_RECEIVE_AUTO
+              && values.some((value) => value !== GOLD_RECEIVE_AUTO),
+            lang,
+            getClassEmoji,
+          }) || (
+            // Every selected character is gone (the roster was renamed or
+            // removed since the card was drawn): nothing was written.
+            result.results.length > 0 && result.results.every(isMissing)
+              ? goldViewNotice("warn", "bulkSaveFailedTitle", "bulkSaveFailedDescription")
+              : null
+          ),
+        }),
+      });
     },
 
     [STATUS_COMPONENT_ACTION.goldMode]: async (component) => {
-      const value = firstSelectValue(component, "");
-      const parsed = parseGoldModeValue(value);
-      if (parsed.kind === "noop" || parsed.kind === "invalid") {
-        return noRedraw();
-      }
+      const { decisions, collapsed, invalid } = parseGoldModeValues(selectValues(component));
+      const selection = getGoldSelection();
+      if (invalid || selection.length === 0) return noRedraw();
 
-      const writeContext = await resolveCurrentAccountWriteContext({
+      return runGoldBulkWrite(component, {
         logLabel: "raid-status gold mode",
-        detail: `raid=${parsed.raidKey}`,
-      });
-      if (!writeContext) {
-        await followUpGoldShareRefusal(component);
-        return noRedraw();
-      }
-      const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
-
-      let result;
-      try {
-        result = await setParsedGoldRaidMode({
-          User,
-          saveWithRetry,
-          discordId: writeDiscordId,
-          targetAccountName,
-          canWrite,
-          targetCharName: parsed.targetCharName,
-          raidKey: parsed.raidKey,
-          modeKey: parsed.modeKey,
-        });
-      } catch (err) {
-        console.warn("[raid-status gold mode] save failed:", err?.message || err);
-        await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.goldView.modeFailedTitle", lang),
-          description: t("raid-status.goldView.modeFailedDescription", lang),
-        }).catch(() => {});
-        return noRedraw();
-      }
-
-      if (result.outcome === "ineligible") {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.goldView.modeIneligibleTitle", lang),
-          description: t("raid-status.goldView.modeIneligibleDescription", lang, {
-            mode: result.modeLabel,
-            raidLabel: result.raidLabel,
-          }),
-        }).catch(() => {});
-        return noRedraw();
-      }
-      if (result.outcome === "denied") {
-        await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
-        return noRedraw();
-      }
-      if (result.outcome === "noop") return noRedraw();
-      if (!result.ok) {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.goldView.modeFailedTitle", lang),
-          description: t("raid-status.goldView.modeFailedDescription", lang),
-        }).catch(() => {});
-        return noRedraw();
-      }
-
-      await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
-      const noticeKey = result.outcome === "immediate"
-        ? "modeApplied"
-        : result.outcome === "cancelled"
-          ? "modeCancelled"
-          : "modeDeferred";
-      await followUpNotice(component, EmbedBuilder, {
-        type: "success",
-        title: t(`raid-status.goldView.${noticeKey}Title`, lang),
-        description: t(`raid-status.goldView.${noticeKey}Description`, lang, {
-          characterName: parsed.targetCharName,
-          raidLabel: result.raidLabel,
-          mode: result.modeLabel,
+        selection,
+        write: (target) => saveBulkRaidModes({ ...target, decisions }),
+        onSaveError: goldViewNotice("warn", "modeFailedTitle", "modeFailedDescription"),
+        summarize: (result) => ({
+          isMissing: (entry) => entry.missing,
+          notice: buildModeSummaryNotice({ result, collapsed, lang, getClassEmoji }),
         }),
-      }).catch(() => {});
-      return redraw();
-    },
-
-    [STATUS_COMPONENT_ACTION.goldToggle]: async (component) => {
-      const value = firstSelectValue(component, "");
-      const parsed = parseGoldToggleValue(value);
-      if (parsed.kind === "noop" || parsed.kind === "invalid") {
-        return noRedraw();
-      }
-
-      const writeContext = await resolveCurrentAccountWriteContext({
-        logLabel: "raid-status gold toggle",
-        detail: `raid=${parsed.raidKey}`,
       });
-      if (!writeContext) {
-        await followUpGoldShareRefusal(component);
-        return noRedraw();
-      }
-      const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
-
-      const toggleResult = await toggleParsedGoldRaid({
-        User,
-        saveWithRetry,
-        discordId: writeDiscordId,
-        targetAccountName,
-        canWrite,
-        parsed,
-      });
-      if (toggleResult.needsReplacement) {
-        return goldReplacementFlow.prompt({
-          component,
-          replacement: toggleResult.replacement,
-          writeDiscordId,
-          targetAccountName,
-          sharedFrom: targetAccount._sharedFrom,
-        });
-      }
-      if (toggleResult.denied) {
-        await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
-        return noRedraw();
-      }
-      if (!toggleResult.ok) {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.goldView.toggleFailedTitle", lang),
-          description: t("raid-status.goldView.toggleFailedDescription", lang),
-        }).catch(() => {});
-        return noRedraw();
-      }
-
-      await reloadViewerAccounts();
-      if (toggleResult.override === "include") {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "success",
-          title: tPick("raid-status.goldView.toggleSuccessTitle", lang),
-          description: t("raid-status.goldView.toggleSuccessDescription", lang, {
-            characterName: parsed.targetCharName,
-            raidLabel: localizedRaidLabel(toggleResult.targetRaid, lang) || parsed.raidKey,
-          }),
-        }).catch(() => {});
-      }
-      return redraw();
     },
   };
+}
+
+function sameRaidKeySet(left, right) {
+  return left.length === right.length && left.every((raidKey) => right.includes(raidKey));
 }
 
 module.exports = {
