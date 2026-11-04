@@ -1807,6 +1807,7 @@ module.exports = {
           "**Tip**: pick `roster:` first - the `character:` autocomplete only lists chars in that roster (avoids picking the wrong char when 2 rosters share a name).",
           "**Mode switch**: e.g. Serca Nightmare → Hard wipes the old progress because each weekly entry is mode-scoped.",
           "**Solo**: `raid:` autocomplete includes `Act 4 Solo`, `Kazeros Solo`, `Serca Solo`, and `Belgardin Solo`; Horizon does not support Solo.",
+          "**Horizon**: `raid:` autocomplete and the `/raid-status` difficulty picker offer Level 3 only, and a character below 1750 no longer gets Horizon by default. A character already on Level 1 or 2 keeps it, and typed or synced Level 1/2 clears still record.",
           "**Faster alternative**: post `Act4 Solo Nailaduk` or `Final Hard Nailaduk G1` to update; `Final rs Nailaduk` resets every gate while preserving mode.",
           "**Manager helper flow**: a Raid Manager who used `/raid-add-roster target:U` to register a roster for user U also sees that roster in their own `/raid-set` autocomplete (marked with 👥 + the user's display name) and can keep maintaining U's progress on it.",
         ],

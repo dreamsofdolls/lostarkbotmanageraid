@@ -4,8 +4,8 @@ const { RAID_REQUIREMENTS, raidModeSortRank } = require("../../../domain/raid-ca
 const { normalizeName, toModeKey } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
-  getBestEligibleModeKey,
   getCompletedGateKeys,
+  getDefaultModeKey,
   getRequirementFor,
   setAssignedRaidMode,
   toPlainAssignedRaid,
@@ -362,5 +362,5 @@ function getRaidModeKey(raidKey, raidData, character) {
   const gateModeKey = gateDifficulty ? toModeKey(gateDifficulty) : null;
   if (RAID_REQUIREMENTS[raidKey]?.modes?.[gateModeKey]) return gateModeKey;
 
-  return getBestEligibleModeKey(raidKey, Number(character?.itemLevel) || 0) || "normal";
+  return getDefaultModeKey(raidKey, Number(character?.itemLevel) || 0);
 }

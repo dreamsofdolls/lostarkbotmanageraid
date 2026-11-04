@@ -60,6 +60,19 @@ function areEquivalentRaidModes(left, right) {
   );
 }
 
+/**
+ * Whether pickers and the automatic default may offer a raid mode. A mode
+ * marked `selectable: false` stays in the catalog so stored data, typed input
+ * and synced clears still resolve.
+ * @param {string} raidKey - catalog raid key
+ * @param {string} modeKey - mode key, any case
+ * @returns {boolean} false for an unknown or retired mode
+ */
+function isSelectableMode(raidKey, modeKey) {
+  const mode = RAID_REQUIREMENTS[raidKey]?.modes?.[normalizeModeKey(modeKey)];
+  return !!mode && mode.selectable !== false;
+}
+
 function preserveManualRaidModePreference(storedModeKey, incomingModeKey, raidKey = null) {
   const stored = normalizeModeKey(storedModeKey);
   const incoming = normalizeModeKey(incomingModeKey);
@@ -107,9 +120,11 @@ const RAID_REQUIREMENTS = {
     partySize: 4,
     gates: ["G1", "G2"],
     supportsSolo: false,
+    // Level 1 and Level 2 are retired: no picker or automatic default offers
+    // them, but stored modes and synced clears still resolve and count.
     modes: {
-      normal: { label: "Level 1", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD },
-      hard: { label: "Level 2", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD },
+      normal: { label: "Level 1", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD, selectable: false },
+      hard: { label: "Level 2", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD, selectable: false },
       nightmare: { label: "Level 3", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
     },
   },
@@ -157,18 +172,25 @@ function buildRaidRequirementList() {
         minItemLevel: mode.minItemLevel,
         raidKey,
         modeKey,
+        selectable: mode.selectable !== false,
       });
     }
   }
   return list;
 }
 
+/**
+ * Every (raid, mode) pair in catalog order, retired modes included.
+ * @returns {Array<{label: string, minItemLevel: number, raidKey: string, modeKey: string, selectable: boolean}>}
+ *   pickers skip entries whose `selectable` is false
+ */
 function getRaidRequirementList() {
   return buildRaidRequirementList().map((raid) => ({
     label: raid.label,
     minItemLevel: raid.minItemLevel,
     raidKey: raid.raidKey,
     modeKey: raid.modeKey,
+    selectable: raid.selectable,
   }));
 }
 
@@ -299,6 +321,7 @@ module.exports = {
   getGateGoldParts,
   hasRaidMode,
   isGoldBound,
+  isSelectableMode,
   isSoloModeKey,
   preserveManualRaidModePreference,
   raidModeSortRank,

@@ -65,11 +65,12 @@ test("the auto-manage reset seeds an empty assignedRaids entry per catalog raid 
 });
 
 test("/raid-status lists a character's raids in catalog order", () => {
-  // At 1730 Horizon is listed on its hard mode (1720), which sits below
-  // Kazeros' hard mode (1730), so the min-item-level tiebreak alone would put
-  // Horizon ahead of Kazeros.
+  // At 1730 a stored Horizon Level 2 (1720) sits below Kazeros' hard mode
+  // (1730), so the min-item-level tiebreak alone would put Horizon ahead of
+  // Kazeros.
   const itemLevel = 1730;
-  const raidKeys = getStatusRaidsForCharacter({ itemLevel, assignedRaids: {}, tasks: [] })
+  const assignedRaids = { horizon: { modeKey: "hard" } };
+  const raidKeys = getStatusRaidsForCharacter({ itemLevel, assignedRaids, tasks: [] })
     .map((raid) => raid.raidKey);
   const eligibleKeys = CATALOG_KEYS.filter((raidKey) =>
     Object.values(RAID_REQUIREMENTS[raidKey].modes).some((mode) => mode.minItemLevel <= itemLevel));

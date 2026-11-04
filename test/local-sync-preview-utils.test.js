@@ -297,6 +297,23 @@ test("preview skips unknown difficulty and Solo on the level-based Horizon raid"
   ]), []);
 });
 
+test("preview keeps a stored Horizon Level 2 clear visible below 1750", async () => {
+  // Level 1 and 2 are retired from pickers, but a stored clear still counts,
+  // so the preview keeps showing it as synced.
+  const { buildDiff } = await loadPreviewUtils();
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1730,
+    assignedRaids: {
+      horizon: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1000 } },
+    },
+  }), []);
+
+  const horizon = diff[0].characters[0].cells.filter((cell) => cell.raidKey === "horizon");
+  assert.deepEqual(horizon.map((cell) => [cell.modeKey, cell.states.G1]), [["hard", "synced"]]);
+});
+
 test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary and backend parity", async () => {
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   const cases = [

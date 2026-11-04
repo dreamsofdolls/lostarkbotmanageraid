@@ -294,14 +294,18 @@ test("REGRESSION: raid-status displays detail-only raids but excludes them from 
 
 // --------- buildAccountPageEmbed ---------
 
+// `horizonModeKey` stores a Horizon mode: below 1750 the default no longer
+// picks Level 1 or 2, so a character shows them only when one is stored.
 function makeChar(name, itemLevel, options = {}) {
+  const assignedRaids = ensureAssignedRaids({});
+  if (options.horizonModeKey) assignedRaids.horizon = { modeKey: options.horizonModeKey };
   return {
     id: `${name}-id`,
     name,
     class: "Bard",
     itemLevel,
     isGoldEarner: Boolean(options.isGoldEarner),
-    assignedRaids: ensureAssignedRaids({}),
+    assignedRaids,
     tasks: [],
   };
 }
@@ -729,11 +733,11 @@ test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-co
 });
 
 test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + totalGold", () => {
-  // 1730 char defaults to Hard across all 4 raids per
-  // getBestEligibleModeKey logic, but only 3 raids can count gold.
+  // 1730 char defaults to Hard on Act 4, Kazeros and Serca and stores Horizon
+  // Level 2, but only 3 raids can count gold.
   // Default un-cleared setup takes the first 3 display slots:
   // Act 4 Hard 38000 + Kazeros Hard 48000 + Serca Hard 44000 = 130000G.
-  const char = makeChar("Maxlevel", 1730);
+  const char = makeChar("Maxlevel", 1730, { horizonModeKey: "hard" });
   const raids = getStatusRaidsForCharacter(char);
   assert.equal(raids.length, 4);
   for (const raid of raids) {
@@ -750,7 +754,7 @@ test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + to
 });
 
 test("getStatusRaidsForCharacter: reduced normal raids still auto-count because they have unbound gold", () => {
-  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true });
+  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true, horizonModeKey: "normal" });
   const raids = getStatusRaidsForCharacter(char);
 
   assert.deepEqual(
@@ -769,7 +773,7 @@ test("getStatusRaidsForCharacter: reduced normal raids still auto-count because 
 });
 
 test("counted raid progress: 1700 chars auto-count the only unbound gold raid", () => {
-  const char = makeChar("Fresh1700", 1700, { isGoldEarner: true });
+  const char = makeChar("Fresh1700", 1700, { isGoldEarner: true, horizonModeKey: "normal" });
   const allRaids = getStatusRaidsForCharacter(char);
   const progressRaids = getStatusRaidsForCharacter(char).filter(isCountedRaidProgress);
 
@@ -1431,7 +1435,7 @@ test("buildAccountPageEmbed: per-character header omits 💰 because the body is
 });
 
 test("buildAccountPageEmbed: real 1710 gold-earner with no clears still shows 0G", () => {
-  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true });
+  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true, horizonModeKey: "normal" });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
 
   const embed = buildAccountPageEmbed(

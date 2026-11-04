@@ -1830,6 +1830,7 @@ module.exports = {
           "**Mẹo**: pick `roster:` trước - autocomplete `character:` chỉ list char trong roster đó (đỡ chọn nhầm khi 2 roster cùng tên char).",
           "**Đổi mode**: ví dụ Serca Nightmare → Hard sẽ wipe progress cũ vì raid weekly entry là mode-scoped.",
           "**Solo**: autocomplete `raid:` có `Act 4 Solo`, `Kazeros Solo`, `Serca Solo`, `Belgardin Solo`; Horizon không hỗ trợ Solo.",
+          "**Horizon**: autocomplete `raid:` và dropdown đổi độ khó trong `/raid-status` chỉ còn Level 3, character dưới 1750 không còn tự có Horizon. Character đang ở Level 1 hoặc 2 vẫn giữ nguyên, clear Level 1/2 gõ tay hoặc sync vẫn được ghi.",
           "**Alternative nhanh hơn**: post `Act4 Solo Nailaduk` hoặc `Final Hard Nailaduk G1` để update; `Final rs Nailaduk` reset mọi gate mà vẫn giữ mode.",
           "**Flow Manager add giúp**: Raid Manager đã dùng `/raid-add-roster target:U` để add roster cho user U cũng sẽ thấy roster đó trong autocomplete `/raid-set` của mình (gắn nhãn 👥 + tên user) và có thể tiếp tục update tiến độ cho U.",
         ],

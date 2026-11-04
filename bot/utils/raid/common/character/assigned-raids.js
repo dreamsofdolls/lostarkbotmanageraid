@@ -11,6 +11,7 @@ const {
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
+  isSelectableMode,
 } = require("../../../../domain/raid-catalog");
 const { getGoldOverride } = require("./gold-policy");
 
@@ -21,14 +22,30 @@ function getRequirementFor(raidKey, modeKey) {
   return RAID_REQUIREMENT_MAP[value] || null;
 }
 
-function getBestEligibleModeKey(raidKey, itemLevel) {
-  const modes = Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
+// Modes the automatic default may pick (not manual-only, not retired), hardest first.
+function getAutoModes(raidKey) {
+  return Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
+    .filter(([modeKey, mode]) => mode.manualOnly !== true && isSelectableMode(raidKey, modeKey))
     .map(([modeKey, mode]) => ({ modeKey, minItemLevel: Number(mode.minItemLevel) || 0 }))
-    .filter(({ modeKey }) => RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.manualOnly !== true)
-    .filter((item) => Number(itemLevel) >= item.minItemLevel)
     .sort((a, b) => b.minItemLevel - a.minItemLevel);
+}
 
-  return modes[0]?.modeKey || null;
+function getBestEligibleModeKey(raidKey, itemLevel) {
+  return getAutoModes(raidKey)
+    .find((item) => Number(itemLevel) >= item.minItemLevel)?.modeKey || null;
+}
+
+/**
+ * Mode a raid falls back to when nothing is stored: the hardest automatic mode
+ * the item level allows, else the easiest automatic mode, which the status
+ * item-level check then hides (Horizon below 1750).
+ * @param {string} raidKey - catalog raid key
+ * @param {number} itemLevel - character item level
+ * @returns {string|null} null only for a raid key outside the catalog
+ */
+function getDefaultModeKey(raidKey, itemLevel) {
+  const modes = getAutoModes(raidKey);
+  return getBestEligibleModeKey(raidKey, itemLevel) || modes[modes.length - 1]?.modeKey || null;
 }
 
 function normalizeRaidModeKey(raidKey, modeKey) {
@@ -220,8 +237,7 @@ function ensureAssignedRaids(character) {
   const assigned = {};
 
   for (const raidKey of RAID_ORDER) {
-    const bestModeKey = getBestEligibleModeKey(raidKey, itemLevel) || "normal";
-    const fallbackDifficulty = toModeLabel(bestModeKey);
+    const fallbackDifficulty = toModeLabel(getDefaultModeKey(raidKey, itemLevel));
     const sourceRaid = existing[raidKey] || {};
 
     assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty, raidKey);
@@ -264,6 +280,7 @@ module.exports = {
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
   getCompletedGateKeys,
+  getDefaultModeKey,
   getGateKeys,
   getRequirementFor,
   hasAssignedRaidModeChange,

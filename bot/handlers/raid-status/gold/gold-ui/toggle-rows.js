@@ -9,6 +9,7 @@ const {
   RAID_REQUIREMENTS,
   areEquivalentRaidModes,
   compareRaidModeOrder,
+  isSelectableMode,
   raidModeSortRank,
 } = require("../../../../domain/raid-catalog");
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
@@ -58,9 +59,9 @@ function resolveModeDirection({
 }
 
 /**
- * Difficulty options for one character: every mode its item level allows,
- * minus the mode it already targets. While a change is queued, the current
- * mode becomes a cancel option.
+ * Difficulty options for one character: every selectable mode its item level
+ * allows, minus the mode it already targets. While a change is queued, the
+ * current mode becomes a cancel option, even when that mode is retired.
  * @param {object[]} raids - the character's status raids
  * @param {number} itemLevel - the character's item level
  * @returns {object[]} options sorted by raid then mode order
@@ -79,6 +80,8 @@ function computeGoldModeOptions(raids, itemLevel) {
       if (modeKey === effectiveTarget) continue;
       if (Number(itemLevel) < Number(mode.minItemLevel)) continue;
       const isCancel = !!raid.pendingModeKey && modeKey === currentModeKey;
+      // A retired mode is never a target, but cancelling back to it still is.
+      if (!isCancel && !isSelectableMode(raid.raidKey, modeKey)) continue;
       // Mode declaration order is difficulty order. Normal and Solo share one
       // tier, so switching between them is lateral rather than up/down.
       const direction = resolveModeDirection({
@@ -117,9 +120,10 @@ function hasClearsThisWeek(raid) {
 }
 
 /**
- * Difficulty options for several characters. A (raid, mode) pair appears when
- * at least one selected character meets its item level and does not already
- * target it; a raid with any queued change also gets one cancel option.
+ * Difficulty options for several characters. A selectable (raid, mode) pair
+ * appears when at least one selected character meets its item level and does
+ * not already target it; a raid with any queued change also gets one cancel
+ * option.
  * @param {Array<{itemLevel: number, raids: object[]}>} entries - selected characters
  * @returns {Array<{raidKey: string, modeKey: string|null, isCancel: boolean, direction: string, minItemLevel: number, eligible: number, total: number, deferred: number, pending: number, value: string}>}
  */
@@ -134,6 +138,7 @@ function computeBulkGoldModeOptions(entries) {
     if (holders.length === 0) continue;
 
     for (const [modeKey, mode] of Object.entries(RAID_REQUIREMENTS[raidKey].modes || {})) {
+      if (!isSelectableMode(raidKey, modeKey)) continue;
       const minItemLevel = Number(mode.minItemLevel) || 0;
       const eligible = holders.filter(({ entry }) => (Number(entry.itemLevel) || 0) >= minItemLevel);
       const needing = eligible.filter(({ raid }) => (raid.pendingModeKey || raid.modeKey) !== modeKey);

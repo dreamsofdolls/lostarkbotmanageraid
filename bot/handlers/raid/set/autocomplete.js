@@ -11,6 +11,12 @@ const {
 } = require("../../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../../services/i18n");
 
+/**
+ * Gate progress of one character on one (raid, mode) choice. Clears count only
+ * when the character's current mode for that raid is the choice's mode.
+ * @param {object} deps - character, req ({raidKey, modeKey}) and the helpers it reads
+ * @returns {{done: number, total: number, isComplete: boolean, icon: string, isCurrentMode: boolean}}
+ */
 function computeRaidProgress({
   character,
   req,
@@ -40,7 +46,7 @@ function computeRaidProgress({
     : done > 0
       ? UI.icons.partial
       : UI.icons.pending;
-  return { done, total, isComplete, icon };
+  return { done, total, isComplete, icon, isCurrentMode: sameDifficulty };
 }
 
 function createRaidSetAutocompleteService({
@@ -73,7 +79,7 @@ function createRaidSetAutocompleteService({
   }
 
   function buildRaidProgressChoice({ req, character }) {
-    const { done, total, isComplete, icon } = computeRaidProgress({
+    const { done, total, isComplete, icon, isCurrentMode } = computeRaidProgress({
       character,
       req,
       UI,
@@ -83,6 +89,9 @@ function createRaidSetAutocompleteService({
       getGateKeys,
       toModeLabel,
     });
+    // A retired mode stays listed only for a character already on it, so its
+    // gates can still be marked.
+    if (req.selectable === false && !isCurrentMode) return null;
     const base = `${icon} ${req.label} · ${done}/${total}`;
     return {
       name: isComplete ? `${base} · DONE` : base,
@@ -174,6 +183,7 @@ function createRaidSetAutocompleteService({
 
   function buildPlainRaidChoices({ needle }) {
     return getRaidRequirementList()
+      .filter((req) => req.selectable !== false)
       .filter((req) => !needle || normalizeName(req.label).includes(needle))
       .slice(0, 25)
       .map((req) => ({
@@ -206,7 +216,9 @@ function createRaidSetAutocompleteService({
     for (const req of getRaidRequirementList()) {
       if (itemLevel < req.minItemLevel) continue;
       if (needle && !normalizeName(req.label).includes(needle)) continue;
-      choices.push(buildRaidProgressChoice({ req, character }));
+      const choice = buildRaidProgressChoice({ req, character });
+      if (!choice) continue;
+      choices.push(choice);
       if (choices.length >= 25) break;
     }
     await interaction.respond(choices).catch(() => {});

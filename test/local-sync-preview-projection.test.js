@@ -425,6 +425,8 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
         G1: { difficulty: "Hard", completedDate: null },
         G2: { difficulty: "Hard", completedDate: null },
       },
+      // Stored, since the default no longer picks Horizon Level 2.
+      horizon: { modeKey: "hard" },
     },
   }), buckets);
 
@@ -472,8 +474,9 @@ test("preview summary includes eligible chars with no assigned raid state", () =
     assignedRaids: {},
   }), []);
 
+  // No Horizon: below 1750 the default no longer picks Level 1 or 2.
   assert.deepEqual(summary.completion, {
-    totalRaids: 4,
+    totalRaids: 3,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -489,7 +492,6 @@ test("preview summary includes eligible chars with no assigned raid state", () =
         { raidKey: "armoche", modeKey: "normal", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "normal", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "normal", status: "pending", incoming: false },
-        { raidKey: "horizon", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);

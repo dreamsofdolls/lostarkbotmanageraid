@@ -213,3 +213,50 @@ test("raid-set roster autocomplete starts independent sources together", async (
   assert.equal(interaction.responses.length, 1);
   assert.equal(interaction.responses[0][0].value, "Main");
 });
+
+async function horizonRaidChoices({ character, optionValues }) {
+  clearUserLanguageCache();
+  const interaction = createInteraction({
+    focused: { name: "raid", value: "horizon" },
+    optionValues: { roster: "Main", ...optionValues },
+  });
+  const userDoc = { accounts: [{ accountName: "Main", characters: [character] }] };
+  await createService({ userDoc }).handleRaidSetAutocomplete(interaction);
+  return interaction.responses[0].map((choice) => choice.value);
+}
+
+const horizonCharacter = (itemLevel, assignedRaids = {}) => ({
+  name: "Aki",
+  class: "Bard",
+  itemLevel,
+  assignedRaids,
+});
+
+test("raid-set autocomplete without a character lists Horizon Level 3 only", async () => {
+  const values = await horizonRaidChoices({ character: horizonCharacter(1760), optionValues: {} });
+  assert.deepEqual(values, ["horizon_nightmare"]);
+});
+
+test("raid-set autocomplete offers no Horizon to a 1730 character with none stored", async () => {
+  const values = await horizonRaidChoices({
+    character: horizonCharacter(1730),
+    optionValues: { character: "Aki" },
+  });
+  assert.deepEqual(values, []);
+});
+
+test("raid-set autocomplete offers a 1760 character Horizon Level 3 only", async () => {
+  const values = await horizonRaidChoices({
+    character: horizonCharacter(1760),
+    optionValues: { character: "Aki" },
+  });
+  assert.deepEqual(values, ["horizon_nightmare"]);
+});
+
+test("raid-set autocomplete keeps a character's stored Horizon Level 2 so its gates can be marked", async () => {
+  const values = await horizonRaidChoices({
+    character: horizonCharacter(1730, { horizon: { modeKey: "hard" } }),
+    optionValues: { character: "Aki" },
+  });
+  assert.deepEqual(values, ["horizon_hard"]);
+});
