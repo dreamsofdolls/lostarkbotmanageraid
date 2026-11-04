@@ -1,7 +1,10 @@
 "use strict";
 
-const SCHEDULE_SOURCE_TIME_ZONE = "Etc/GMT+4";
-const SCHEDULE_SOURCE_LABEL = "UTC-4";
+// NA worlds run on "NA East timing" (region merge, 2025-10-21). Events are
+// modelled on US Eastern wall-clock time, so they move with daylight saving
+// (UTC-4 in summer, UTC-5 in winter) while the daily reset stays 10:00 UTC.
+const SCHEDULE_SOURCE_TIME_ZONE = "America/New_York";
+const SCHEDULE_SOURCE_LABEL = "ET";
 const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const SHARED_TASK_CAP_DAILY = 5;
 const SHARED_TASK_CAP_WEEKLY = 5;
@@ -40,7 +43,7 @@ const SHARED_TASK_PRESETS = Object.freeze(Object.assign(Object.create(null), {
     startMinute: 11 * 60,
     slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Mon/Thu/Sat/Sun hourly 11 AM-5 AM UTC-4",
+    scheduleText: "Mon/Thu/Sat/Sun hourly 11 AM-5 AM ET",
   }),
   field_boss: Object.freeze({
     preset: "field_boss",
@@ -54,7 +57,7 @@ const SHARED_TASK_PRESETS = Object.freeze(Object.assign(Object.create(null), {
     startMinute: 11 * 60,
     slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM UTC-4",
+    scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM ET",
   }),
 }));
 

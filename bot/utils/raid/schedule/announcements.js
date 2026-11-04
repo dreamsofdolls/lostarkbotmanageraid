@@ -149,7 +149,7 @@ const ANNOUNCEMENT_REGISTRY = {
     // enabling it for every legacy guild would be an unexpectedly noisy
     // migration.
     defaultEnabled: false,
-    trigger: "5 phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch UTC-4. Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.",
+    trigger: "5 phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch ET (giờ miền Đông Mỹ, có đổi giờ mùa đông). Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.",
     dedup: "1 post/spawn/guild (`lastWorldEventReminderKey`). Tick 1 phút và chỉ claim trong cửa sổ T-5m → T-0 để restart trễ vẫn catch-up mà không post lặp.",
     messageTtl: "6 phút rồi Artist tự xóa",
     previewContent:

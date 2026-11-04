@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Fixed
 - Maintenance reminders follow the official "Wednesday 12:00 AM PT" start, so they move with US daylight saving: 14:00 VN in summer, 15:00 VN in winter (from 2026-11-04). The T-3h ... T-1m reminders and the `/raid-announce` next-boundary preview had stayed at 14:00 VN.
 - Help shows both maintenance times. The daily and weekly reset stay at 17:00 VN.
+- Chaos Gate / Field Boss windows, their `/raid-task` shared tasks and the T-5 world-event reminder follow US Eastern time (ET) in place of a fixed UTC-4, so in US winter time they open at 23:00 VN instead of 22:00 VN.
 
 ## 2026-11-02
 

@@ -100,8 +100,8 @@ function isDuplicateSharedTask(sharedTasks, preset, taskName, reset, nowMs = Dat
 }
 
 function sharedPresetLabel(preset) {
-  if (preset.preset === "chaos_gate") return "Chaos Gate (UTC-4)";
-  if (preset.preset === "field_boss") return "Field Boss (UTC-4)";
+  if (preset.preset === "chaos_gate") return "Chaos Gate (ET)";
+  if (preset.preset === "field_boss") return "Field Boss (ET)";
   return preset.label;
 }
 

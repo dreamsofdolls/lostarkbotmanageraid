@@ -27,7 +27,7 @@ function normalizeReminderWindow(now, leadMs) {
 /**
  * Return the next real spawn strictly after `after`. During an active
  * schedule window, the next slot boundary is a spawn unless it is also the
- * window end (06:00 UTC-4), where the helper advances to the next active day.
+ * window end (06:00 ET), where the helper advances to the next active day.
  */
 function getNextScheduledSpawnAtMs(presetKey, after = new Date()) {
   const date = toDate(after);

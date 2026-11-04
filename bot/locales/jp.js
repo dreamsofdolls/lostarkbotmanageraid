@@ -807,8 +807,8 @@ module.exports = {
     expiredFooter: "⏱️ セッションが期限切れですわ ({seconds}秒) · もう一度見るには /raid-status を実行してね♪",
     taskView: {
       embedTitle: "📝 サイドタスク · {accountName}",
-      mainDescription: "下のドロップダウンを押して各タスクの完了をトグルしてね♪\n{iconReset} リセット: 毎日 19:00 JST · 毎週 19:00 JST 水曜日 · スケジュール毎時 UTC-4 ですわ。",
-      emptyDescription: "このアカウントにはまだサイドタスク / 共通タスクが見えませんわ～\n\n**サイドタスク** (キャラ1体に紐づく、各キャラ毎日3 + 毎週5 キャップ):\n`/raid-task add action:single roster:<ロスター> character:<キャラ> name:<名前> reset:<daily|weekly>`\n\n**共通タスク** (ロスター単位、ロスターの全キャラで共有 - 毎日5 + 毎週5 + スケジュール5 キャップ):\n`/raid-task shared-add roster:<ロスター> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} リセット: 毎日 19:00 JST · 毎週 19:00 JST 水曜日 · Chaos Gate / Field Boss は UTC-4 スケジュールに従って毎時自動オンになりますわ。",
+      mainDescription: "下のドロップダウンを押して各タスクの完了をトグルしてね♪\n{iconReset} リセット: 毎日 19:00 JST · 毎週 19:00 JST 水曜日 · スケジュール毎時 ET (米国東部時間) ですわ。",
+      emptyDescription: "このアカウントにはまだサイドタスク / 共通タスクが見えませんわ～\n\n**サイドタスク** (キャラ1体に紐づく、各キャラ毎日3 + 毎週5 キャップ):\n`/raid-task add action:single roster:<ロスター> character:<キャラ> name:<名前> reset:<daily|weekly>`\n\n**共通タスク** (ロスター単位、ロスターの全キャラで共有 - 毎日5 + 毎週5 + スケジュール5 キャップ):\n`/raid-task shared-add roster:<ロスター> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} リセット: 毎日 19:00 JST · 毎週 19:00 JST 水曜日 · Chaos Gate / Field Boss は ET (米国東部時間) スケジュールに従って毎時自動オンになりますわ。",
       sharedTasksHeader: "🌟 ロスター共通タスク",
       moreSharedTasks: "_他に共通タスクが {n} 個ありますわ_",
       moreCharacters: "_他にタスクを持つキャラが {n} 体いますわ_",
@@ -1432,7 +1432,7 @@ module.exports = {
       noNewRosterTypeLine: "**種類:** {presetLabel}",
       resetDetailDaily: "デイリー (19:00 JST リセット)",
       resetDetailWeekly: "ウィークリー (19:00 JST 水曜日リセット)",
-      resetDetailScheduled: "UTC-4 スケジュール",
+      resetDetailScheduled: "ET スケジュール",
     },
     sharedRemove: {
       noTaskTitle: "共通タスクがもう存在しませんわ",
@@ -1769,7 +1769,7 @@ module.exports = {
           "**アクション `all`**: ロスターの全キャラに同じタスクを追加 (6 回打たなくていいですわ♪)。既にタスクがある / 上限満杯のキャラは返信に名前付きでスキップ表示されますの。",
           "**共通タスク**: `shared-add` で Event Shop、Chaos Gate、Field Boss などロスター単位のチェックを追加ですわ。Event Shop は `expires_at` でイベント終了後に自動非表示にできますの。",
           "**全ロスター共通タスク**: `all_rosters:true` で登録済みの全ロスターに同じプリセットを追加ですわ。既にあるロスターやスロット満杯のロスターは返信でスキップ表示されますの。",
-          "**UTC-4 スケジュールプリセット**: Chaos Gate = 月/木/土/日 11:00-5:00 UTC-4 毎時 · Field Boss = 火/金/日 11:00-5:00 UTC-4 毎時",
+          "**ET スケジュールプリセット** (米国東部時間、冬時間に自動で切り替え): Chaos Gate = 月/木/土/日 11:00-5:00 ET 毎時 · Field Boss = 火/金/日 11:00-5:00 ET 毎時",
           "**トグル**: `/raid-status` → `📝 サイドタスク` ドロップダウン → キャラを選択 (またはまとめてやる時は `🌐 全キャラ`) → タスクをクリックして 🟢/⚪ 切り替えですわ♪",
           "**サブコマンド `clear`**: 1 キャラの全タスクを削除ですわ (削除前にエフェメラル確認あり)。",
           "**個人別リスト**: サイドタスクは自分のキャラに紐づきますの。全ユーザーが同じ機能を使えますわ♪",

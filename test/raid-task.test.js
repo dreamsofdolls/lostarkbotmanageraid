@@ -261,11 +261,27 @@ test("scheduled shared task: Chaos Gate completion key follows hourly spawn slot
     activeDisplay.status,
     new RegExp(`<t:${Math.floor(lateState.slotEndAtMs / 1000)}:f>`)
   );
-  assert.doesNotMatch(activeDisplay.status, /VN · .*UTC-4/);
+  assert.doesNotMatch(activeDisplay.status, /VN · .* ET/);
   assert.match(inactiveDisplay.status, /<t:\d+:R>/);
   assert.match(inactiveDisplay.status, /<t:\d+:f>/);
-  assert.doesNotMatch(inactiveDisplay.status, /VN · .*UTC-4/);
+  assert.doesNotMatch(inactiveDisplay.status, /VN · .* ET/);
   assert.equal(inactiveDisplay.optionStatus, "Mở T5 22:00 VN");
+});
+
+test("scheduled shared task: Chaos Gate follows US Eastern standard time in winter", () => {
+  const task = { preset: "chaos_gate", reset: "scheduled", completedForKey: "" };
+  const wednesdayNoonVn = new Date("2026-11-04T05:00:00.000Z");
+  const fridayLastSlot = new Date("2026-11-06T10:30:00.000Z"); // Fri 05:30 EST.
+
+  const waiting = resolveScheduledSharedTaskState(task, wednesdayNoonVn);
+  const lastSlot = resolveScheduledSharedTaskState(task, fridayLastSlot);
+
+  assert.equal(waiting.active, false);
+  assert.equal(waiting.nextAtMs, Date.UTC(2026, 10, 5, 16, 0, 0, 0)); // Thu 23:00 VN
+  assert.equal(getSharedTaskDisplay(task, wednesdayNoonVn).optionStatus, "Mở T5 23:00 VN");
+  assert.equal(lastSlot.active, true);
+  assert.equal(lastSlot.key, "chaos_gate:slot:2026-11-06T10:00Z");
+  assert.equal(lastSlot.windowEndAtMs, Date.UTC(2026, 10, 6, 11, 0, 0, 0));
 });
 
 test("scheduled shared task: Field Boss follows Tue/Fri/Sun UTC-4 windows", () => {

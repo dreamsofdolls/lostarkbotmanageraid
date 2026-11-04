@@ -829,8 +829,8 @@ module.exports = {
     expiredFooter: "⏱️ Hết {seconds}s, các nút đã khoá · Gõ /raid-status để mở lại",
     taskView: {
       embedTitle: "📝 Side tasks · {accountName}",
-      mainDescription: "Bấm dropdown bên dưới để toggle complete cho từng task nha~\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled hourly theo lịch UTC-4.",
-      emptyDescription: "Tớ chưa thấy side task / task chung nào ở account này nha~\n\n**Side task** (gắn 1 character, cap 3 daily + 5 weekly mỗi char):\n`/raid-task add action:single roster:<roster> character:<char> name:<tên> reset:<daily|weekly>`\n\n**Task chung** (cấp roster, mọi char trong roster share - cap 5 daily + 5 weekly + 5 scheduled):\n`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật hourly theo lịch UTC-4.",
+      mainDescription: "Bấm dropdown bên dưới để toggle complete cho từng task nha~\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled hourly theo lịch ET (giờ miền Đông Mỹ).",
+      emptyDescription: "Tớ chưa thấy side task / task chung nào ở account này nha~\n\n**Side task** (gắn 1 character, cap 3 daily + 5 weekly mỗi char):\n`/raid-task add action:single roster:<roster> character:<char> name:<tên> reset:<daily|weekly>`\n\n**Task chung** (cấp roster, mọi char trong roster share - cap 5 daily + 5 weekly + 5 scheduled):\n`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật hourly theo lịch ET (giờ miền Đông Mỹ).",
       sharedTasksHeader: "🌟 Task chung của roster",
       moreSharedTasks: "_+{n} task chung khác_",
       moreCharacters: "_+{n} character có task khác_",
@@ -1454,7 +1454,7 @@ module.exports = {
       noNewRosterTypeLine: "**Loại:** {presetLabel}",
       resetDetailDaily: "Daily (reset 17:00 VN)",
       resetDetailWeekly: "Weekly (reset 17:00 VN thứ 4)",
-      resetDetailScheduled: "Theo lịch UTC-4",
+      resetDetailScheduled: "Theo lịch ET",
     },
     sharedRemove: {
       noTaskTitle: "Task chung đã không còn",
@@ -1791,7 +1791,7 @@ module.exports = {
           "**Action `all`**: thêm cùng task cho mọi char trong roster (đỡ gõ 6 lần). Char đã có task / đầy cap được skip kèm tên trong reply.",
           "**Task chung**: `shared-add` thêm checklist cấp roster như Event Shop, Chaos Gate, Field Boss. Event shop có thể dùng `expires_at` để tự ẩn sau khi hết event.",
           "**Task chung toàn bộ roster**: dùng `all_rosters:true` để thêm cùng preset cho mọi roster đã đăng ký; roster nào đã có sẵn hoặc đầy slot sẽ được skip trong reply.",
-          "**Preset lịch UTC-4**: Chaos Gate = T2/T5/T7/CN mỗi giờ 11 AM-5 AM UTC-4 · Field Boss = T3/T6/CN mỗi giờ 11 AM-5 AM UTC-4.",
+          "**Preset lịch ET** (giờ miền Đông Mỹ, tự đổi theo giờ mùa đông): Chaos Gate = T2/T5/T7/CN mỗi giờ 11 AM-5 AM ET · Field Boss = T3/T6/CN mỗi giờ 11 AM-5 AM ET.",
           "**Toggle**: vào `/raid-status` → dropdown `📝 Side tasks` → chọn char (hoặc `🌐 Tất cả character` để bulk) → bấm task để flip 🟢/⚪.",
           "**Subcommand `clear`**: xoá toàn bộ task của 1 char (ephemeral confirm trước khi xoá).",
           "**Mỗi người có list riêng**: side tasks gắn với character của bản thân. Mọi user đều có cùng feature.",

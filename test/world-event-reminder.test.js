@@ -45,6 +45,19 @@ test("world-event reminder matches Chaos Gate at T-5 and catches up inside the w
   assert.equal(exact?.spawnAtMs, Date.UTC(2026, 3, 27, 15, 0, 0, 0));
   assert.equal(catchUp?.key, exact?.key);
 });
+test("world-event reminder follows US Eastern standard time in winter", () => {
+  // Thu Nov 5 2026: 11:00 EST = 16:00 UTC = 23:00 VN; the last spawn is
+  // Fri 05:00 EST = 10:00 UTC.
+  const daylightTime = resolveWorldEventReminderForNow(utc(2026, 11, 5, 14, 55));
+  const firstSpawn = resolveWorldEventReminderForNow(utc(2026, 11, 5, 15, 55));
+  const lastSpawn = resolveWorldEventReminderForNow(utc(2026, 11, 6, 9, 55));
+
+  assert.equal(daylightTime, null);
+  assert.deepEqual(firstSpawn?.presetKeys, ["chaos_gate"]);
+  assert.equal(firstSpawn?.spawnAtMs, Date.UTC(2026, 10, 5, 16, 0, 0, 0));
+  assert.equal(lastSpawn?.spawnAtMs, Date.UTC(2026, 10, 6, 10, 0, 0, 0));
+});
+
 test("world-event reminder matches Field Boss alone on Tuesday", () => {
   const match = resolveWorldEventReminderForNow(utc(2026, 4, 28, 14, 56));
   assert.deepEqual(match?.presetKeys, ["field_boss"]);

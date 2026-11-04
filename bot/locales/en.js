@@ -806,8 +806,8 @@ module.exports = {
     expiredFooter: "⏱️ Session expired ({seconds}s) · Run /raid-status to reopen",
     taskView: {
       embedTitle: "📝 Side tasks · {accountName}",
-      mainDescription: "Use the dropdowns below to toggle each task complete~\n{iconReset} Reset: Daily 10:00 UTC · Weekly 10:00 UTC Wednesday · Scheduled hourly per UTC-4.",
-      emptyDescription: "No side tasks or roster-level shared tasks for this account yet~\n\n**Side task** (per-character, cap 3 daily + 5 weekly per char):\n`/raid-task add action:single roster:<roster> character:<char> name:<name> reset:<daily|weekly>`\n\n**Shared task** (roster-level, every char shares it - cap 5 daily + 5 weekly + 5 scheduled):\n`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} Reset: Daily 10:00 UTC · Weekly 10:00 UTC Wed · Chaos Gate / Field Boss auto-arm hourly per UTC-4.",
+      mainDescription: "Use the dropdowns below to toggle each task complete~\n{iconReset} Reset: Daily 10:00 UTC · Weekly 10:00 UTC Wednesday · Scheduled hourly per ET (US Eastern time).",
+      emptyDescription: "No side tasks or roster-level shared tasks for this account yet~\n\n**Side task** (per-character, cap 3 daily + 5 weekly per char):\n`/raid-task add action:single roster:<roster> character:<char> name:<name> reset:<daily|weekly>`\n\n**Shared task** (roster-level, every char shares it - cap 5 daily + 5 weekly + 5 scheduled):\n`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} Reset: Daily 10:00 UTC · Weekly 10:00 UTC Wed · Chaos Gate / Field Boss auto-arm hourly per ET (US Eastern time).",
       sharedTasksHeader: "🌟 Roster-shared tasks",
       moreSharedTasks: "_+{n} more shared task(s)_",
       moreCharacters: "_+{n} more character(s) with tasks_",
@@ -1431,7 +1431,7 @@ module.exports = {
       noNewRosterTypeLine: "**Type:** {presetLabel}",
       resetDetailDaily: "Daily (resets 10:00 UTC)",
       resetDetailWeekly: "Weekly (resets 10:00 UTC Wed)",
-      resetDetailScheduled: "On UTC-4 schedule",
+      resetDetailScheduled: "On ET schedule",
     },
     sharedRemove: {
       noTaskTitle: "Shared task no longer there",
@@ -1768,7 +1768,7 @@ module.exports = {
           "**Action `all`**: adds the same task to every char in a roster (saves 6 commands). Chars already at cap or with the same task get skipped, and their names are listed in the reply.",
           "**Shared tasks**: `shared-add` adds roster-level checks like Event Shop, Chaos Gate, and Field Boss. Event shops can use `expires_at` so they disappear after the event.",
           "**Roster-wide shared tasks**: pass `all_rosters:true` to apply the same preset to every saved roster; existing rosters or full-slot rosters are reported as skipped.",
-          "**UTC-4 schedule presets**: Chaos Gate = Mon/Thu/Sat/Sun hourly 11 AM-5 AM UTC-4 · Field Boss = Tue/Fri/Sun hourly 11 AM-5 AM UTC-4.",
+          "**ET schedule presets** (US Eastern time, follows daylight saving): Chaos Gate = Mon/Thu/Sat/Sun hourly 11 AM-5 AM ET · Field Boss = Tue/Fri/Sun hourly 11 AM-5 AM ET.",
           "**Toggle**: open `/raid-status` → dropdown `📝 Side tasks` → pick a char (or `🌐 Tất cả character` for bulk) → click a task to flip 🟢/⚪.",
           "**Subcommand `clear`**: deletes every task on a single char (ephemeral confirm before delete).",
           "**Each player has their own list**: side tasks attach to your own characters. Every user has the same feature.",

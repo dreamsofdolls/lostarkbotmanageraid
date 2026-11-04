@@ -3,7 +3,7 @@
  * /raid-task: per-character + roster-level side tasks (Una dailies,
  * Chaos Gate, Field Boss, custom presets). Subcommands: add / remove
  * / clear / shared-add / shared-remove. Auto-reset 17:00 VN daily,
- * Wed 17:00 weekly; scheduled presets follow UTC-4 windows. Toggle
+ * Wed 17:00 weekly; scheduled presets follow US Eastern (ET) windows. Toggle
  * complete via the /raid-status side-tasks dropdown.
  */
 
