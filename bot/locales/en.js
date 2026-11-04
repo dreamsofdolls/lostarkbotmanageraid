@@ -821,7 +821,7 @@ module.exports = {
       viewToggleTaskLabel: "Side tasks",
       viewToggleTaskDescription: "View + toggle per-char tasks and roster-shared tasks",
       viewToggleGoldLabel: "Gold & difficulty",
-      viewToggleGoldDescription: "View + toggle gold, and change raid difficulty per character",
+      viewToggleGoldDescription: "Set received gold and raid difficulty for one or several characters",
       viewToggleSyncLabel: "Local Sync",
       viewToggleSyncDescription: "Get a Local Reader link and see the latest sync",
       viewTogglePlaceholder: "Pick a view...",
@@ -838,7 +838,7 @@ module.exports = {
     },
     goldView: {
       embedTitle: "💰 Gold & difficulty · {accountName}",
-      mainDescription: "Auto mode counts only raids with unbound gold by default. Fully bound raids do not consume a slot unless you force them on here.",
+      mainDescription: "Auto mode counts only raids with unbound gold by default; fully bound raids take no slot. Tick the characters to change in the character dropdown (✏️ on the card), then pick gold raids or difficulties: one pick applies to all of them.",
       emptyDescription: "No eligible gold-earner characters on this account yet.\n\nUse `/raid-gold-earner roster:<name>` to choose gold-earner characters first. The current raid-gold cap is **{cap} raids / character**.",
       allAccounts: "🌐 Total gold across all rosters: **{earned}** / **{total}**{boundTail}",
       accountLine: "💰 Gold on this account: **{earned}** / **{total}**{boundTail}",
@@ -1710,7 +1710,7 @@ module.exports = {
           "**Filters**: raid filter dropdown to zoom into one specific raid. Toggle `📝 Side tasks` to view daily/weekly chores registered via `/raid-task`.",
           "**Solo**: Act 4/Kazeros/Serca/Belgardin Solo stays visible in character cards and the raid dropdown with its own pending count, but is excluded from all-raids, roster, header, and footer pending/success totals. A Solo raid that takes no gold slot this week stays on the card but is counted nowhere. Horizon has no Solo mode.",
           "**💰 Gold tracking**: all-raid view shows `💰 earned / total G` on each gold-earner card, plus a per-account rollup line in the description. The `🔒 ...` tail is the bound share inside that total (normal Act 4/Kazeros/Serca/Belgardin split half bound). LA caps at 6 gold-earners/account/week - mark them via `/raid-gold-earner roster:<name>`. When you filter to one raid, per-character gold lines are hidden to keep the card clean, while the raid-scoped rollup stays in the description.",
-          "**Difficulty changes**: in the **Gold & difficulty** view, pick a raid difficulty for the active character. If that raid already ran this week, Artist queues it for the next weekly reset.",
+          "**Gold & difficulty**: in the **Gold & difficulty** view, tick one or more characters in the first dropdown (✏️ marks them on the card). The gold dropdown takes up to 3 raids to receive gold from and leaves the others out; **🔄 Let Artist choose** goes back to automatic. The difficulty dropdown takes several raid → difficulty picks at once. Each time a dropdown closes, Artist saves once for every selected character and sends one summary. A raid already run this week changes difficulty after the next weekly reset.",
           "**🗃️ Local Sync**: lives directly inside the `/raid-status` frame. Pick it to get a Local Reader link and see the latest sync. A preview still waiting (say, a web sync that failed halfway) can still be Synced / Cancelled / Refreshed right there, then switch back to another view without losing the message. With no sync mode on, the view still opens but only explains how to turn it on, with no buttons.",
           "**Real-time countdown**: the `Last updated`, `Last synced`, `Sync ready` lines tick down automatically (Discord native timestamp), no need to refresh the embed.",
         ],
@@ -2148,7 +2148,7 @@ module.exports = {
     goldValue: [
       "Open `/raid-status` all-raid view to see `💰 earned / total G` per gold-earner plus the `💰 Roster` rollup across the current roster. The `🔒 ...` tail shows how much of that total is bound gold. When filtering to one raid, per-character gold lines are hidden while the rollup stays visible.",
       "Pick 6 gold-earners via `/raid-gold-earner roster:<name>` (LA cap is 6 / account / week). New characters added by `/raid-add-roster` start as gold-earners.",
-      "In the **Gold & difficulty** view of `/raid-status`, use the difficulty dropdown to set a raid mode for a character. Already ran it this week? Artist queues the change for the next weekly reset.",
+      "In `/raid-status` → **Gold & difficulty**, tick one or more characters, then pick gold raids (up to 3) or difficulties for all of them. A raid already run this week switches after the weekly reset.",
     ],
     iconName: "🛡️ ⚔️ What do the dropdown icons mean?",
     iconValue: [

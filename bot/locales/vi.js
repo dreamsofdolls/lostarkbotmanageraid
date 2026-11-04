@@ -844,7 +844,7 @@ module.exports = {
       viewToggleTaskLabel: "Side tasks",
       viewToggleTaskDescription: "Xem + toggle task riêng theo char và task chung của roster",
       viewToggleGoldLabel: "Gold & độ khó",
-      viewToggleGoldDescription: "Xem + toggle gold nhận, và đổi độ khó raid cho từng character",
+      viewToggleGoldDescription: "Chỉnh gold nhận và độ khó raid, cho một hay nhiều character một lần",
       viewToggleSyncLabel: "Local Sync",
       viewToggleSyncDescription: "Lấy link Local Reader và xem lượt đồng bộ gần nhất",
       viewTogglePlaceholder: "Chọn view...",
@@ -861,7 +861,7 @@ module.exports = {
     },
     goldView: {
       embedTitle: "💰 Gold & độ khó · {accountName}",
-      mainDescription: "Auto mặc định chỉ tính raid có gold unbound. Raid full bound không tự ăn slot; cậu có thể ép nhận hoặc tắt nhận bằng dropdown bên dưới.",
+      mainDescription: "Auto mặc định chỉ tính raid có gold unbound; raid full bound không tự ăn slot. Tick các con cần chỉnh ở dropdown character (✏️ trên card), rồi chọn raid nhận gold hoặc độ khó: một lần chọn áp cho cả nhóm.",
       emptyDescription: "Chưa có character gold-earner đủ điều kiện trong account này.\n\nDùng `/raid-gold-earner roster:<tên>` để chọn character ăn gold trước nha. Cap gold raid hiện là **{cap} raid / character**.",
       allAccounts: "🌐 Tổng gold tất cả roster: **{earned}** / **{total}**{boundTail}",
       accountLine: "💰 Gold nhận account này: **{earned}** / **{total}**{boundTail}",
@@ -1733,7 +1733,7 @@ module.exports = {
           "**Filter**: dropdown raid filter để zoom 1 raid cụ thể. Toggle `📝 Side tasks` để xem checklist chore daily/weekly đã đăng ký qua `/raid-task`.",
           "**Solo**: Act 4/Kazeros/Serca/Belgardin Solo vẫn hiện trong card và dropdown raid với pending riêng, nhưng không cộng vào tổng pending/success ở all-raids, roster, header hay footer. Raid Solo không chiếm slot gold nào tuần này vẫn hiện trong card nhưng không được đếm ở đâu cả. Horizon không có Solo.",
           "**💰 Track gold**: all-raid view hiện dòng `💰 đã kiếm / tổng G` trên từng gold-earner, kèm rollup per-account ở description cộng dồn mọi gold-earner. Phần `🔒 ...` là gold bound nằm trong tổng đó (normal Act 4/Kazeros/Serca/Belgardin có nửa bound). LA cap 6 gold-earner/account/tuần - mark bằng `/raid-gold-earner roster:<tên>`. Khi filter 1 raid cụ thể, Artist ẩn dòng gold từng char để card gọn hơn, còn rollup theo raid vẫn nằm ở description.",
-          "**Đổi độ khó**: trong view **Gold & độ khó**, chọn độ khó raid cho character đang xem. Nếu raid đó đã chạy tuần này, Artist sẽ xếp lịch áp dụng sau reset tuần kế tiếp.",
+          "**Gold & độ khó**: trong view **Gold & độ khó**, tick một hay nhiều character ở dropdown đầu (con đang chọn có ✏️ trên card). Dropdown gold: tick tối đa 3 raid nhận gold, raid còn lại bỏ; **🔄 Để Artist tự chọn** trả về tự động. Dropdown độ khó: tick nhiều cặp raid → độ khó cùng lúc. Mỗi lần đóng dropdown là một lần lưu cho mọi con đã chọn, kèm một bản tóm tắt. Raid đã chạy tuần này sẽ đổi độ khó sau reset tuần kế tiếp.",
           "**🗃️ Local Sync**: view này nằm trực tiếp trong khung `/raid-status`. Chọn để lấy link Local Reader và xem lượt đồng bộ gần nhất. Preview nào còn chờ (ví dụ lần ghi trên web bị lỗi giữa chừng) vẫn Đồng bộ / Huỷ / Làm mới ngay tại chỗ được, xong lại đổi view khác mà không mất tin nhắn. Chưa bật sync mode thì view vẫn mở được nhưng chỉ hướng dẫn cách bật, không có nút nào.",
           "**Real-time countdown**: dòng `Last updated`, `Last synced`, `Sync ready` đếm ngược tự động (Discord native timestamp), không cần refresh embed.",
         ],
@@ -2178,7 +2178,7 @@ module.exports = {
     goldValue: [
       "Mở `/raid-status` all-raid view để xem dòng `💰 đã kiếm / tổng G` trên mỗi gold-earner + rollup `💰 Roster` cộng dồn roster đang xem. Phần `🔒 ...` cho biết lượng gold bound trong tổng đó. Khi lọc 1 raid cụ thể, dòng gold từng char sẽ ẩn đi cho gọn, còn rollup vẫn được giữ.",
       "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/raid-add-roster` mặc định là gold-earner sẵn rồi nha~",
-      "Trong view **Gold & độ khó** của `/raid-status`, dùng dropdown độ khó để set mode raid cho từng character. Nếu tuần này raid đã chạy, Artist sẽ queue đổi sau reset tuần kế tiếp.",
+      "Trong view **Gold & độ khó** của `/raid-status`, tick một hay nhiều character rồi chọn raid nhận gold (tối đa 3) hoặc độ khó: một lần chọn áp cho cả nhóm. Nếu tuần này raid đã chạy, Artist sẽ queue đổi độ khó sau reset tuần kế tiếp.",
     ],
     iconName: "🛡️ ⚔️ Icon trong dropdown nghĩa là gì?",
     iconValue: [
