@@ -2148,7 +2148,7 @@ module.exports = {
       "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
       "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",
     ],
-    maintenanceName: "🛠️ Lịch bảo trì thứ 4 (14:00 VN)",
+    maintenanceName: "🛠️ Lịch bảo trì thứ 4 (14:00 VN, giờ mùa đông Mỹ là 15:00 VN)",
     maintenanceValue: [
       "Artist nhắc 7 lần quanh giờ tắt server: 3 lần đầu **T-3h / T-2h / T-1h** kèm checklist (shop solo, event, paradise, key hell).",
       "Ping `@here` ở **T-3h** và **T-1h** để member online thấy. 4 lần countdown **T-15m / T-10m / T-5m / T-1m** không ping, đếm ngược tới giờ tắt.",

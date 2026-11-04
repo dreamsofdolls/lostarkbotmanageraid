@@ -2119,7 +2119,7 @@ module.exports = {
       "• **このチャンネルが設定された直後**: 簡単なご挨拶を投稿、2分後に自動消去 (ウェルカムピンはそのまま残りますわ)。",
       "• **`/raid-auto-manage` を有効化したのに全キャラが非公開ログのメンバーがいた時**: lostark.bible で **Public Log** を有効化するよう優しくお知らせ、最大7日に1回ですの。",
     ],
-    maintenanceName: "🛠️ 水曜メンテナンス (16:00 JST)",
+    maintenanceName: "🛠️ 水曜メンテナンス (16:00 JST、米国冬時間は 17:00 JST)",
     maintenanceValue: [
       "サーバー停止前後でアーティストが7回お知らせしますわ: 最初の3回 **T-3h / T-2h / T-1h** はチェックリスト付き (shop solo, event, paradise, key hell)。",
       "**T-3h** と **T-1h** で `@here` を ping しオンラインメンバーに通知しますの。残り4回 **T-15m / T-10m / T-5m / T-1m** は ping せず、停止までのカウントダウンですわ♪",

@@ -1,25 +1,31 @@
 /**
  * utils/raid/schedule/maintenance.js
- * Single source of truth for LA VN maintenance schedule (Wed 14:00 VN
- * fixed). Slot config + reminder pool live here so reminders, previews,
- * and next-boundary math share one set of constants. NOTE: 14:00 is
- * maintenance, NOT the daily reset (which is 17:00 VN) - don't conflate
- * the two.
+ * Single source of truth for the Lost Ark weekly maintenance schedule
+ * (Wednesday 00:00 Pacific time: 14:00 VN in US daylight time, 15:00 VN in
+ * standard time). Slot config + reminder pool live here so reminders,
+ * previews, and next-boundary math share one set of constants. NOTE:
+ * maintenance is NOT the daily reset (17:00 VN, fixed in UTC) - don't
+ * conflate the two.
  */
 
 "use strict";
 
 const { DEFAULT_LANGUAGE } = require("../../../locales");
 const { lookupArray, pickArrayVariant } = require("./locale-arrays");
-const { toLocalClock } = require("./artist-clock");
+const {
+  getZonedParts,
+  shiftLocalDate,
+  zonedDateTimeToUtcMs,
+} = require("../tasks/shared-tasks/schedule");
 
-// Lost Ark VN maintenance is fixed at Wednesday 14:00 VN. Keep this as a
-// single schedule module so reminders, previews, and next-boundary math share
-// the same source of truth.
-const MAINTENANCE_DAY_VN = 3; // 0=Sun, 3=Wed
-const MAINTENANCE_HOUR_VN = 14;
-const MAINTENANCE_MINUTE_VN = 0;
+// Official notices give the start as "12:00 AM PT", so it follows US daylight
+// saving while the reset stays at 10:00 UTC.
+const MAINTENANCE_TIME_ZONE = "America/Los_Angeles";
+const MAINTENANCE_WEEKDAY = 3; // 0=Sun, 3=Wed, in MAINTENANCE_TIME_ZONE
+const MAINTENANCE_HOUR = 0;
+const MAINTENANCE_MINUTE = 0;
 const MAINTENANCE_TICK_MS = 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 
 const MAINTENANCE_TTL_EARLY_MS = 30 * 60 * 1000;
 const MAINTENANCE_TTL_COUNTDOWN_MS = 10 * 60 * 1000;
@@ -48,23 +54,35 @@ function lookupMaintenanceVariants(slotKey, lang) {
 }
 
 /**
+ * First maintenance start strictly after `after`, as UTC ms.
+ * @param {Date|number} [after=new Date()] - reference instant
+ * @returns {number} UTC ms of the next Wednesday 00:00 Pacific time
+ */
+function nextMaintenanceStartMs(after = new Date()) {
+  const afterMs = after instanceof Date ? after.getTime() : Number(after);
+  const today = getZonedParts(new Date(afterMs), MAINTENANCE_TIME_ZONE);
+  // Days 0..7 cover today's start (if still ahead) and next week's.
+  for (let delta = 0; delta <= 7; delta += 1) {
+    const day = shiftLocalDate(today, delta);
+    if (day.weekday !== MAINTENANCE_WEEKDAY) continue;
+    const startMs = zonedDateTimeToUtcMs(day, MAINTENANCE_HOUR, MAINTENANCE_MINUTE, MAINTENANCE_TIME_ZONE);
+    if (startMs > afterMs) return startMs;
+  }
+  return null;
+}
+
+/**
  * Resolve which maintenance reminder slot (if any) matches the current
- * minute. Wed-only · returns the matching slot + group ("early" or
- * "countdown") or null when off-cycle. Slot match is exact-minute by
- * design · scheduler ticks every minute on maintenance day.
+ * minute. Returns the matching slot + group ("early" or "countdown") or null
+ * when off-cycle. Slot match is exact-minute by design (seconds are ignored);
+ * the scheduler ticks every minute.
  * @param {Date} [now=new Date()] - test clock
  * @returns {{slot: object, group: "early"|"countdown"}|null}
  */
 function getMaintenanceSlotForNow(now = new Date()) {
-  const vn = toLocalClock(now, "vi");
-  const dayOfWeek = vn.getUTCDay();
-  if (dayOfWeek !== MAINTENANCE_DAY_VN) return null;
-
-  const hour = vn.getUTCHours();
-  const minute = vn.getUTCMinutes();
-  const minutesUntil =
-    (MAINTENANCE_HOUR_VN - hour) * 60 + (MAINTENANCE_MINUTE_VN - minute);
-  if (minutesUntil <= 0) return null;
+  const nowMinuteMs = Math.floor(now.getTime() / MINUTE_MS) * MINUTE_MS;
+  const startMs = nextMaintenanceStartMs(nowMinuteMs);
+  const minutesUntil = (startMs - nowMinuteMs) / MINUTE_MS;
 
   const earlyMatch = MAINTENANCE_EARLY_SLOTS.find(
     (slot) => slot.minutesBefore === minutesUntil
@@ -118,15 +136,14 @@ function buildMaintenancePreview(group) {
 
 /**
  * Snapshot of slot config for cross-module consumption (e.g.
- * scheduling.js `resolveMaintenanceSlotConfig` resolver). UTC hour is
- * pre-computed (VN-7) so consumers don't need to know the time zone.
- * @returns {{dayOfWeek: number, utcHour: number, utcMinute: number, earlyMinutes: number[], countdownMinutes: number[]}}
+ * scheduling.js `resolveMaintenanceSlotConfig` resolver). Consumers get the
+ * start resolver instead of a fixed UTC hour, so daylight saving is handled
+ * in one place.
+ * @returns {{nextStartMs: function(Date|number): number, earlyMinutes: number[], countdownMinutes: number[]}}
  */
 function getMaintenanceSlotConfigSnapshot() {
   return {
-    dayOfWeek: MAINTENANCE_DAY_VN,
-    utcHour: MAINTENANCE_HOUR_VN - 7,
-    utcMinute: MAINTENANCE_MINUTE_VN,
+    nextStartMs: nextMaintenanceStartMs,
     earlyMinutes: MAINTENANCE_EARLY_SLOTS.map((slot) => slot.minutesBefore),
     countdownMinutes: MAINTENANCE_COUNTDOWN_SLOTS.map((slot) => slot.minutesBefore),
   };
@@ -143,10 +160,12 @@ function buildMaintenanceConfigQuery() {
 }
 
 module.exports = {
-  MAINTENANCE_DAY_VN,
-  MAINTENANCE_HOUR_VN,
-  MAINTENANCE_MINUTE_VN,
+  MAINTENANCE_TIME_ZONE,
+  MAINTENANCE_WEEKDAY,
+  MAINTENANCE_HOUR,
+  MAINTENANCE_MINUTE,
   MAINTENANCE_TICK_MS,
+  nextMaintenanceStartMs,
   getMaintenanceSlotForNow,
   pickMaintenanceVariant,
   buildMaintenancePreview,

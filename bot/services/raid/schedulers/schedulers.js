@@ -17,9 +17,10 @@ const {
   buildCleanupNoticePreview,
 } = require("../../../utils/raid/schedule/cleanup-notices");
 const {
-  MAINTENANCE_DAY_VN,
-  MAINTENANCE_HOUR_VN,
-  MAINTENANCE_MINUTE_VN,
+  MAINTENANCE_TIME_ZONE,
+  MAINTENANCE_WEEKDAY,
+  MAINTENANCE_HOUR,
+  MAINTENANCE_MINUTE,
   MAINTENANCE_TICK_MS,
   getMaintenanceSlotForNow,
   pickMaintenanceVariant,
@@ -123,9 +124,10 @@ function createRaidSchedulerService({
     MAINTENANCE_TICK_MS,
     WORLD_EVENT_REMINDER_TICK_MS:
       worldEventReminderService.WORLD_EVENT_REMINDER_TICK_MS,
-    MAINTENANCE_DAY_VN,
-    MAINTENANCE_HOUR_VN,
-    MAINTENANCE_MINUTE_VN,
+    MAINTENANCE_TIME_ZONE,
+    MAINTENANCE_WEEKDAY,
+    MAINTENANCE_HOUR,
+    MAINTENANCE_MINUTE,
     ARTIST_QUIET_START_HOUR_VN,
     ARTIST_QUIET_END_HOUR_VN,
     postChannelAnnouncement,

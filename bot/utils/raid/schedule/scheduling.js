@@ -139,27 +139,18 @@ function createSchedulingHelpers({
     const minutesArr = cfg[minutesKey];
     if (!Array.isArray(minutesArr) || minutesArr.length === 0) return null;
 
-    const utcDay = now.getUTCDay();
-    const daysToAdd = utcDay === cfg.dayOfWeek
-      ? 0
-      : (cfg.dayOfWeek - utcDay + 7) % 7;
-    const boundary = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() + daysToAdd,
-      cfg.utcHour, cfg.utcMinute, 0, 0
-    ));
-    const boundaryMs = boundary.getTime();
+    const boundaryMs = cfg.nextStartMs(now);
     const futureFirePoint = minutesArr
       .map((minutesBefore) => boundaryMs - minutesBefore * 60000)
       .sort((a, b) => a - b)
       .find((timestampMs) => timestampMs > now.getTime());
     if (futureFirePoint !== undefined) return futureFirePoint;
 
-    // All fire points this week passed - next eligible is the earliest
-    // fire point (largest minutesBefore) of NEXT week's boundary.
+    // All fire points of this start passed - next eligible is the earliest
+    // fire point (largest minutesBefore) of the following start, which may
+    // sit at another UTC hour across a daylight-saving change.
     const earliestMinutes = Math.max(...minutesArr);
-    return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
+    return cfg.nextStartMs(boundaryMs) - earliestMinutes * 60000;
   }
 
   const cleanupSchedulerCheck = ({ now, schedulerState }) => nextIntervalTickMs(

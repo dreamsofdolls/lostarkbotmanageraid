@@ -11,9 +11,10 @@ const {
   announcementTypeEntry,
 } = require("../bot/utils/raid/schedule/announcements");
 
-// Lost Ark VN maintenance: Wednesday 14:00 VN = Wednesday 07:00 UTC.
-// All test instants below use Apr 22 2026 (a Wednesday) for the boundary
-// day, so each mốc maps to a clean UTC moment:
+// Lost Ark maintenance starts Wednesday 00:00 Pacific time. During US
+// daylight time that is 07:00 UTC = 14:00 VN; in standard time 08:00 UTC =
+// 15:00 VN. Most instants below use Apr 22 2026 (a daylight-time Wednesday),
+// so each mốc maps to a clean UTC moment:
 //   T-3h    11:00 VN  = 04:00 UTC
 //   T-2h    12:00 VN  = 05:00 UTC
 //   T-1h    13:00 VN  = 06:00 UTC
@@ -28,10 +29,43 @@ function wedAt(utcHour, utcMinute = 0) {
   return new Date(Date.UTC(2026, 3, WED_DAY_OF_MONTH, utcHour, utcMinute, 0, 0));
 }
 
-test("MAINTENANCE_DAY_VN/HOUR/MINUTE constants point at Wed 14:00 VN", () => {
-  assert.equal(__test.MAINTENANCE_DAY_VN, 3);
-  assert.equal(__test.MAINTENANCE_HOUR_VN, 14);
-  assert.equal(__test.MAINTENANCE_MINUTE_VN, 0);
+test("maintenance constants point at Wednesday 00:00 Pacific time", () => {
+  assert.equal(__test.MAINTENANCE_TIME_ZONE, "America/Los_Angeles");
+  assert.equal(__test.MAINTENANCE_WEEKDAY, 3);
+  assert.equal(__test.MAINTENANCE_HOUR, 0);
+  assert.equal(__test.MAINTENANCE_MINUTE, 0);
+});
+
+// Nov 4 2026 is the first Wednesday after US clocks went back (Nov 1), so
+// maintenance starts at 08:00 UTC = 15:00 VN.
+function winterWedAt(utcHour, utcMinute = 0) {
+  return new Date(Date.UTC(2026, 10, 4, utcHour, utcMinute, 0, 0));
+}
+
+test("getMaintenanceSlotForNow follows Pacific standard time in winter", () => {
+  assert.equal(__test.getMaintenanceSlotForNow(winterWedAt(5, 0))?.slot.key, "T-3h"); // 12:00 VN
+  assert.equal(__test.getMaintenanceSlotForNow(winterWedAt(7, 0))?.slot.key, "T-1h"); // 14:00 VN
+  assert.equal(__test.getMaintenanceSlotForNow(winterWedAt(7, 59))?.slot.key, "T-1m"); // 14:59 VN
+  assert.equal(__test.getMaintenanceSlotForNow(winterWedAt(8, 1)), null); // 15:01 VN, past start
+});
+
+test("getMaintenanceSlotForNow ignores seconds within the matching minute", () => {
+  const lateInMinute = new Date(Date.UTC(2026, 10, 4, 7, 59, 45, 0));
+  assert.equal(__test.getMaintenanceSlotForNow(lateInMinute)?.slot.key, "T-1m");
+});
+
+test("nextAnnouncementEligibleBoundaryMs maintenance-early crosses the switch to standard time", () => {
+  // Wed Oct 28 2026 07:01 UTC: daylight-time maintenance just started. The
+  // next T-3h belongs to Nov 4, which starts an hour later in UTC.
+  const afterDaylightStart = new Date(Date.UTC(2026, 9, 28, 7, 1, 0, 0));
+  const next = __test.nextAnnouncementEligibleBoundaryMs("maintenance-early", afterDaylightStart);
+  assert.equal(next, Date.UTC(2026, 10, 4, 5, 0, 0, 0));
+});
+
+test("nextAnnouncementEligibleBoundaryMs maintenance-countdown uses the winter start", () => {
+  const winterMorning = winterWedAt(2, 0); // 09:00 VN
+  const next = __test.nextAnnouncementEligibleBoundaryMs("maintenance-countdown", winterMorning);
+  assert.equal(next, Date.UTC(2026, 10, 4, 7, 45, 0, 0)); // T-15m = 14:45 VN
 });
 
 test("getMaintenanceSlotForNow returns null on a non-Wednesday", () => {

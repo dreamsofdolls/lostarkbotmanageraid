@@ -254,6 +254,9 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
 }
 
 module.exports = {
+  getZonedParts,
+  shiftLocalDate,
+  zonedDateTimeToUtcMs,
   formatDiscordTimestamp,
   formatVietnamSourceScheduleLabel,
   formatVietnamScheduleLabel,

@@ -2118,7 +2118,7 @@ module.exports = {
       "• **Right after channel set**: a brief greeting that self-deletes after 2 minutes (welcome pin stays).",
       "• **When a member enables `/raid-auto-manage` but all characters are private logs**: Artist gently nudges them to enable Public Log on lostark.bible, max once per 7 days.",
     ],
-    maintenanceName: "🛠️ Wednesday maintenance schedule (07:00 UTC)",
+    maintenanceName: "🛠️ Wednesday maintenance schedule (00:00 PT: 07:00 UTC, 08:00 UTC in US winter time)",
     maintenanceValue: [
       "Artist sends 7 reminders around server downtime: the first 3 are **T-3h / T-2h / T-1h** with a checklist (shop solo, event, paradise, key hell).",
       "Pings `@here` at **T-3h** and **T-1h** so online members notice. The final 4 countdowns **T-15m / T-10m / T-5m / T-1m** don't ping; pure countdown.",

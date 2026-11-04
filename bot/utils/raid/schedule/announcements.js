@@ -124,7 +124,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Maintenance early reminder",
     subdocKey: "maintenanceEarly",
     channelOverridable: true,
-    trigger: "Mỗi tuần thứ 4 lúc 11:00 / 12:00 / 13:00 VN (tức T-3h / T-2h / T-1h trước boundary 14:00 VN). Tick 1 phút bắt mốc.",
+    trigger: "Mỗi tuần T-3h / T-2h / T-1h trước giờ bảo trì thứ 4 0:00 PT (14:00 VN, giờ mùa đông Mỹ 15:00 VN): 11:00 / 12:00 / 13:00 VN, mùa đông 12:00 / 13:00 / 14:00 VN. Tick 1 phút bắt mốc.",
     dedup: "1 post/slot/guild (`lastMaintenanceEarlyKey = 'YYYY-MM-DD:T-{3h|2h|1h}'`). Mỗi tuần 1 chu kỳ key mới.",
     messageTtl: "30 phút rồi Artist tự xóa",
     previewContent:
@@ -134,7 +134,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Maintenance countdown",
     subdocKey: "maintenanceCountdown",
     channelOverridable: true,
-    trigger: "Mỗi tuần thứ 4 lúc 13:45 / 13:50 / 13:55 / 13:59 VN (tức T-15m / T-10m / T-5m / T-1m). Tick 1 phút bắt mốc.",
+    trigger: "Mỗi tuần T-15m / T-10m / T-5m / T-1m trước giờ bảo trì: 13:45 / 13:50 / 13:55 / 13:59 VN, giờ mùa đông Mỹ 14:45 / 14:50 / 14:55 / 14:59 VN. Tick 1 phút bắt mốc.",
     dedup: "1 post/slot/guild (`lastMaintenanceCountdownKey = 'YYYY-MM-DD:T-{15m|10m|5m|1m}'`).",
     messageTtl: "10 phút rồi Artist tự xóa (mốc T-1m TTL ngắn hơn vì server sắp tắt)",
     previewContent:
