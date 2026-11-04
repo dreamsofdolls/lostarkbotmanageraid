@@ -186,8 +186,10 @@ function computeBulkGoldModeOptions(entries) {
 
 /**
  * Gold-set options for the selected characters, in catalog order, plus the
- * trailing auto option. A raid is pre-ticked when every selected character
- * receives gold from it.
+ * trailing auto option. When every selected character receives the same set,
+ * that set is pre-ticked. When the sets differ nothing is pre-ticked: the
+ * raids they share describe no single character, and the handler reads a
+ * submit equal to the pre-ticked set as an unchanged close.
  * @param {Array<{raids: object[]}>} entries - selected characters
  * @returns {Array<{raidKey: string|null, value: string, isAuto: boolean, receiving: number, has: number, total: number, default: boolean, raid: object|null}>}
  *   raid is the status raid when exactly one character is selected
@@ -195,6 +197,11 @@ function computeBulkGoldModeOptions(entries) {
 function computeGoldReceiveOptions(entries) {
   const list = Array.isArray(entries) ? entries : [];
   const total = list.length;
+  const sameSet = new Set(list.map((entry) => (entry?.raids || [])
+    .filter((raid) => raid.goldReceives)
+    .map((raid) => raid.raidKey)
+    .sort()
+    .join(","))).size <= 1;
   const out = [];
   for (const raidKey of RAID_ORDER) {
     const raids = list.map((entry) => raidOf(entry, raidKey)).filter(Boolean);
@@ -207,7 +214,7 @@ function computeGoldReceiveOptions(entries) {
       receiving,
       has: raids.length,
       total,
-      default: receiving === total,
+      default: sameSet && receiving === total,
       raid: total === 1 ? raids[0] : null,
     });
   }
@@ -227,7 +234,7 @@ function computeGoldReceiveOptions(entries) {
 /**
  * Raid keys pre-ticked in the gold-set dropdown for these characters.
  * @param {Array<{raids: object[]}>} entries - selected characters
- * @returns {string[]} raid keys every entry receives gold from
+ * @returns {string[]} the set every entry receives, or none when the sets differ
  */
 function goldReceiveDefaults(entries) {
   return computeGoldReceiveOptions(entries)
@@ -239,6 +246,13 @@ function toOptionEmoji(icon) {
   return parseCustomEmoji(icon) || { name: icon };
 }
 
+/**
+ * Builders for the gold view's three selects: characters, gold set and
+ * difficulty. All three read the selection from filterState at build time.
+ * @param {object} deps - discord.js builders, UI, label/format helpers, lang,
+ *   t, getRaidsFor, getCharacterName and filterState (createGoldFilterState)
+ * @returns {{buildGoldCharsRow: (disabled: boolean) => object|null, buildGoldReceiveRow: (disabled: boolean) => object, buildGoldModeRow: (disabled: boolean) => object|null, selectedEntries: () => Array<{name: string, itemLevel: number, raids: object[]}>}}
+ */
 function createGoldToggleRows({
   ActionRowBuilder,
   StringSelectMenuBuilder,

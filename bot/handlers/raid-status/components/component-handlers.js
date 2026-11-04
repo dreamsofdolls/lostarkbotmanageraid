@@ -725,33 +725,29 @@ function createStatusComponentRouteHandlers(ctx) {
       if (receive.kind === "invalid" || selection.length === 0) return noRedraw();
       // Closing the dropdown on its pre-ticked set must not pin characters
       // that already receive those raids automatically.
-      if (receive.kind !== GOLD_RECEIVE_AUTO
-        && sameRaidKeySet(receive.raidKeys, goldReceiveDefaults(selection))) {
+      const preTicked = goldReceiveDefaults(selection);
+      if (receive.kind !== GOLD_RECEIVE_AUTO && sameRaidKeySet(receive.raidKeys, preTicked)) {
         return redraw();
       }
 
-      const isMissing = (entry) => entry.status === "missing";
       return runGoldBulkWrite(component, {
         logLabel: "raid-status gold receive",
         selection,
         write: (target) => saveBulkGoldReceive({ ...target, receive }),
         onSaveError: goldViewNotice("warn", "bulkSaveFailedTitle", "bulkSaveFailedDescription"),
         summarize: (result) => ({
-          isMissing,
+          isMissing: (entry) => entry.status === "missing",
           notice: buildGoldReceiveSummaryNotice({
             result,
             receive,
-            ignoredTicks: receive.kind === GOLD_RECEIVE_AUTO
-              && values.some((value) => value !== GOLD_RECEIVE_AUTO),
+            // Raids left ticked from the pre-ticked set are the card's own
+            // state; only a raid the user added on top of it was ignored.
+            ignoredTicks: receive.kind === GOLD_RECEIVE_AUTO && values.some((value) => (
+              value !== GOLD_RECEIVE_AUTO && !preTicked.includes(value)
+            )),
             lang,
             getClassEmoji,
-          }) || (
-            // Every selected character is gone (the roster was renamed or
-            // removed since the card was drawn): nothing was written.
-            result.results.length > 0 && result.results.every(isMissing)
-              ? goldViewNotice("warn", "bulkSaveFailedTitle", "bulkSaveFailedDescription")
-              : null
-          ),
+          }),
         }),
       });
     },

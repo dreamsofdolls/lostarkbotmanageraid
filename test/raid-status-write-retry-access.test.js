@@ -14,7 +14,7 @@ const {
 } = require("../bot/handlers/raid-status/gold/gold-actions");
 const { getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
 const { dailyResetStartMs } = require("../bot/utils/raid/schedule/reset-windows");
-const { UI, formatGold, truncateText } = require("../bot/utils/raid/common/shared");
+const { UI } = require("../bot/utils/raid/common/shared");
 
 const { saveWithRetry } = User;
 
@@ -99,8 +99,6 @@ async function toggleTaskWhileShareIsCutDuringRetry(getAccessibleAccountsFn) {
     buildComponents: () => [],
     canEditAccountFn: (_viewer, _owner) => canWrite(),
     getAccessibleAccountsFn,
-    formatGold,
-    truncateText,
   });
 
   await handlers[STATUS_COMPONENT_ACTION.taskToggle]({
@@ -183,8 +181,6 @@ function makeGoldSelectHandlers({
     buildComponents: () => [],
     canEditAccountFn,
     getAccessibleAccountsFn,
-    formatGold,
-    truncateText,
     // Aki is selected on the card and receives Act 4 and Kazeros gold.
     getGoldSelection: () => [{
       name: "Aki",

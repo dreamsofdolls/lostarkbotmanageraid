@@ -163,14 +163,30 @@ function goldSkippedTail(entry, lang) {
  * @param {boolean} [args.ignoredTicks] - raids were ticked together with auto
  * @param {string} args.lang - viewer language
  * @param {(className: string) => string} args.getClassEmoji - class icon lookup
- * @returns {{type: "success"|"info", title: string, description: string}|null}
- *   null when no character changed or was pinned
+ * @returns {{type: "success"|"info"|"warn", title: string, description: string}|null}
+ *   warn when nothing changed but a character was left as is or is missing;
+ *   null when nothing changed and nobody needs naming
  */
 function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, lang, getClassEmoji }) {
   const entries = Array.isArray(result?.results) ? result.results : [];
   const touched = entries.filter((entry) => TOUCHED_GOLD_STATUSES.has(entry.status));
-  if (touched.length === 0) return null;
   const missing = missingLine(entries, (entry) => entry.status === "missing", lang);
+  // Characters the set left as they were although some ticked raids were
+  // skipped for them, typically because they have none of those raids.
+  const keptLines = entries
+    .filter((entry) => entry.status === "unchanged" && entry.skipped.length > 0)
+    .map((entry) => (
+      `${characterPrefix(entry, getClassEmoji)}: ${goldViewText("goldKeptAsIs", lang)}${goldSkippedTail(entry, lang)}`
+    ));
+
+  if (touched.length === 0) {
+    if (keptLines.length === 0 && !missing) return null;
+    return {
+      type: "warn",
+      title: goldViewText("nothingChangedTitle", lang),
+      description: clampDescription([...keptLines, missing]),
+    };
+  }
 
   if (receive?.kind === GOLD_RECEIVE_AUTO) {
     return {
@@ -193,6 +209,7 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
       ...touched.map((entry) => (
         `${characterPrefix(entry, getClassEmoji)}: ${goldChangeText(entry, lang)}${goldSkippedTail(entry, lang)}`
       )),
+      ...keptLines,
       missing,
     ]),
   };

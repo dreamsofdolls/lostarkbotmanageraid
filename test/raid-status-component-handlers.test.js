@@ -6,7 +6,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } = require("discord.js");
 
 const {
@@ -23,8 +22,6 @@ const {
 } = require("../bot/handlers/raid-status/raid-filter");
 const {
   UI,
-  formatGold,
-  truncateText,
 } = require("../bot/utils/raid/common/shared");
 const {
   getAccessibleAccounts,
@@ -120,7 +117,6 @@ function createHandlerHarness(overrides = {}) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    StringSelectMenuBuilder,
     UI,
     User: overrides.User || {},
     saveWithRetry: overrides.saveWithRetry || (async (fn) => fn()),
@@ -138,8 +134,6 @@ function createHandlerHarness(overrides = {}) {
     canEditAccountFn: overrides.canEditAccountFn || (async (viewerId, ownerId) => viewerId === ownerId),
     getAccessibleAccountsFn: overrides.getAccessibleAccountsFn || VIEW_SHARE_OF_OWNER_1,
     formatNextCooldownRemaining: () => "",
-    formatGold,
-    truncateText,
     getAutoManageCooldownMs: () => 0,
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
     isReplyPrivate: overrides.isReplyPrivate || (() => true),
@@ -562,7 +556,7 @@ test("goldReceive auto resets the selected characters", async () => {
     },
   ]);
   const harness = createHandlerHarness({ User: ownerUserModel(doc) });
-  const { followUps, component } = collectFollowUps(["auto", "kazeros"]);
+  const { followUps, component } = collectFollowUps(["auto", "horizon"]);
 
   const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
 
@@ -573,8 +567,46 @@ test("goldReceive auto resets the selected characters", async () => {
   assert.equal(doc.saves, 1);
   assert.equal(followUps.length, 1);
   assert.match(followUps[0].embeds[0].title, /Artist tự chọn gold lại cho 1 con/);
-  // Raids ticked together with auto are named as ignored.
+  // A raid ticked on top of the pre-ticked set, together with auto, is named as ignored.
   assert.match(followUps[0].embeds[0].description, /bỏ qua/);
+});
+
+test("goldReceive auto reached by unticking one pre-ticked raid names no ignored tick", async () => {
+  // Three pre-ticked raids fill max_values, so reaching auto means unticking
+  // one; the two left ticked are the card's own defaults, not a user pick.
+  const doc = goldRosterDoc([
+    { name: "Goldie", itemLevel: 1720, assignedRaids: { armoche: { modeKey: "hard", goldOverride: "include" } } },
+  ]);
+  const harness = createHandlerHarness({ User: ownerUserModel(doc) });
+  const { followUps, component } = collectFollowUps(["armoche", "kazeros", "auto"]);
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
+
+  assert.equal(doc.saves, 1);
+  assert.equal(followUps.length, 1);
+  assert.doesNotMatch(followUps[0].embeds[0].description, /bỏ qua/);
+});
+
+test("goldReceive with differing gold sets writes the ticked set to every selected character", async () => {
+  const doc = goldRosterDoc([
+    { name: "Goldie", itemLevel: 1720, assignedRaids: {} },
+    { name: "Silver", itemLevel: 1720, assignedRaids: {} },
+  ]);
+  const silver = goldSelectionEntry("Silver");
+  silver.raids = silver.raids.map((raid) => ({ ...raid, goldReceives: raid.raidKey !== "serca" }));
+  const harness = createHandlerHarness({
+    User: ownerUserModel(doc),
+    getGoldSelection: () => [goldSelectionEntry("Goldie"), silver],
+  });
+  // Act 4 and Kazeros are what both receive; with the sets differing the card
+  // pre-ticks nothing, so this pick is deliberate and must be written.
+  const { followUps, component } = collectFollowUps(["armoche", "kazeros"]);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive](component);
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(doc.saves, 1);
+  assert.equal(followUps.length, 1);
 });
 
 test("goldMode applies picks to all selected characters and posts one summary", async () => {
@@ -909,7 +941,9 @@ test("goldReceive warns and reloads when the roster is gone from the fresh docum
   assert.equal(harness.reloadCount, 1);
   assert.equal(followUps.length, 1);
   assert.equal(followUps[0].flags, 64);
-  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.bulkSaveFailedTitle));
+  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.nothingChangedTitle));
+  // The selected character the fresh document no longer has is named.
+  assert.match(followUps[0].embeds[0].description, /Goldie/);
 });
 
 test("raid-status component handlers show the view-only lock when a task is toggled on a view-only share", async () => {

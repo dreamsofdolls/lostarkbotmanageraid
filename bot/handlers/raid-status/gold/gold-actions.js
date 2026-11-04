@@ -152,8 +152,10 @@ function receivingRaidKeys(character) {
 
 /**
  * Apply a gold set to a character. A set includes the ticked raids and
- * excludes every other raid the character's card shows; auto removes every
- * override. Raids are written only when their override actually changes.
+ * excludes every other raid the character's card shows; a set that names none
+ * of those raids leaves the character as it is, since it would otherwise
+ * receive no gold at all. Auto removes every override. Raids are written only
+ * when their override actually changes.
  * @param {object} character - character document or plain object
  * @param {{kind: "auto"}|{kind: "set", raidKeys: string[]}} receive - from parseGoldReceiveValues
  * @returns {{changed: boolean, before: string[], after: string[], skipped: string[]}}
@@ -168,11 +170,13 @@ function applyGoldReceive(character, receive) {
   const ticked = new Set(isAuto ? [] : receive?.raidKeys || []);
 
   // Catalog keys rather than Object.keys: a Mongoose subdoc exposes internals.
-  const targets = isAuto
-    ? [...VALID_RAID_KEYS]
-      .filter((raidKey) => character.assignedRaids[raidKey])
-      .map((raidKey) => [raidKey, null])
-    : statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : "exclude"]);
+  const autoTargets = () => [...VALID_RAID_KEYS]
+    .filter((raidKey) => character.assignedRaids[raidKey])
+    .map((raidKey) => [raidKey, null]);
+  const setTargets = () => (statusRaids.some((raid) => ticked.has(raid.raidKey))
+    ? statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : "exclude"])
+    : []);
+  const targets = isAuto ? autoTargets() : setTargets();
 
   let changed = false;
   for (const [raidKey, override] of targets) {

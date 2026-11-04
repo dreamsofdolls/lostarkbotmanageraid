@@ -176,6 +176,28 @@ test("gold auto summary lists each character's new raids and the ignored ticks",
   assert.match(lines[2], /bỏ qua/);
 });
 
+test("gold summary names a character left as is because it has none of the ticked raids", () => {
+  const notice = goldNotice([
+    goldEntry("Soulrano", "Destroyer", "changed", {
+      added: ["belgardin"], removed: ["serca"], kept: ["kazeros", "belgardin"],
+    }),
+    goldEntry("Lowbie", "Paladin", "unchanged", { kept: ["armoche"], skipped: ["belgardin"] }),
+  ], { kind: "set", raidKeys: ["belgardin", "kazeros"] });
+  assert.equal(notice.title, "Gold nhận đổi xong cho 1 con");
+  assert.match(notice.description, /\[Paladin\] \*\*Lowbie\*\*: giữ nguyên · bỏ qua Belgardin/);
+});
+
+test("gold summary warns when nothing changed but a character was skipped or missing", () => {
+  const notice = goldNotice([
+    goldEntry("Lowbie", "Paladin", "unchanged", { kept: ["armoche"], skipped: ["belgardin"] }),
+    goldEntry("Ghost", "", "missing"),
+  ], { kind: "set", raidKeys: ["belgardin"] });
+  assert.equal(notice.type, "warn");
+  assert.equal(notice.title, "Chưa đổi được gì");
+  assert.match(notice.description, /Lowbie/);
+  assert.match(notice.description, /Ghost/);
+});
+
 test("gold summary sends no notice when no character changed", () => {
   assert.equal(goldNotice([
     goldEntry("Soulrano", "Destroyer", "unchanged", { kept: ["armoche"] }),

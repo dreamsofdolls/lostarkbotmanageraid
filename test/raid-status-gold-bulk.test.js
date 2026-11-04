@@ -171,6 +171,16 @@ test("applyGoldReceive skips a ticked raid the character does not have", () => {
   assert.equal(target.assignedRaids.belgardin?.goldOverride, undefined);
 });
 
+test("applyGoldReceive leaves a character as is when it has none of the ticked raids", () => {
+  // Writing the set would exclude every raid it has and leave it no gold.
+  const target = character("Lowbie", 1745, { armoche: { modeKey: "hard" } });
+  const result = applyGoldReceive(target, { kind: "set", raidKeys: ["belgardin"] });
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.skipped, ["belgardin"]);
+  assert.deepEqual(result.after, result.before);
+  assert.equal(target.assignedRaids.armoche.goldOverride, undefined);
+});
+
 test("applyGoldReceive reports no change when overrides already match", () => {
   const target = character("Soulrano", 1771);
   const receive = { kind: "set", raidKeys: ["armoche", "kazeros", "serca"] };
@@ -320,4 +330,65 @@ test("saveBulkGoldReceive does not save when nothing changes", async () => {
   assert.equal(stats.saves, 0);
   assert.equal(result.ok, false);
   assert.equal(result.results[0].status, "unchanged");
+});
+
+// ─── retry ───
+
+// The first loaded document loses a version race on save; the retry loads a
+// second one that another write already brought to the target state.
+function versionRaceModel(firstCharacter, secondCharacter) {
+  const docs = [firstCharacter, secondCharacter].map((characterData) => {
+    const { stats, doc } = makeRosterModel([characterData]);
+    return { stats, doc };
+  });
+  docs[0].doc.save = async () => {
+    docs[0].stats.saves += 1;
+    const error = new Error("concurrent write");
+    error.name = "VersionError";
+    throw error;
+  };
+  let loads = 0;
+  return { docs, model: { async findOne() { return docs[loads++].doc; } } };
+}
+
+test("bulk writers report the outcomes of the attempt that saves, not the one that lost the race", async () => {
+  const writers = {
+    mode: {
+      run: (options) => saveBulkRaidModes({
+        ...options,
+        decisions: parseGoldModeValues(["armoche::hard"]).decisions,
+      }),
+      beforeRace: { armoche: { modeKey: "normal" } },
+      afterRace: { armoche: { modeKey: "hard" } },
+      outcomeOf: (entry) => entry.outcomes[0].outcome,
+      expected: "noop",
+    },
+    gold: {
+      run: (options) => saveBulkGoldReceive({ ...options, receive: { kind: "set", raidKeys: ["armoche"] } }),
+      beforeRace: {},
+      afterRace: Object.fromEntries(["armoche", "kazeros", "serca", "horizon"].map((raidKey) => [
+        raidKey,
+        { goldOverride: raidKey === "armoche" ? "include" : "exclude" },
+      ])),
+      outcomeOf: (entry) => entry.status,
+      expected: "unchanged",
+    },
+  };
+  for (const [label, writer] of Object.entries(writers)) {
+    const { docs, model } = versionRaceModel(
+      { id: "c1", name: "Aki", class: "Bard", itemLevel: 1720, assignedRaids: writer.beforeRace },
+      { id: "c1", name: "Aki", class: "Bard", itemLevel: 1720, assignedRaids: writer.afterRace },
+    );
+    const result = await writer.run({
+      User: model,
+      saveWithRetry: User.saveWithRetry,
+      discordId: "owner",
+      targetAccountName: "Perfectwings",
+      targetCharNames: ["Aki"],
+    });
+    assert.equal(docs[0].stats.saves, 1, label);
+    assert.equal(docs[1].stats.saves, 0, label);
+    assert.equal(result.ok, false, label);
+    assert.equal(writer.outcomeOf(result.results[0]), writer.expected, label);
+  }
 });

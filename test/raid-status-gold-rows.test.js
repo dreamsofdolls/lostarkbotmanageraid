@@ -102,6 +102,17 @@ test("computeGoldReceiveOptions counts characters that lack a raid", () => {
   assert.equal(belgardin.default, false);
 });
 
+test("computeGoldReceiveOptions pre-ticks nothing when the selected characters receive different sets", () => {
+  // High receives Belgardin, which Low cannot run. The raids both receive
+  // describe neither character, so pre-ticking them would make a deliberate
+  // pick of exactly that set look like an unchanged close.
+  const entries = [char("High", 1771), char("Low", 1745)].map(entryOf);
+  const receiving = entries.map((entry) => entry.raids.filter((raid) => raid.goldReceives).length);
+  assert.ok(receiving.every((count) => count > 0));
+  assert.deepEqual(goldReceiveDefaults(entries), []);
+  assert.ok(computeGoldReceiveOptions(entries).every((option) => option.default === false));
+});
+
 // ─── selection state ───
 
 test("gold selection is kept per page and drops vanished names", () => {

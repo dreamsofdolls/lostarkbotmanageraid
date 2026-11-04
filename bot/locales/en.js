@@ -888,6 +888,7 @@ module.exports = {
       goldIn: "{raids} in",
       goldOut: "{raids} out",
       goldKeptPinned: "keeps {raids}, now picked by hand",
+      goldKeptAsIs: "left as is",
       goldSkippedRaids: " · skipped {raids} (no such raid)",
       goldIgnoredTicks: "_Raids ticked together with \"Let Artist choose\" were ignored, since auto replaces the whole set._",
       bulkSaveFailedTitle: "Not saved",

@@ -889,6 +889,7 @@ module.exports = {
       goldIn: "{raids} 追加",
       goldOut: "{raids} 除外",
       goldKeptPinned: "{raids} のまま、手動選択になりました",
+      goldKeptAsIs: "そのまま",
       goldSkippedRaids: " · {raids} は対象外なのでスキップ",
       goldIgnoredTicks: "_「おまかせ」と一緒に選んだレイドは無視しました。おまかせは全体を置き換えます。_",
       bulkSaveFailedTitle: "保存できませんでした",

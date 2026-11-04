@@ -911,6 +911,7 @@ module.exports = {
       goldIn: "{raids} vào",
       goldOut: "{raids} ra",
       goldKeptPinned: "giữ {raids}, giờ là chọn tay",
+      goldKeptAsIs: "giữ nguyên",
       goldSkippedRaids: " · bỏ qua {raids} (chưa có raid này)",
       goldIgnoredTicks: "_Các raid cậu tick kèm đã được bỏ qua vì \"tự chọn\" thay cả bộ._",
       bulkSaveFailedTitle: "Chưa lưu được",

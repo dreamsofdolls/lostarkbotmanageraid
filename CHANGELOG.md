@@ -8,7 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - `/raid-status` Gold view edits several characters at once: the character dropdown takes several picks (✏️ marks them on the card), and one pick in the gold or difficulty dropdown applies to every selected character in a single save, followed by one summary notice.
-- The gold dropdown sets the whole gold set: tick up to 3 raids, which are then chosen by hand while the character's other raids are left out; "Let Artist choose" returns the selected characters to automatic. Closing it on the pre-ticked set saves nothing.
+- The gold dropdown sets the whole gold set: tick up to 3 raids, which are then chosen by hand while the character's other raids are left out; "Let Artist choose" returns the selected characters to automatic. Closing it on the pre-ticked set saves nothing; when the selected characters receive different sets nothing is pre-ticked, and a character that has none of the ticked raids is left as it is and named in the summary.
 - The difficulty dropdown lists "raid → mode" with the item level it needs and how many selected characters qualify; ticking two modes of one raid keeps the higher one. A raid already run this week still switches after the reset.
 - The one-raid gold toggle and its "3/3 slots full, pick one to untick" prompt are gone, and so are the per-change difficulty notices.
 

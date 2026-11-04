@@ -3,6 +3,16 @@
 const { sameCharacterName } = require("../../state/character-filter");
 const { countedGoldEarners } = require("../../../../utils/raid/common/character");
 
+/**
+ * Character selection of the gold view on the current page.
+ * @param {object} deps
+ * @param {() => object[]} deps.getAccounts - accounts in page order
+ * @param {() => number} deps.getCurrentPage - current page index
+ * @param {(page: number) => string[]|undefined} deps.getGoldCharSelection - stored names for a page
+ * @param {(character: object) => string} deps.getCharacterName - display name of a character
+ * @param {(character: object) => object[]} deps.getRaidsFor - status raids of a character
+ * @returns {{goldCharactersOnPage: () => object[], resolveGoldCharSelection: () => string[], selectedGoldCharacters: () => object[]}}
+ */
 function createGoldFilterState({
   getAccounts,
   getCurrentPage,
