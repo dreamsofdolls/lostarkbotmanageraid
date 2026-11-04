@@ -240,6 +240,8 @@ test("saveBulkRaidModes applies every decision to every named character in one s
   const belgardinNeed = result.results[2].outcomes.find((o) => o.raidKey === "belgardin");
   assert.equal(belgardinNeed.minItemLevel, 1770);
   assert.equal(result.results[2].itemLevel, 1765);
+  // The summary puts each character's class icon on its line.
+  assert.deepEqual(result.results.map((entry) => entry.className), ["Destroyer", "Bard", "Paladin"]);
 
   const [soul, naila] = charsOf(doc);
   assert.equal(soul.assignedRaids.belgardin.modeKey, "hard");
@@ -299,6 +301,7 @@ test("saveBulkGoldReceive reports changed, pinned and skipped per character", as
   assert.deepEqual(match.kept, ["kazeros", "serca", "belgardin"]);
   assert.equal(low.status, "changed");
   assert.deepEqual(low.skipped, ["belgardin"]);
+  assert.deepEqual([match.className, low.className], ["Bard", "Paladin"]);
   assert.equal(charsOf(doc)[0].assignedRaids.armoche.goldOverride, "exclude");
 });
 
