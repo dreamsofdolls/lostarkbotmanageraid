@@ -14,7 +14,7 @@ function createRaidStatusGoldUi(deps) {
     t,
   };
   const filterState = createGoldFilterState(context);
-  const { buildGoldCharFilterRow, buildGoldModeRow, buildGoldToggleRow } = createGoldToggleRows({
+  const { buildGoldCharsRow, buildGoldModeRow, buildGoldReceiveRow } = createGoldToggleRows({
     ...context,
     filterState,
   });
@@ -24,9 +24,9 @@ function createRaidStatusGoldUi(deps) {
       ...context,
       filterState,
     }),
-    buildGoldCharFilterRow,
+    buildGoldCharsRow,
     buildGoldModeRow,
-    buildGoldToggleRow,
+    buildGoldReceiveRow,
   };
 }
 

@@ -97,8 +97,8 @@ function createHandlerHarness(overrides = {}) {
     setTaskCharFilterForPage(page, value) {
       taskFilters.set(page, value);
     },
-    setGoldCharFilterForPage(page, value) {
-      goldFilters.set(page, value);
+    setGoldCharSelectionForPage(page, names) {
+      goldFilters.set(page, names);
     },
     ...(overrides.session || {}),
   };
@@ -442,7 +442,7 @@ test("raid-status component handlers update filter and task view state", async (
   assert.equal(session.currentView, "gold");
 
   await handlers[STATUS_COMPONENT_ACTION.goldCharFilter]({ values: ["Goldie"] });
-  assert.equal(goldFilters.get(session.currentPage), "Goldie");
+  assert.deepEqual(goldFilters.get(session.currentPage), ["Goldie"]);
 });
 
 test("raid-status component handlers persist gold toggle and request redraw", async () => {

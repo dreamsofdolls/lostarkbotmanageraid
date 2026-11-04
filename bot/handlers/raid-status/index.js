@@ -242,9 +242,9 @@ function createRaidStatusCommand(deps) {
 
     const {
       buildGoldViewEmbed,
-      buildGoldCharFilterRow,
+      buildGoldCharsRow,
       buildGoldModeRow,
-      buildGoldToggleRow,
+      buildGoldReceiveRow,
     } = createRaidStatusGoldUi({
       EmbedBuilder,
       ActionRowBuilder,
@@ -255,7 +255,7 @@ function createRaidStatusCommand(deps) {
       formatGold,
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
-      getGoldCharFilter: (page) => statusState.getGoldCharFilter(page),
+      getGoldCharSelection: (page) => statusState.getGoldCharSelection(page),
       getRaidsFor: statusState.baseGetRaidsFor,
       lang,
     });
@@ -370,9 +370,9 @@ function createRaidStatusCommand(deps) {
       buildSharedTaskToggleRow,
       buildTaskCharFilterRow,
       buildTaskToggleRow,
-      buildGoldCharFilterRow,
+      buildGoldCharsRow,
       buildGoldModeRow,
-      buildGoldToggleRow,
+      buildGoldReceiveRow,
       buildSyncButton: syncControls.buildSyncButton,
       buildSyncRow: syncControls.buildSyncRow,
       buildLocalSyncNewButton: syncControls.buildLocalSyncNewButton,

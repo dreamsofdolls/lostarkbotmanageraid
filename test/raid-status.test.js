@@ -1973,7 +1973,7 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
     formatGold,
     getAccounts: () => accounts,
     getCurrentPage: () => 0,
-    getGoldCharFilter: () => undefined,
+    getGoldCharSelection: () => undefined,
     getRaidsFor: getStatusRaidsForCharacter,
     lang: "vi",
   });
@@ -1992,16 +1992,16 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   assert.doesNotMatch(goldField.value, /auto bỏ qua vì/i);
 
   const rows = [
-    goldUi.buildGoldCharFilterRow(false),
-    goldUi.buildGoldToggleRow(false),
+    goldUi.buildGoldCharsRow(false),
+    goldUi.buildGoldReceiveRow(false),
   ].filter(Boolean);
   assert.deepEqual(
     rows.map((row) => row.toJSON().components[0].custom_id),
-    ["status-gold:char-filter", "status-gold:toggle"],
+    ["status-gold:chars", "status-gold:receive"],
   );
-  const toggleOptions = rows[1].toJSON().components[0].options;
-  assert.equal(toggleOptions.length, 4);
-  assert.ok(toggleOptions.some((option) => /auto bỏ qua locked/.test(option.label)));
+  const receiveOptions = rows[1].toJSON().components[0].options;
+  assert.equal(receiveOptions.length, 5, "four raids plus the auto option");
+  assert.ok(receiveOptions.some((option) => /auto bỏ qua locked/.test(option.description)));
 });
 
 test("raid-status gold view renders forced bound gold as a normal gold line with a lock before the amount", () => {
@@ -2028,7 +2028,7 @@ test("raid-status gold view renders forced bound gold as a normal gold line with
     formatGold,
     getAccounts: () => accounts,
     getCurrentPage: () => 0,
-    getGoldCharFilter: () => undefined,
+    getGoldCharSelection: () => undefined,
     getRaidsFor: getStatusRaidsForCharacter,
     lang: "vi",
   });
@@ -2067,7 +2067,7 @@ test("raid-status gold view: an excluded UNBOUND raid stays neutral (no lock)", 
     formatGold,
     getAccounts: () => accounts,
     getCurrentPage: () => 0,
-    getGoldCharFilter: () => undefined,
+    getGoldCharSelection: () => undefined,
     getRaidsFor: getStatusRaidsForCharacter,
     lang: "vi",
   });
@@ -2135,7 +2135,7 @@ test("raid-status task and gold embeds label a roster without an accountName fro
     const goldUi = createRaidStatusGoldUi({
       ...deps,
       formatGold,
-      getGoldCharFilter: () => undefined,
+      getGoldCharSelection: () => undefined,
       getRaidsFor: getStatusRaidsForCharacter,
     });
 

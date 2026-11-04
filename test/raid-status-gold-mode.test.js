@@ -8,7 +8,7 @@ const {
 } = require("../bot/handlers/raid-status/gold/gold-ui/toggle-rows");
 
 test("computeGoldModeOptions offers Solo plus eligible difficulty modes", () => {
-  const opts = computeGoldModeOptions("Aurora", [
+  const opts = computeGoldModeOptions([
     {
       raidKey: "armoche",
       modeKey: "normal",
@@ -19,7 +19,7 @@ test("computeGoldModeOptions offers Solo plus eligible difficulty modes", () => 
 
   const byMode = Object.fromEntries(opts.map((option) => [option.modeKey, option]));
   assert.deepEqual(Object.keys(byMode).sort(), ["hard", "solo"]);
-  assert.equal(byMode.solo.value, "Aurora::armoche::solo");
+  assert.equal(byMode.solo.value, "armoche::solo");
   assert.equal(byMode.solo.direction, "side");
   assert.equal(byMode.solo.goldTotal, 27000); // same base total as Normal
   assert.equal(byMode.hard.direction, "up");
@@ -28,7 +28,7 @@ test("computeGoldModeOptions offers Solo plus eligible difficulty modes", () => 
 });
 
 test("computeGoldModeOptions keeps Solo eligible at the Normal item level", () => {
-  const opts = computeGoldModeOptions("Aurora", [
+  const opts = computeGoldModeOptions([
     {
       raidKey: "armoche",
       modeKey: "normal",
@@ -42,7 +42,7 @@ test("computeGoldModeOptions keeps Solo eligible at the Normal item level", () =
 });
 
 test("computeGoldModeOptions includes the current mode as a cancel option when pending is set", () => {
-  const opts = computeGoldModeOptions("Aurora", [
+  const opts = computeGoldModeOptions([
     {
       raidKey: "armoche",
       modeKey: "normal",
@@ -55,10 +55,11 @@ test("computeGoldModeOptions includes the current mode as a cancel option when p
   assert.ok(cancel);
   assert.equal(cancel.isCancel, true);
   assert.equal(cancel.direction, "cancel");
+  assert.equal(cancel.value, "armoche::cancel");
 });
 
 test("computeGoldModeOptions tags direction + defers when the raid ran this week", () => {
-  const opts = computeGoldModeOptions("Aurora", [
+  const opts = computeGoldModeOptions([
     {
       raidKey: "serca",
       modeKey: "hard",
@@ -79,7 +80,7 @@ test("computeGoldModeOptions tags direction + defers when the raid ran this week
 });
 
 test("computeGoldModeOptions treats Solo and Normal as a lateral switch", () => {
-  const opts = computeGoldModeOptions("Aurora", [
+  const opts = computeGoldModeOptions([
     {
       raidKey: "armoche",
       modeKey: "solo",

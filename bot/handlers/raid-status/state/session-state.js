@@ -60,7 +60,7 @@ async function createRaidStatusSessionState({
   let totalRaidPending = 0;
   let totalSoloPending = 0;
   const taskCharFilterByPage = new Map();
-  const goldCharFilterByPage = new Map();
+  const goldCharSelectionByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
   let totalCharacters = countCharacters(accounts);
   let lastReloadedAtMs = Number(now());
@@ -259,15 +259,15 @@ async function createRaidStatusSessionState({
     getTaskCharFilter(page) {
       return taskCharFilterByPage.get(page);
     },
-    getGoldCharFilter(page) {
-      return goldCharFilterByPage.get(page);
+    getGoldCharSelection(page) {
+      return goldCharSelectionByPage.get(page);
     },
     refreshViewerAccountsIfStale,
     reloadViewerAccounts,
     movePage,
     selectRoster,
-    setGoldCharFilterForPage(page, value) {
-      goldCharFilterByPage.set(page, value);
+    setGoldCharSelectionForPage(page, names) {
+      goldCharSelectionByPage.set(page, Array.isArray(names) ? [...names] : []);
     },
     setTaskCharFilterForPage(page, value) {
       taskCharFilterByPage.set(page, value);
@@ -336,8 +336,8 @@ function createRaidStatusComponentSession({
     setTaskCharFilterForPage(page, value) {
       state.setTaskCharFilterForPage(page, value);
     },
-    setGoldCharFilterForPage(page, value) {
-      state.setGoldCharFilterForPage(page, value);
+    setGoldCharSelectionForPage(page, names) {
+      state.setGoldCharSelectionForPage(page, names);
     },
   };
 }

@@ -11,8 +11,10 @@ const {
   localizedRaidLabel,
   rawGoldTotal,
 } = require("../gold-formatting");
+const { sameCharacterName } = require("../../state/character-filter");
 
 const PAGE_CHAR_CAP = 11;
+const GOLD_EDIT_MARK = "✏️";
 
 function createGoldViewEmbedBuilder({
   EmbedBuilder,
@@ -30,6 +32,7 @@ function createGoldViewEmbedBuilder({
 }) {
   const {
     goldCharactersOnPage,
+    resolveGoldCharSelection,
   } = filterState;
 
   function goldBoundTail(gold) {
@@ -76,11 +79,15 @@ function createGoldViewEmbedBuilder({
     return `${GOLD_RECEIVE_ICON} ${slot}${label} - ${amount}${pendingTail}`;
   }
 
-  function buildGoldCharacterField(character) {
+  function buildGoldCharacterField(character, selectedNames) {
     const raids = getRaidsFor(character);
     const name = getCharacterName(character);
     const classIcon = getClassEmoji(character.class || character.className);
-    const namePrefix = classIcon ? `${classIcon} ` : "";
+    // The pencil marks the characters the dropdowns below will edit.
+    const editMark = selectedNames.some((selected) => sameCharacterName(selected, name))
+      ? `${GOLD_EDIT_MARK} `
+      : "";
+    const namePrefix = `${editMark}${classIcon ? `${classIcon} ` : ""}`;
     const itemLevel = Number(character.itemLevel) || 0;
     const counted = raids.filter((raid) => raid.goldReceives).length;
     const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${counted}/${GOLD_RAID_CAP_PER_CHARACTER}`;
@@ -131,7 +138,8 @@ function createGoldViewEmbedBuilder({
     }));
     embed.setDescription(descriptionLines.join("\n"));
 
-    const fields = goldChars.map(buildGoldCharacterField);
+    const selectedNames = resolveGoldCharSelection();
+    const fields = goldChars.map((character) => buildGoldCharacterField(character, selectedNames));
     const visibleFields = fields.length <= PAGE_CHAR_CAP
       ? pack2Columns(fields)
       : fields.map((field) => ({ ...field, inline: false }));

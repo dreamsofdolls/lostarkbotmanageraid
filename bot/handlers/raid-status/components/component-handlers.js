@@ -668,7 +668,7 @@ function createStatusComponentRouteHandlers(ctx) {
     [STATUS_COMPONENT_ACTION.goldCharFilter]: async (component) => {
       const picked = firstSelectValue(component, "");
       if (picked) {
-        session.setGoldCharFilterForPage(session.currentPage, picked);
+        session.setGoldCharSelectionForPage(session.currentPage, [picked]);
       }
       return redraw();
     },

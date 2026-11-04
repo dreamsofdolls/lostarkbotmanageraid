@@ -10,9 +10,9 @@ function createRaidStatusComponentLayout({
   buildSharedTaskToggleRow,
   buildTaskCharFilterRow,
   buildTaskToggleRow,
-  buildGoldCharFilterRow,
+  buildGoldCharsRow,
   buildGoldModeRow,
-  buildGoldToggleRow,
+  buildGoldReceiveRow,
   buildSyncButton,
   buildSyncRow,
   buildLocalSyncNewButton,
@@ -89,13 +89,13 @@ function createRaidStatusComponentLayout({
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
     addPaginatedViewHeader(rows, disabled);
-    const charFilterRow = buildGoldCharFilterRow(disabled);
-    if (charFilterRow) rows.push(charFilterRow);
+    const charsRow = buildGoldCharsRow(disabled);
+    if (charsRow) rows.push(charsRow);
 
     const currentAccount = accounts[currentPage];
     const sharedFrom = currentAccount?._sharedFrom;
     const goldToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
-    rows.push(buildGoldToggleRow(goldToggleDisabled));
+    rows.push(buildGoldReceiveRow(goldToggleDisabled));
     const modeRow = buildGoldModeRow(goldToggleDisabled);
     if (modeRow && rows.length < 5) rows.push(modeRow);
   };

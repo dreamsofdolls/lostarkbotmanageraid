@@ -1,15 +1,12 @@
 "use strict";
 
-const {
-  resolveCharacterNameFilter,
-  sameCharacterName,
-} = require("../../state/character-filter");
+const { sameCharacterName } = require("../../state/character-filter");
 const { countedGoldEarners } = require("../../../../utils/raid/common/character");
 
 function createGoldFilterState({
   getAccounts,
   getCurrentPage,
-  getGoldCharFilter,
+  getGoldCharSelection,
   getCharacterName,
   getRaidsFor,
 }) {
@@ -23,29 +20,34 @@ function createGoldFilterState({
     });
   }
 
-  function resolveGoldCharFilter() {
-    const explicit = getGoldCharFilter(getCurrentPage());
+  /**
+   * Names of the selected gold characters on the current page, in roster
+   * order. Stored names that are no longer candidates are dropped; an empty
+   * result falls back to the first candidate.
+   * @returns {string[]} empty only when the page has no gold candidate
+   */
+  function resolveGoldCharSelection() {
     const candidates = goldCharactersOnPage();
-    return resolveCharacterNameFilter({
-      candidates,
-      explicit,
-      getCharacterName,
-    });
+    if (candidates.length === 0) return [];
+    const stored = getGoldCharSelection(getCurrentPage());
+    const wanted = Array.isArray(stored) ? stored : [];
+    const picked = candidates
+      .map(getCharacterName)
+      .filter((name) => wanted.some((want) => sameCharacterName(want, name)));
+    return picked.length > 0 ? picked : [getCharacterName(candidates[0])];
   }
 
-  function activeGoldCharacter() {
-    const activeName = resolveGoldCharFilter();
-    if (!activeName) return null;
-    const account = getAccounts()[getCurrentPage()];
-    return (account?.characters || []).find((character) =>
-      sameCharacterName(getCharacterName(character), activeName)
-    ) || null;
+  function selectedGoldCharacters() {
+    const names = resolveGoldCharSelection();
+    return goldCharactersOnPage().filter((character) =>
+      names.some((name) => sameCharacterName(name, getCharacterName(character)))
+    );
   }
 
   return {
-    activeGoldCharacter,
     goldCharactersOnPage,
-    resolveGoldCharFilter,
+    resolveGoldCharSelection,
+    selectedGoldCharacters,
   };
 }
 

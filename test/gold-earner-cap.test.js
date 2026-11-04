@@ -70,7 +70,7 @@ test("the /raid-status gold view lists only the characters that earn gold", () =
   const { goldCharactersOnPage } = createGoldFilterState({
     getAccounts: () => [{ accountName: "Alpha", characters }],
     getCurrentPage: () => 0,
-    getGoldCharFilter: () => null,
+    getGoldCharSelection: () => null,
     getCharacterName: (character) => character.name,
     getRaidsFor: () => [{ raidKey: "kazeros" }],
   });
