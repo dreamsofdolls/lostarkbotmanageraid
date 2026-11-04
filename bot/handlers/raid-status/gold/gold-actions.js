@@ -224,30 +224,27 @@ function applyGoldReceive(character, receive) {
   };
 }
 
-function findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName) {
+function findAccountCharacter(account, targetCharName) {
   const charName = normalizeName(targetCharName);
-  const account = findAccountByName(userDocFresh, targetAccountName, normalizeName);
-  if (!account || !Array.isArray(account.characters)) return null;
-
-  const character = account.characters.find(
+  const character = (Array.isArray(account?.characters) ? account.characters : []).find(
     (c) => normalizeName(c?.name || c?.charName) === charName
   );
   if (!character) return null;
   if (!character.assignedRaids) character.assignedRaids = {};
-  return { account, character };
+  return character;
 }
 
 function markAccountsModified(userDocFresh) {
   userDocFresh?.markModified("accounts");
 }
 
-async function updateGoldWriteTarget(options, applyUpdate) {
+async function updateGoldWriteTargets(options, applyUpdate) {
   const {
     User,
     saveWithRetry,
     discordId,
     targetAccountName,
-    targetCharName,
+    targetCharNames = [],
     canWrite = null,
     saveRolloverAlone = false,
   } = options;
@@ -269,22 +266,17 @@ async function updateGoldWriteTarget(options, applyUpdate) {
     // change, or on its own only when the caller asks for it.
     const didFreshenWeek = userDocFresh ? ensureFreshWeek(userDocFresh) : false;
     const saveRollover = didFreshenWeek && saveRolloverAlone;
-    const target = findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName);
-    if (!target) {
-      if (saveRollover) {
-        markAccountsModified(userDocFresh);
-        await userDocFresh.save();
-        saved = true;
-        savedUserDoc = userDocFresh;
-      }
-      return;
-    }
+    const account = userDocFresh
+      ? findAccountByName(userDocFresh, targetAccountName, normalizeName)
+      : null;
+    const entries = targetCharNames.map((name) => ({
+      name,
+      character: account ? findAccountCharacter(account, name) : null,
+    }));
 
-    const shouldSave = await applyUpdate({
-      userDoc: userDocFresh,
-      account: target.account,
-      character: target.character,
-    });
+    const shouldSave = account
+      ? await applyUpdate({ userDoc: userDocFresh, account, entries })
+      : false;
     if (!shouldSave && !saveRollover) return;
 
     markAccountsModified(userDocFresh);
@@ -294,6 +286,95 @@ async function updateGoldWriteTarget(options, applyUpdate) {
   });
 
   return { saved, userDoc: savedUserDoc, denied };
+}
+
+async function updateGoldWriteTarget(options, applyUpdate) {
+  return updateGoldWriteTargets(
+    { ...options, targetCharNames: [options.targetCharName] },
+    ({ userDoc, account, entries }) => (entries[0].character
+      ? applyUpdate({ userDoc, account, character: entries[0].character })
+      : false)
+  );
+}
+
+const CHANGED_MODE_OUTCOMES = new Set(["immediate", "deferred", "cancelled"]);
+
+/**
+ * Apply raid decisions to every named character of one account in a single
+ * save. Outcomes are rebuilt on every attempt, so they describe the attempt
+ * that saved.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharNames, decisions (from parseGoldModeValues),
+ *   and optionally canWrite (asked before every save attempt)
+ * @returns {Promise<{ok: boolean, denied: boolean, results: Array<{name: string, missing: boolean, itemLevel: number, outcomes: Array<{raidKey: string, modeKey: string|null, outcome: string, minItemLevel: number}>}>, userDoc: object|null}>}
+ *   ok is true when the document was saved
+ */
+async function saveBulkRaidModes(options) {
+  const decisions = options.decisions instanceof Map ? options.decisions : new Map();
+  let results = [];
+  const update = await updateGoldWriteTargets(
+    { ...options, saveRolloverAlone: true },
+    ({ entries }) => {
+      results = entries.map(({ name, character }) => {
+        if (!character) return { name, missing: true, itemLevel: 0, outcomes: [] };
+        const outcomes = [...decisions].map(([raidKey, decision]) => ({
+          raidKey,
+          modeKey: decision.modeKey || null,
+          outcome: applyModeDecision(character, raidKey, decision),
+          minItemLevel: getRequirementFor(raidKey, decision.modeKey)?.minItemLevel || 0,
+        }));
+        return {
+          name: character.name || name,
+          missing: false,
+          itemLevel: Number(character.itemLevel) || 0,
+          outcomes,
+        };
+      });
+      return results.some((entry) => entry.outcomes.some(
+        (item) => CHANGED_MODE_OUTCOMES.has(item.outcome)
+      ));
+    }
+  );
+  return { ok: update.saved, denied: update.denied, results, userDoc: update.userDoc };
+}
+
+function goldReceiveStatus(applied, added, removed) {
+  if (!applied.changed) return "unchanged";
+  return added.length > 0 || removed.length > 0 ? "changed" : "pinned";
+}
+
+/**
+ * Apply one gold set (or auto) to every named character of one account in a
+ * single save.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharNames, receive (from parseGoldReceiveValues),
+ *   and optionally canWrite (asked before every save attempt)
+ * @returns {Promise<{ok: boolean, denied: boolean, results: Array<{name: string, status: "changed"|"pinned"|"unchanged"|"missing", added: string[], removed: string[], kept: string[], skipped: string[]}>, userDoc: object|null}>}
+ *   pinned = overrides changed while the receiving raids stayed the same
+ */
+async function saveBulkGoldReceive(options) {
+  const { receive } = options;
+  let results = [];
+  const update = await updateGoldWriteTargets(options, ({ entries }) => {
+    results = entries.map(({ name, character }) => {
+      if (!character) {
+        return { name, status: "missing", added: [], removed: [], kept: [], skipped: [] };
+      }
+      const applied = applyGoldReceive(character, receive);
+      const added = applied.after.filter((raidKey) => !applied.before.includes(raidKey));
+      const removed = applied.before.filter((raidKey) => !applied.after.includes(raidKey));
+      return {
+        name: character.name || name,
+        status: goldReceiveStatus(applied, added, removed),
+        added,
+        removed,
+        kept: applied.after,
+        skipped: applied.skipped,
+      };
+    });
+    return results.some((entry) => entry.status === "changed" || entry.status === "pinned");
+  });
+  return { ok: update.saved, denied: update.denied, results, userDoc: update.userDoc };
 }
 
 /**
@@ -435,6 +516,8 @@ module.exports = {
   applyModeDecision,
   parseGoldModeValues,
   parseGoldReceiveValues,
+  saveBulkGoldReceive,
+  saveBulkRaidModes,
   parseGoldModeValue,
   parseGoldToggleValue,
   setParsedGoldRaidMode,

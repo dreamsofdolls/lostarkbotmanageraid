@@ -8,7 +8,10 @@ const User = require("../bot/models/user");
 const { createStatusComponentRouteHandlers } = require("../bot/handlers/raid-status/components/component-handlers");
 const { STATUS_COMPONENT_ACTION } = require("../bot/handlers/raid-status/components/component-routes");
 const {
+  parseGoldModeValues,
   replaceRaidGoldSelection,
+  saveBulkGoldReceive,
+  saveBulkRaidModes,
   setParsedGoldRaidMode,
   toggleParsedGoldRaid,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
@@ -145,6 +148,16 @@ test("raid-status gold writes retried after the share was revoked commit nothing
       targetCharName: "Aki",
       includeRaidKey: "horizon",
       excludeRaidKey: "armoche",
+    }),
+    bulkMode: (options) => saveBulkRaidModes({
+      ...options,
+      targetCharNames: ["Aki"],
+      decisions: parseGoldModeValues(["armoche::hard"]).decisions,
+    }),
+    bulkReceive: (options) => saveBulkGoldReceive({
+      ...options,
+      targetCharNames: ["Aki"],
+      receive: { kind: "set", raidKeys: ["horizon"] },
     }),
   };
   for (const [label, run] of Object.entries(operations)) {

@@ -8,7 +8,33 @@ const {
   applyModeDecision,
   parseGoldModeValues,
   parseGoldReceiveValues,
+  saveBulkGoldReceive,
+  saveBulkRaidModes,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
+const User = require("../bot/models/user");
+const { getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
+
+const directSave = async (attempt) => attempt();
+
+// A real Mongoose document so writes go through the strict:false subdoc
+// re-cast; save() is stubbed and counted.
+function makeRosterModel(characters) {
+  const stats = { saves: 0 };
+  const doc = new User({
+    discordId: "owner",
+    weeklyResetKey: getTargetResetKey(),
+    accounts: [{ accountName: "Perfectwings", characters }],
+  });
+  doc.save = async () => {
+    stats.saves += 1;
+    return doc;
+  };
+  return { stats, doc, model: { async findOne() { return doc; } } };
+}
+
+function charsOf(doc) {
+  return doc.toObject().accounts[0].characters;
+}
 
 function character(name, itemLevel, assignedRaids = {}) {
   return { name, itemLevel, assignedRaids };
@@ -167,4 +193,128 @@ test("applyGoldReceive auto clears overrides on every assigned raid", () => {
 test("applyGoldReceive auto with nothing overridden is unchanged", () => {
   const target = character("Soulrano", 1771, { armoche: { modeKey: "hard" } });
   assert.equal(applyGoldReceive(target, { kind: "auto" }).changed, false);
+});
+
+// ─── multi-character writers ───
+
+function exampleRoster() {
+  const kazerosCleared = { modeKey: "normal", G1: { difficulty: "Normal", completedDate: 1 } };
+  const belgardinCleared = { modeKey: "normal", G1: { difficulty: "Normal", completedDate: 1 } };
+  return makeRosterModel([
+    { id: "c1", name: "Soulrano", class: "Destroyer", itemLevel: 1771, assignedRaids: {
+      armoche: { modeKey: "normal" }, kazeros: { modeKey: "normal" }, belgardin: { modeKey: "normal" },
+    } },
+    { id: "c2", name: "Nailaduk", class: "Bard", itemLevel: 1772, assignedRaids: {
+      armoche: { modeKey: "normal" }, kazeros: kazerosCleared, belgardin: belgardinCleared,
+    } },
+    { id: "c3", name: "Priscilladuk", class: "Paladin", itemLevel: 1765, assignedRaids: {
+      armoche: { modeKey: "normal" }, kazeros: { modeKey: "normal" }, belgardin: { modeKey: "normal" },
+    } },
+  ]);
+}
+
+const ACT_KAZ_BELG_HARD = parseGoldModeValues(["armoche::hard", "kazeros::hard", "belgardin::hard"]).decisions;
+
+test("saveBulkRaidModes applies every decision to every named character in one save", async () => {
+  const { stats, doc, model } = exampleRoster();
+  const result = await saveBulkRaidModes({
+    User: model,
+    saveWithRetry: directSave,
+    discordId: "owner",
+    targetAccountName: "Perfectwings",
+    targetCharNames: ["Soulrano", "Nailaduk", "Priscilladuk"],
+    decisions: ACT_KAZ_BELG_HARD,
+  });
+
+  assert.equal(stats.saves, 1);
+  assert.equal(result.ok, true);
+  const outcomes = Object.fromEntries(result.results.map((entry) => [
+    entry.name,
+    Object.fromEntries(entry.outcomes.map((o) => [o.raidKey, o.outcome])),
+  ]));
+  assert.deepEqual(outcomes, {
+    Soulrano: { armoche: "immediate", kazeros: "immediate", belgardin: "immediate" },
+    Nailaduk: { armoche: "immediate", kazeros: "deferred", belgardin: "deferred" },
+    Priscilladuk: { armoche: "immediate", kazeros: "immediate", belgardin: "ineligible" },
+  });
+  const belgardinNeed = result.results[2].outcomes.find((o) => o.raidKey === "belgardin");
+  assert.equal(belgardinNeed.minItemLevel, 1770);
+  assert.equal(result.results[2].itemLevel, 1765);
+
+  const [soul, naila] = charsOf(doc);
+  assert.equal(soul.assignedRaids.belgardin.modeKey, "hard");
+  assert.equal(naila.assignedRaids.kazeros.pendingModeKey, "hard");
+});
+
+test("saveBulkRaidModes names a character missing from the fresh document", async () => {
+  const { stats, model } = exampleRoster();
+  const result = await saveBulkRaidModes({
+    User: model,
+    saveWithRetry: directSave,
+    discordId: "owner",
+    targetAccountName: "Perfectwings",
+    targetCharNames: ["Soulrano", "Ghost"],
+    decisions: ACT_KAZ_BELG_HARD,
+  });
+  assert.equal(stats.saves, 1);
+  assert.deepEqual(result.results.map((entry) => [entry.name, entry.missing]), [
+    ["Soulrano", false],
+    ["Ghost", true],
+  ]);
+});
+
+test("saveBulkRaidModes saves nothing when every decision is a no-op or ineligible", async () => {
+  const { stats, model } = exampleRoster();
+  const result = await saveBulkRaidModes({
+    User: model,
+    saveWithRetry: directSave,
+    discordId: "owner",
+    targetAccountName: "Perfectwings",
+    targetCharNames: ["Priscilladuk"],
+    decisions: parseGoldModeValues(["belgardin::nightmare", "armoche::normal"]).decisions,
+  });
+  assert.equal(stats.saves, 0);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.results[0].outcomes.map((o) => o.outcome), ["ineligible", "noop"]);
+});
+
+test("saveBulkGoldReceive reports changed, pinned and skipped per character", async () => {
+  const { stats, doc, model } = makeRosterModel([
+    // Auto receives kazeros, serca, belgardin (the three largest unbound totals).
+    { id: "c1", name: "AutoMatch", class: "Bard", itemLevel: 1771, assignedRaids: {} },
+    { id: "c2", name: "Lowbie", class: "Paladin", itemLevel: 1745, assignedRaids: {} },
+  ]);
+  const result = await saveBulkGoldReceive({
+    User: model,
+    saveWithRetry: directSave,
+    discordId: "owner",
+    targetAccountName: "Perfectwings",
+    targetCharNames: ["AutoMatch", "Lowbie"],
+    receive: { kind: "set", raidKeys: ["kazeros", "serca", "belgardin"] },
+  });
+
+  assert.equal(stats.saves, 1);
+  const [match, low] = result.results;
+  assert.equal(match.status, "pinned");
+  assert.deepEqual(match.kept, ["kazeros", "serca", "belgardin"]);
+  assert.equal(low.status, "changed");
+  assert.deepEqual(low.skipped, ["belgardin"]);
+  assert.equal(charsOf(doc)[0].assignedRaids.armoche.goldOverride, "exclude");
+});
+
+test("saveBulkGoldReceive does not save when nothing changes", async () => {
+  const { stats, model } = makeRosterModel([
+    { id: "c1", name: "AutoOnly", class: "Bard", itemLevel: 1771, assignedRaids: {} },
+  ]);
+  const result = await saveBulkGoldReceive({
+    User: model,
+    saveWithRetry: directSave,
+    discordId: "owner",
+    targetAccountName: "Perfectwings",
+    targetCharNames: ["AutoOnly"],
+    receive: { kind: "auto" },
+  });
+  assert.equal(stats.saves, 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.results[0].status, "unchanged");
 });
