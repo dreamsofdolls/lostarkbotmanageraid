@@ -22,16 +22,26 @@ function getRequirementFor(raidKey, modeKey) {
   return RAID_REQUIREMENT_MAP[value] || null;
 }
 
-// Modes the automatic default may pick (not manual-only, not retired), hardest first.
-function getAutoModes(raidKey) {
+// Modes the automatic default may pick (not manual-only, and not retired unless
+// asked), hardest first.
+function getAutoModes(raidKey, { includeRetired = false } = {}) {
   return Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
-    .filter(([modeKey, mode]) => mode.manualOnly !== true && isSelectableMode(raidKey, modeKey))
+    .filter(([modeKey, mode]) => mode.manualOnly !== true
+      && (includeRetired || isSelectableMode(raidKey, modeKey)))
     .map(([modeKey, mode]) => ({ modeKey, minItemLevel: Number(mode.minItemLevel) || 0 }))
     .sort((a, b) => b.minItemLevel - a.minItemLevel);
 }
 
-function getBestEligibleModeKey(raidKey, itemLevel) {
-  return getAutoModes(raidKey)
+/**
+ * Hardest automatic mode the item level allows. Manual-only modes never count;
+ * retired modes count only with `includeRetired`.
+ * @param {string} raidKey - catalog raid key
+ * @param {number} itemLevel - character item level
+ * @param {{includeRetired?: boolean}} [options]
+ * @returns {string|null} null when no automatic mode is eligible
+ */
+function getBestEligibleModeKey(raidKey, itemLevel, options) {
+  return getAutoModes(raidKey, options)
     .find((item) => Number(itemLevel) >= item.minItemLevel)?.modeKey || null;
 }
 
@@ -230,6 +240,13 @@ function buildAssignedRaidFromLegacy(legacyRaid) {
   return { raidKey: requirement.raidKey, data };
 }
 
+/**
+ * Every catalog raid of a character, normalized. A raid with no stored mode and
+ * no clears takes the default mode; one ticked for gold by hand keeps the mode
+ * it was ticked on, retired modes included.
+ * @param {object} character - character document or plain object
+ * @returns {Object<string, object>} assigned raids keyed by raid key
+ */
 function ensureAssignedRaids(character) {
   const itemLevel = Number(character?.itemLevel) || 0;
   const existing = character?.assignedRaids || {};
@@ -237,8 +254,11 @@ function ensureAssignedRaids(character) {
   const assigned = {};
 
   for (const raidKey of RAID_ORDER) {
-    const fallbackDifficulty = toModeLabel(getDefaultModeKey(raidKey, itemLevel));
     const sourceRaid = existing[raidKey] || {};
+    const tickedForGold = getGoldOverride(sourceRaid) === "include";
+    const fallbackModeKey = (tickedForGold && getBestEligibleModeKey(raidKey, itemLevel, { includeRetired: true }))
+      || getDefaultModeKey(raidKey, itemLevel);
+    const fallbackDifficulty = toModeLabel(fallbackModeKey);
 
     assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty, raidKey);
   }

@@ -172,7 +172,7 @@ function buildRaidRequirementList() {
         minItemLevel: mode.minItemLevel,
         raidKey,
         modeKey,
-        selectable: mode.selectable !== false,
+        selectable: isSelectableMode(raidKey, modeKey),
       });
     }
   }

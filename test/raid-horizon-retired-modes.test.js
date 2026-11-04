@@ -65,6 +65,34 @@ test("a character at 1750 or above defaults to Horizon Level 3", () => {
   assert.equal(horizonOf(1760).modeKey, "nightmare");
 });
 
+test("a sub-1750 Horizon ticked for gold keeps its mode and its gold slot", () => {
+  const raids = getStatusRaidsForCharacter({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1730,
+    assignedRaids: {
+      armoche: { goldOverride: "include" },
+      kazeros: { goldOverride: "include" },
+      serca: { goldOverride: "exclude" },
+      horizon: { goldOverride: "include", G1: { difficulty: "Hard" }, G2: { difficulty: "Hard" } },
+    },
+  });
+  assert.equal(raids.find((raid) => raid.raidKey === "horizon")?.modeKey, "hard");
+  assert.deepEqual(
+    raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "horizon"],
+  );
+});
+
+test("a sub-1750 Horizon ticked for gold with no stored label shows the mode it was ticked on", () => {
+  assert.equal(horizonOf(1730, { goldOverride: "include" })?.modeKey, "hard");
+  assert.equal(horizonOf(1710, { goldOverride: "include" })?.modeKey, "normal");
+});
+
+test("a sub-1750 Horizon excluded from gold follows the default and stays hidden", () => {
+  assert.equal(horizonOf(1730, { goldOverride: "exclude", G1: { difficulty: "Hard" } }), null);
+});
+
 test("a gold mode write reads an unset sub-1750 Horizon as unset, like the status card", () => {
   const character = { name: "Aki", class: "Bard", itemLevel: 1730, assignedRaids: {} };
   assert.equal(applyModeDecision(character, "horizon", { modeKey: "normal" }), "immediate");

@@ -425,7 +425,7 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
         G1: { difficulty: "Hard", completedDate: null },
         G2: { difficulty: "Hard", completedDate: null },
       },
-      // Stored, since the default no longer picks Horizon Level 2.
+      // Stored: the default skips Horizon Level 2.
       horizon: { modeKey: "hard" },
     },
   }), buckets);
@@ -474,7 +474,7 @@ test("preview summary includes eligible chars with no assigned raid state", () =
     assignedRaids: {},
   }), []);
 
-  // No Horizon: below 1750 the default no longer picks Level 1 or 2.
+  // No Horizon: below 1750 the default skips Level 1 and 2.
   assert.deepEqual(summary.completion, {
     totalRaids: 3,
     cleared: 0,

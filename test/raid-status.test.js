@@ -294,8 +294,8 @@ test("REGRESSION: raid-status displays detail-only raids but excludes them from 
 
 // --------- buildAccountPageEmbed ---------
 
-// `horizonModeKey` stores a Horizon mode: below 1750 the default no longer
-// picks Level 1 or 2, so a character shows them only when one is stored.
+// `horizonModeKey` stores a Horizon mode: below 1750 the default skips
+// Level 1 and 2, so a character shows them only when one is stored.
 function makeChar(name, itemLevel, options = {}) {
   const assignedRaids = ensureAssignedRaids({});
   if (options.horizonModeKey) assignedRaids.horizon = { modeKey: options.horizonModeKey };
