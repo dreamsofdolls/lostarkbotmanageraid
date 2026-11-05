@@ -1,6 +1,8 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const { NoticeKind, buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const { buildAutoManageStateNotice } = require("./action-policy");
 const {
   setBibleAutoSyncEnabled,
   setLocalSyncEnabled,
@@ -19,12 +21,12 @@ function createAutoManageBasicActionHandlers({
 }) {
   async function handleOff({ discordId, lang, replyAutoEmbed }) {
     await setBibleAutoSyncEnabled(discordId, false, {}, { UserModel: User });
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.muted)
-      .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.disable.title", lang)}`)
-      .setDescription(t("raid-auto-manage.disable.description", lang))
-      .setTimestamp();
-    await replyAutoEmbed(embed);
+    await replyAutoEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: NoticeKind.DONE,
+      title: t("raid-auto-manage.disable.title", lang),
+      description: t("raid-auto-manage.disable.description", lang),
+      tip: t("raid-auto-manage.disable.tip", lang),
+    }));
   }
 
   async function handleLocalOn({ interaction, discordId, lang, replyAutoNotice, replyAutoEmbed }) {
@@ -35,11 +37,7 @@ function createAutoManageBasicActionHandlers({
       { UserModel: User }
     );
     if (!result.ok && result.reason === SYNC_RESULT.conflict) {
-      await replyAutoNotice({
-        type: "warn",
-        title: t("raid-auto-manage.mutex.localBlockedByBibleTitle", lang),
-        description: t("raid-auto-manage.mutex.localBlockedByBibleDescription", lang),
-      });
+      await replyAutoNotice(buildAutoManageStateNotice("localBlockedByBible", lang));
       return;
     }
 
@@ -55,15 +53,21 @@ function createAutoManageBasicActionHandlers({
       console.warn("[raid-auto-manage] local-on token mint failed:", err?.message || String(err));
     }
 
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.success)
-      .setTitle(`${UI.icons.done} ${t("raid-auto-manage.localEnable.successTitle", lang)}`)
-      .setDescription(
-        companionUrl
-          ? t("raid-auto-manage.localEnable.successDescriptionWithLink", lang)
-          : t("raid-auto-manage.localEnable.successDescription", lang)
-      )
-      .setTimestamp();
+    // Local-sync is on either way; without a Reader link the card says what
+    // is still missing.
+    const embed = buildNoticeEmbed(EmbedBuilder, companionUrl
+      ? {
+        kind: NoticeKind.DONE,
+        title: t("raid-auto-manage.localEnable.successTitle", lang),
+        description: t("raid-auto-manage.localEnable.successDescriptionWithLink", lang),
+        tip: t("raid-auto-manage.localEnable.successTip", lang),
+      }
+      : {
+        kind: NoticeKind.PARTIAL,
+        title: t("raid-auto-manage.localEnable.successTitle", lang),
+        description: t("raid-auto-manage.localEnable.successDescription", lang),
+        tip: t("raid-auto-manage.localEnable.successNoLinkTip", lang),
+      });
     const replyExtras = {};
     if (companionUrl) {
       const row = new ActionRowBuilder().addComponents(
@@ -85,19 +89,15 @@ function createAutoManageBasicActionHandlers({
       { UserModel: User }
     );
     if (!result.ok && result.reason === SYNC_RESULT.noUser) {
-      await replyAutoNotice({
-        type: "info",
-        title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
-        description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
-      });
+      await replyAutoNotice(buildAutoManageStateNotice("localAlreadyOff", lang));
       return;
     }
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.muted)
-      .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.localDisable.title", lang)}`)
-      .setDescription(t("raid-auto-manage.localDisable.description", lang))
-      .setTimestamp();
-    await replyAutoEmbed(embed);
+    await replyAutoEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: NoticeKind.DONE,
+      title: t("raid-auto-manage.localDisable.title", lang),
+      description: t("raid-auto-manage.localDisable.description", lang),
+      tip: t("raid-auto-manage.localDisable.tip", lang),
+    }));
   }
 
   async function handleStatus({ discordId, lang, replyAutoEmbed }) {

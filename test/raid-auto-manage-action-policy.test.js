@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   buildAutoManageAutocompleteChoices,
+  buildAutoManageStateNotice,
   getAutoManageStateGate,
   isValidAutoManageAction,
   shouldReadAutoManageState,
@@ -26,14 +27,21 @@ test("auto-manage action policy validates supported slash actions", () => {
 });
 
 test("auto-manage state policy gates redundant and mutex actions", () => {
-  const redundantOn = getAutoManageStateGate("on", { bibleOn: true, localOn: false });
-  assert.equal(redundantOn?.type, "info");
-  assert.equal(redundantOn?.titleKey, "raid-auto-manage.redundant.alreadyOnTitle");
-  assert.equal(redundantOn?.descriptionKey, "raid-auto-manage.redundant.alreadyOnDescription");
-  assert.equal(getAutoManageStateGate("on", { bibleOn: false, localOn: true })?.titleKey, "raid-auto-manage.mutex.bibleBlockedByLocalTitle");
-  assert.equal(getAutoManageStateGate("sync", { bibleOn: false, localOn: true })?.titleKey, "raid-auto-manage.sync.localLockedTitle");
-  assert.equal(getAutoManageStateGate("local-off", { bibleOn: false, localOn: false })?.titleKey, "raid-auto-manage.redundant.localAlreadyOffTitle");
+  assert.equal(getAutoManageStateGate("on", { bibleOn: true, localOn: false })?.notice, "alreadyOn");
+  assert.equal(getAutoManageStateGate("on", { bibleOn: false, localOn: true })?.notice, "bibleBlockedByLocal");
+  assert.equal(getAutoManageStateGate("sync", { bibleOn: false, localOn: true })?.notice, "localLocked");
+  assert.equal(getAutoManageStateGate("local-off", { bibleOn: false, localOn: false })?.notice, "localAlreadyOff");
   assert.equal(getAutoManageStateGate("status", { bibleOn: false, localOn: false }), null);
+});
+
+test("auto-manage state notices: already on or off is input, a mode conflict is guard", () => {
+  const redundantOn = buildAutoManageStateNotice("alreadyOn", "en");
+  assert.equal(redundantOn.kind, "input");
+  assert.equal(redundantOn.title, "Auto-manage is already on");
+  assert.ok(redundantOn.tip);
+  for (const name of ["bibleBlockedByLocal", "localBlockedByBible", "localLocked"]) {
+    assert.equal(buildAutoManageStateNotice(name, "en").kind, "guard", name);
+  }
 });
 
 test("auto-manage state policy limits the pre-read to state-sensitive actions", () => {

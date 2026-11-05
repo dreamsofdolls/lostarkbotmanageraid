@@ -1,14 +1,20 @@
 "use strict";
 
-const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoRosterNotice,
+  deferEphemeralReply,
+} = require("../../../../utils/raid/common/shared");
 const { assertBibleSyncAllowed } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 // tPick, not t: the cooldown intro line is a variant pool; other keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
 const {
   stampAutoManageAttemptFromReport,
 } = require("../../../../services/auto-manage/reports/utils");
+const { buildAutoManageStateNotice } = require("../action-policy");
 
-function buildSyncCooldownDescription({
+function buildSyncCooldownNotice({
   lang,
   guard,
   getAutoManageCooldownMs,
@@ -17,20 +23,22 @@ function buildSyncCooldownDescription({
 }) {
   const totalCooldownText =
     formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId));
-  return [
-    t("raid-auto-manage.sync.cooldownLineIntro", lang),
-    "",
-    t("raid-auto-manage.sync.cooldownLineWait", lang, {
-      remain: formatAutoManageCooldownRemaining(guard.remainingMs),
-    }),
-    totalCooldownText
-      ? t("raid-auto-manage.sync.cooldownLineTotal", lang, {
-          totalCooldown: totalCooldownText,
-        })
-      : null,
-    "",
-    t("raid-auto-manage.sync.cooldownLineNote", lang),
-  ].filter((line) => line !== null).join("\n");
+  return {
+    kind: NoticeKind.BUSY,
+    title: t("raid-auto-manage.sync.cooldownTitle", lang),
+    description: t("raid-auto-manage.sync.cooldownLineIntro", lang),
+    fields: [
+      {
+        name: t("raid-auto-manage.fields.timeLeft", lang),
+        value: formatAutoManageCooldownRemaining(guard.remainingMs),
+        inline: true,
+      },
+      totalCooldownText
+        ? { name: t("raid-auto-manage.sync.cooldownTotalLabel", lang), value: totalCooldownText, inline: true }
+        : null,
+    ],
+    tip: t("raid-auto-manage.sync.cooldownTip", lang),
+  };
 }
 
 async function replySyncGuardFailure({
@@ -43,34 +51,25 @@ async function replySyncGuardFailure({
 }) {
   if (guard.reason === "in-flight") {
     await replyAutoNotice({
-      type: "info",
+      kind: NoticeKind.BUSY,
       title: t("raid-auto-manage.sync.inFlightTitle", lang),
       description: t("raid-auto-manage.sync.inFlightDescription", lang),
+      tip: t("raid-auto-manage.sync.inFlightTip", lang),
     });
     return;
   }
 
-  await replyAutoNotice({
-    type: "info",
-    title: t("raid-auto-manage.sync.cooldownTitle", lang),
-    description: buildSyncCooldownDescription({
-      lang,
-      guard,
-      getAutoManageCooldownMs,
-      formatAutoManageCooldownRemaining,
-      discordId,
-    }),
-  });
+  await replyAutoNotice(buildSyncCooldownNotice({
+    lang,
+    guard,
+    getAutoManageCooldownMs,
+    formatAutoManageCooldownRemaining,
+    discordId,
+  }));
 }
 
 async function editNoRosterNotice({ lang, editAutoNotice }) {
-  await editAutoNotice({
-    type: "info",
-    title: t("raid-auto-manage.sync.noRosterTitle", lang),
-    description: t("raid-auto-manage.sync.noRosterDescription", lang),
-  }, {
-    content: null,
-  });
+  await editAutoNotice(buildNoRosterNotice(lang), { content: null });
 }
 
 function hasSyncableRoster(userDoc) {
@@ -176,20 +175,16 @@ function createAutoManageSyncHandler({
     } catch (err) {
       if (!acknowledged) throw err;
       if (err?.code === "LOCAL_SYNC_ACTIVE") {
-        await editAutoNotice({
-          type: "warn",
-          title: t("raid-auto-manage.sync.localLockedTitle", lang),
-          description: t("raid-auto-manage.sync.localLockedDescription", lang),
-        }, { content: null });
+        await editAutoNotice(buildAutoManageStateNotice("localLocked", lang), { content: null });
         return;
       }
       console.error("[auto-manage] sync failed:", err?.message || err);
       await editAutoNotice({
-        type: "error",
+        kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.sync.failTitle", lang),
-        description: t("raid-auto-manage.sync.failDescription", lang, {
-          error: err?.message || err,
-        }),
+        description: t("raid-auto-manage.sync.failDescription", lang),
+        fields: [buildDetailField(err?.message || String(err), lang)],
+        tip: t("raid-auto-manage.sync.failTip", lang),
       }, {
         content: null,
       });

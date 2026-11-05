@@ -2,15 +2,27 @@
 
 const { RAID_ORDER } = require("../../../../domain/raid-catalog");
 const { t } = require("../../../../services/i18n");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoticeEmbed,
+} = require("../../../../utils/raid/common/shared");
 const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
 
-function buildResetConfirmEmbed({ EmbedBuilder, UI, lang }) {
-  return new EmbedBuilder()
-    .setColor(UI.colors.danger || 0xff5555)
-    .setTitle(`${UI.icons.warn} ${t("raid-auto-manage.reset.confirmTitle", lang)}`)
-    .setDescription(t("raid-auto-manage.reset.confirmDescription", lang))
-    .setTimestamp();
+// A confirm card; the irreversible step is carried by the red Danger button.
+function buildResetConfirmEmbed({ EmbedBuilder, lang }) {
+  return buildNoticeEmbed(EmbedBuilder, {
+    kind: NoticeKind.CONFIRM,
+    title: t("raid-auto-manage.reset.confirmTitle", lang),
+    description: t("raid-auto-manage.reset.confirmDescription", lang),
+    fields: [{
+      name: t("raid-auto-manage.reset.confirmKeptLabel", lang),
+      value: t("raid-auto-manage.reset.confirmKeptValue", lang),
+      inline: false,
+    }],
+    tip: t("raid-auto-manage.reset.confirmTip", lang),
+  });
 }
 
 function buildResetConfirmRow({
@@ -31,12 +43,13 @@ function buildResetConfirmRow({
   );
 }
 
-function buildResetSuccessEmbed({ EmbedBuilder, UI, lang }) {
-  return new EmbedBuilder()
-    .setColor(UI.colors.success)
-    .setTitle(`${UI.icons.done} ${t("raid-auto-manage.reset.successTitle", lang)}`)
-    .setDescription(t("raid-auto-manage.reset.successDescription", lang))
-    .setTimestamp();
+function buildResetSuccessEmbed({ EmbedBuilder, lang }) {
+  return buildNoticeEmbed(EmbedBuilder, {
+    kind: NoticeKind.DONE,
+    title: t("raid-auto-manage.reset.successTitle", lang),
+    description: t("raid-auto-manage.reset.successDescription", lang),
+    tip: t("raid-auto-manage.reset.successTip", lang),
+  });
 }
 
 function wipeAutoManageState(userDoc) {
@@ -71,7 +84,6 @@ function createAutoManageResetHandler({
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  UI,
   User,
   saveWithRetry,
   acquireAutoManageSyncSlot,
@@ -86,7 +98,7 @@ function createAutoManageResetHandler({
     editAutoEmbed,
   }) {
     await replyAutoEmbed(
-      buildResetConfirmEmbed({ EmbedBuilder, UI, lang }),
+      buildResetConfirmEmbed({ EmbedBuilder, lang }),
       {
         components: [
           buildResetConfirmRow({
@@ -108,7 +120,7 @@ function createAutoManageResetHandler({
     });
     if (decision !== "confirm") {
       await editAutoEmbed(
-        buildAutoManageCancelEmbed({ EmbedBuilder, UI, lang, decision, action: "reset" }),
+        buildAutoManageCancelEmbed({ EmbedBuilder, lang, decision, action: "reset" }),
         { components: [] }
       ).catch(() => {});
       return;
@@ -121,9 +133,10 @@ function createAutoManageResetHandler({
       });
       if (!resetGuard.acquired) {
         await editAutoNotice({
-          type: "info",
+          kind: NoticeKind.BUSY,
           title: t("raid-auto-manage.reset.inFlightTitle", lang),
           description: t("raid-auto-manage.reset.inFlightDescription", lang),
+          tip: t("raid-auto-manage.reset.inFlightTip", lang),
         }, {
           components: [],
         }).catch(() => {});
@@ -139,11 +152,11 @@ function createAutoManageResetHandler({
     } catch (err) {
       console.error("[raid-auto-manage] reset failed:", err?.message || err);
       await editAutoNotice({
-        type: "error",
+        kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.reset.failTitle", lang),
-        description: t("raid-auto-manage.reset.failDescription", lang, {
-          error: err?.message || String(err),
-        }),
+        description: t("raid-auto-manage.reset.failDescription", lang),
+        fields: [buildDetailField(err?.message || String(err), lang)],
+        tip: t("raid-auto-manage.reset.failTip", lang),
       }, {
         components: [],
       }).catch(() => {});
@@ -153,7 +166,7 @@ function createAutoManageResetHandler({
     }
 
     await editAutoEmbed(
-      buildResetSuccessEmbed({ EmbedBuilder, UI, lang }),
+      buildResetSuccessEmbed({ EmbedBuilder, lang }),
       { components: [] }
     ).catch(() => {});
   };

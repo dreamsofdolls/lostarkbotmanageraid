@@ -98,5 +98,5 @@ test("action:on reports an error when the user record disappears before commit",
 
   assert.equal(captured.options, undefined);
   assert.equal(notices.length, 1);
-  assert.equal(notices[0].type, "error");
+  assert.equal(notices[0].kind, "failure");
 });

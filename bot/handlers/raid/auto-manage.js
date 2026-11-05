@@ -10,6 +10,7 @@
 "use strict";
 
 const {
+  NoticeKind,
   editEmbed,
   editNotice,
   replyEmbed,
@@ -19,6 +20,7 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const { createAutocompleteDispatcher } = require("../../utils/raid/common/autocomplete");
 const {
   buildAutoManageAutocompleteChoices,
+  buildAutoManageStateNotice,
   getAutoManageStateGate,
   isValidAutoManageAction,
   shouldReadAutoManageState,
@@ -79,7 +81,6 @@ function createRaidAutoManageCommand(deps) {
     ButtonBuilder,
     ButtonStyle,
     ComponentType,
-    UI,
     User,
     saveWithRetry,
     ensureFreshWeek,
@@ -113,12 +114,14 @@ function createRaidAutoManageCommand(deps) {
     const editAutoNotice = (options, extras) => editNotice(interaction, EmbedBuilder, options, extras);
     const editAutoEmbed = (embed, extras) => editEmbed(interaction, embed, extras);
     const action = interaction.options.getString("action", true);
+    const invalidActionNotice = () => ({
+      kind: NoticeKind.INPUT,
+      title: t("raid-auto-manage.invalid.actionTitle", lang),
+      description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
+      tip: t("raid-auto-manage.invalid.actionTip", lang),
+    });
     if (!isValidAutoManageAction(action)) {
-      await replyAutoNotice({
-        type: "warn",
-        title: t("raid-auto-manage.invalid.actionTitle", lang),
-        description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
-      });
+      await replyAutoNotice(invalidActionNotice());
       return;
     }
     if (shouldReadAutoManageState(action)) {
@@ -130,11 +133,7 @@ function createRaidAutoManageCommand(deps) {
       const localOn = !!stateUser?.localSyncEnabled;
       const gate = getAutoManageStateGate(action, { bibleOn, localOn });
       if (gate) {
-        await replyAutoNotice({
-          type: gate.type,
-          title: t(gate.titleKey, lang),
-          description: t(gate.descriptionKey, lang),
-        });
+        await replyAutoNotice(buildAutoManageStateNotice(gate.notice, lang));
         return;
       }
     }
@@ -152,11 +151,7 @@ function createRaidAutoManageCommand(deps) {
       return;
     }
     console.warn(`[raid-auto-manage] no handler registered for action=${action}`);
-    await replyAutoNotice({
-      type: "warn",
-      title: t("raid-auto-manage.invalid.actionTitle", lang),
-      description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
-    });
+    await replyAutoNotice(invalidActionNotice());
   }
 
   const handleRaidAutoManageAutocomplete = createAutocompleteDispatcher("raid-auto-manage", {

@@ -3,6 +3,21 @@
 const {
   filterAutocompleteChoices,
 } = require("../../../utils/discord/select-options");
+const { t } = require("../../../services/i18n");
+const { NoticeKind } = require("../../../utils/raid/common/shared");
+
+// One definition per state notice. The action gates below and the handlers
+// that hit the same state later (a Local Sync conflict found while saving)
+// all build from here.
+const STATE_NOTICES = Object.freeze({
+  alreadyOn: { kind: NoticeKind.INPUT, keyBase: "raid-auto-manage.redundant.alreadyOn" },
+  alreadyOff: { kind: NoticeKind.INPUT, keyBase: "raid-auto-manage.redundant.alreadyOff" },
+  localAlreadyOn: { kind: NoticeKind.INPUT, keyBase: "raid-auto-manage.redundant.localAlreadyOn" },
+  localAlreadyOff: { kind: NoticeKind.INPUT, keyBase: "raid-auto-manage.redundant.localAlreadyOff" },
+  bibleBlockedByLocal: { kind: NoticeKind.GUARD, keyBase: "raid-auto-manage.mutex.bibleBlockedByLocal" },
+  localBlockedByBible: { kind: NoticeKind.GUARD, keyBase: "raid-auto-manage.mutex.localBlockedByBible" },
+  localLocked: { kind: NoticeKind.GUARD, keyBase: "raid-auto-manage.sync.localLocked" },
+});
 
 const AUTO_MANAGE_ACTIONS = Object.freeze([
   "on",
@@ -19,50 +34,20 @@ const AUTO_MANAGE_ACTION_SET = new Set(AUTO_MANAGE_ACTIONS);
 
 const STATE_GATES = Object.freeze({
   on: [
-    {
-      when: ({ bibleOn }) => bibleOn,
-      type: "info",
-      titleKey: "raid-auto-manage.redundant.alreadyOnTitle",
-      descriptionKey: "raid-auto-manage.redundant.alreadyOnDescription",
-    },
-    {
-      when: ({ localOn }) => localOn,
-      type: "warn",
-      titleKey: "raid-auto-manage.mutex.bibleBlockedByLocalTitle",
-      descriptionKey: "raid-auto-manage.mutex.bibleBlockedByLocalDescription",
-    },
+    { when: ({ bibleOn }) => bibleOn, notice: "alreadyOn" },
+    { when: ({ localOn }) => localOn, notice: "bibleBlockedByLocal" },
   ],
   off: [
-    {
-      when: ({ bibleOn }) => !bibleOn,
-      type: "info",
-      titleKey: "raid-auto-manage.redundant.alreadyOffTitle",
-      descriptionKey: "raid-auto-manage.redundant.alreadyOffDescription",
-    },
+    { when: ({ bibleOn }) => !bibleOn, notice: "alreadyOff" },
   ],
   sync: [
-    {
-      when: ({ localOn }) => localOn,
-      type: "warn",
-      titleKey: "raid-auto-manage.sync.localLockedTitle",
-      descriptionKey: "raid-auto-manage.sync.localLockedDescription",
-    },
+    { when: ({ localOn }) => localOn, notice: "localLocked" },
   ],
   "local-on": [
-    {
-      when: ({ localOn }) => localOn,
-      type: "info",
-      titleKey: "raid-auto-manage.redundant.localAlreadyOnTitle",
-      descriptionKey: "raid-auto-manage.redundant.localAlreadyOnDescription",
-    },
+    { when: ({ localOn }) => localOn, notice: "localAlreadyOn" },
   ],
   "local-off": [
-    {
-      when: ({ localOn }) => !localOn,
-      type: "info",
-      titleKey: "raid-auto-manage.redundant.localAlreadyOffTitle",
-      descriptionKey: "raid-auto-manage.redundant.localAlreadyOffDescription",
-    },
+    { when: ({ localOn }) => !localOn, notice: "localAlreadyOff" },
   ],
 });
 
@@ -117,6 +102,23 @@ function getAutoManageStateGate(action, state = {}) {
   return gates.find((gate) => gate.when(state)) || null;
 }
 
+/**
+ * The notice for one auto-manage state: already on or off, or blocked by the
+ * other sync mode.
+ * @param {"alreadyOn"|"alreadyOff"|"localAlreadyOn"|"localAlreadyOff"|"bibleBlockedByLocal"|"localBlockedByBible"|"localLocked"} name
+ * @param {string} lang
+ * @returns {{kind: string, title: string, description: string, tip: string}}
+ */
+function buildAutoManageStateNotice(name, lang) {
+  const { kind, keyBase } = STATE_NOTICES[name];
+  return {
+    kind,
+    title: t(`${keyBase}Title`, lang),
+    description: t(`${keyBase}Description`, lang),
+    tip: t(`${keyBase}Tip`, lang),
+  };
+}
+
 function buildAutoManageAutocompleteChoices({ bibleOn = false, localOn = false, needle = "", lang, t, normalizeName }) {
   const choices = AUTO_MANAGE_ACTION_CHOICES
     .filter((choice) => choice.show({ bibleOn, localOn }))
@@ -132,6 +134,7 @@ function buildAutoManageAutocompleteChoices({ bibleOn = false, localOn = false, 
 
 module.exports = {
   buildAutoManageAutocompleteChoices,
+  buildAutoManageStateNotice,
   getAutoManageStateGate,
   isValidAutoManageAction,
   shouldReadAutoManageState,

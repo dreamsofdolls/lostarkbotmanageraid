@@ -60,8 +60,10 @@ for (const action of ["enable", "reset"]) {
       assert.equal(acknowledged, decision === "timeout" || decision === "no hidden logs" ? 0 : 1);
       assert.deepEqual(edits.at(-1).options.components, []);
       if (!proceeds) {
+        // A pressed Cancel is done; an unanswered prompt is expired.
         const titleKey = decision === "timeout" ? "cancelTimeoutTitle" : "cancelTitle";
-        assert.equal(edits.at(-1).embed.title, `reset ${t(`raid-auto-manage.${action}.${titleKey}`, "en")}`);
+        const icon = decision === "timeout" ? "⌛" : "✅";
+        assert.equal(edits.at(-1).embed.title, `${icon}  ${t(`raid-auto-manage.${action}.${titleKey}`, "en")}`);
         assert.equal(edits.at(-1).embed.description, t(`raid-auto-manage.${action}.cancelDescription`, "en"));
       }
     });
@@ -98,7 +100,9 @@ for (const [label, doc] of [["missing user", null], ["empty roster", { accounts:
   });
 }
 
-test("reset asks for confirmation in the danger color", async () => {
+// The prompt is a yellow confirm card; the red Danger button carries the
+// irreversible step (raid-auto-manage-b-notices.test.js checks the button).
+test("reset asks for confirmation on a confirm card", async () => {
   let confirm;
   const handler = createAutoManageResetHandler({
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, UI,
@@ -113,5 +117,6 @@ test("reset asks for confirmation in the danger color", async () => {
     replyAutoEmbed: async embed => { confirm = embed.toJSON(); },
     editAutoEmbed: async () => {},
   });
-  assert.equal(confirm.color, UI.colors.danger);
+  assert.equal(confirm.color, UI.colors.progress);
+  assert.ok(confirm.title.startsWith("❔  "));
 });

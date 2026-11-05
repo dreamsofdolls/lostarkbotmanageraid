@@ -58,7 +58,8 @@ test("raid-auto-manage action:sync rejects while local-sync is active", async ()
   assert.equal(replies.length, 1);
   assert.equal(replies[0].flags, 64);
   assert.match(replies[0].embeds[0].data.title, /local-sync/i);
-  assert.match(replies[0].embeds[0].data.description, /Local Reader/);
+  // The way out of the block (a Local Reader link) is the card's next step.
+  assert.match(replies[0].embeds[0].data.footer.text, /Local Reader/);
 });
 
 test("raid-auto-manage autocomplete hides bible sync while local-sync is active", async () => {
@@ -272,7 +273,7 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
   assert.equal(doc.accounts[0].characters[0].publicLogDisabled, false);
   assert.equal(doc.accounts[0].characters[0].bibleSerial, null);
   assert.equal(doc.accounts[0].characters[0].sideTasks.length, 1);
-  assert.match(edits.at(-1).embeds[0].data.title, /Reset/);
+  assert.match(edits.at(-1).embeds[0].data.title, /^✅ {2}.*reset/i);
 });
 
 test("raid-auto-manage action:reset refuses while a bible sync is in flight", async () => {
@@ -318,5 +319,5 @@ test("raid-auto-manage action:reset refuses while a bible sync is in flight", as
   });
 
   assert.equal(saved, 0);
-  assert.match(edits.at(-1).embeds[0].data.title, /Reset/);
+  assert.match(edits.at(-1).embeds[0].data.title, /^🚦 {2}Reset/);
 });

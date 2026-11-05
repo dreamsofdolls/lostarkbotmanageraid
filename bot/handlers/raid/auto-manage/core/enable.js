@@ -1,35 +1,44 @@
 "use strict";
 
-const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoticeEmbed,
+  deferEphemeralReply,
+} = require("../../../../utils/raid/common/shared");
 const { assertBibleSyncAllowed, enableBibleSync } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 const { t } = require("../../../../services/i18n");
 const { getAutoManageEntries } = require("../../../../services/auto-manage/reports/utils");
+const { buildAutoManageStateNotice } = require("../action-policy");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
 
-function buildEnableSimpleSuccessEmbed({ EmbedBuilder, UI, lang, descriptionKey }) {
-  return new EmbedBuilder()
-    .setColor(UI.colors.success)
-    .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.successTitle", lang)}`)
-    .setDescription(t(descriptionKey, lang))
-    .setTimestamp();
+function buildEnableNoRosterEmbed({ EmbedBuilder, lang }) {
+  return buildNoticeEmbed(EmbedBuilder, {
+    kind: NoticeKind.DONE,
+    title: t("raid-auto-manage.enable.successTitle", lang),
+    description: t("raid-auto-manage.enable.noRosterDescription", lang),
+    tip: t("raid-auto-manage.enable.noRosterTip", lang),
+  });
 }
 
+// The flag is on but the first sync waits for the cooldown.
 function buildEnableCooldownSkipEmbed({
   EmbedBuilder,
-  UI,
   lang,
   guard,
   formatAutoManageCooldownRemaining,
 }) {
-  return new EmbedBuilder()
-    .setColor(UI.colors.success)
-    .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.cooldownSkipTitle", lang)}`)
-    .setDescription(
-      t("raid-auto-manage.enable.cooldownSkipDescription", lang, {
-        remain: formatAutoManageCooldownRemaining(guard.remainingMs),
-      })
-    )
-    .setTimestamp();
+  return buildNoticeEmbed(EmbedBuilder, {
+    kind: NoticeKind.PARTIAL,
+    title: t("raid-auto-manage.enable.cooldownSkipTitle", lang),
+    description: t("raid-auto-manage.enable.cooldownSkipDescription", lang),
+    fields: [{
+      name: t("raid-auto-manage.fields.timeLeft", lang),
+      value: formatAutoManageCooldownRemaining(guard.remainingMs),
+      inline: true,
+    }],
+    tip: t("raid-auto-manage.enable.cooldownSkipTip", lang),
+  });
 }
 
 function buildHiddenCharsConfirmRow({
@@ -56,7 +65,6 @@ function createAutoManageEnableHandler({
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
-  UI,
   User,
   ensureFreshWeek,
   acquireAutoManageSyncSlot,
@@ -108,9 +116,10 @@ function createAutoManageEnableHandler({
     const guard = await acquireAutoManageSyncSlot(discordId);
     if (!guard.acquired && guard.reason === "in-flight") {
       await replyAutoNotice({
-        type: "info",
+        kind: NoticeKind.BUSY,
         title: t("raid-auto-manage.enable.inFlightTitle", lang),
         description: t("raid-auto-manage.enable.inFlightDescription", lang),
+        tip: t("raid-auto-manage.enable.inFlightTip", lang),
       });
       return;
     }
@@ -125,7 +134,6 @@ function createAutoManageEnableHandler({
         await editAutoEmbed(
           buildEnableCooldownSkipEmbed({
             EmbedBuilder,
-            UI,
             lang,
             guard,
             formatAutoManageCooldownRemaining,
@@ -139,14 +147,7 @@ function createAutoManageEnableHandler({
       assertBibleSyncAllowed(probeDoc);
       if (!probeDoc || !Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
         await enableBibleSync(User, discordId);
-        await editAutoEmbed(
-          buildEnableSimpleSuccessEmbed({
-            EmbedBuilder,
-            UI,
-            lang,
-            descriptionKey: "raid-auto-manage.enable.noRosterDescription",
-          })
-        );
+        await editAutoEmbed(buildEnableNoRosterEmbed({ EmbedBuilder, lang }));
         return;
       }
 
@@ -209,27 +210,26 @@ function createAutoManageEnableHandler({
 
       await stampAutoManageAttempt(discordId);
       await editAutoEmbed(
-        buildAutoManageCancelEmbed({ EmbedBuilder, UI, lang, decision, action: "enable" }),
+        buildAutoManageCancelEmbed({ EmbedBuilder, lang, decision, action: "enable" }),
         { components: [] }
       );
     } catch (err) {
       if (!acknowledged) throw err;
       if (err?.code === "LOCAL_SYNC_ACTIVE") {
-        await editAutoNotice({
-          type: "warn",
-          title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
-          description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
-        }, { content: null, components: [] });
+        await editAutoNotice(
+          buildAutoManageStateNotice("bibleBlockedByLocal", lang),
+          { content: null, components: [] },
+        );
         return;
       }
       await stampAutoManageAttempt(discordId);
       console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
       await editAutoNotice({
-        type: "error",
+        kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.enable.probeFailTitle", lang),
-        description: t("raid-auto-manage.enable.probeFailDescription", lang, {
-          error: err?.message || err,
-        }),
+        description: t("raid-auto-manage.enable.probeFailDescription", lang),
+        fields: [buildDetailField(err?.message || String(err), lang)],
+        tip: t("raid-auto-manage.enable.probeFailTip", lang),
       }, {
         content: null,
         components: [],
