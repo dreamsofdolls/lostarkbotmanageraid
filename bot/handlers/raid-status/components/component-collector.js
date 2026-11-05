@@ -2,6 +2,7 @@
 
 const { t, getUserLanguage } = require("../../../services/i18n");
 const {
+  NoticeKind,
   deferEphemeralReply,
   editNotice,
   followUpNotice,
@@ -151,9 +152,10 @@ function attachRaidStatusComponentCollector({
         console.warn("[raid-status component] non-owner language lookup failed:", err?.message || err);
       }
       await editNotice(component, EmbedBuilder, {
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-status.sync.noControlTitle", clickerLang),
         description: t("raid-status.sync.noControlDescription", clickerLang),
+        tip: t("raid-status.sync.noControlTip", clickerLang),
       }).catch(() => {});
       return;
     }
@@ -166,9 +168,10 @@ function attachRaidStatusComponentCollector({
       console.error(`[raid-status component] ${component.customId} failed:`, err);
       const sendNotice = component.deferred || component.replied ? followUpNotice : replyNotice;
       await sendNotice(component, EmbedBuilder, {
-        type: "warn",
+        kind: NoticeKind.FAILURE,
         title: t("raid-status.sync.buttonFailedTitle", lang),
         description: t("raid-status.sync.buttonFailedDescription", lang),
+        tip: t("raid-status.sync.buttonFailedTip", lang),
       }).catch(() => {});
     }
   });

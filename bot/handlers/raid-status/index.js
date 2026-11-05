@@ -19,6 +19,8 @@ const {
   buildStatusRosterFilterRow,
 } = require("./raid-filter");
 const {
+  NoticeKind,
+  buildNoRosterNotice,
   buildNoticeEmbed,
 } = require("../../utils/raid/common/shared");
 const { t } = require("../../services/i18n");
@@ -160,19 +162,21 @@ function createRaidStatusCommand(deps) {
     let userDoc = viewerState.userDoc;
 
     const openingNotice = [
-      { when: viewerState.shareLookupFailed, type: "warn", key: "shareLookupFailed" },
-      { when: viewerState.noRoster, type: "info", key: "noRoster" },
+      {
+        when: viewerState.shareLookupFailed,
+        build: () => ({
+          kind: NoticeKind.FAILURE,
+          title: t("raid-status.notice.shareLookupFailedTitle", lang),
+          description: t("raid-status.notice.shareLookupFailedDescription", lang),
+          tip: t("raid-status.notice.shareLookupFailedTip", lang),
+        }),
+      },
+      { when: viewerState.noRoster, build: () => buildNoRosterNotice(lang) },
     ].find((notice) => notice.when);
     if (openingNotice) {
       await interaction.editReply({
         content: initialContent,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: openingNotice.type,
-            title: t(`raid-status.notice.${openingNotice.key}Title`, lang),
-            description: t(`raid-status.notice.${openingNotice.key}Description`, lang),
-          }),
-        ],
+        embeds: [buildNoticeEmbed(EmbedBuilder, openingNotice.build())],
         files: [],
         attachments: [],
         components: [],
@@ -337,11 +341,7 @@ function createRaidStatusCommand(deps) {
       buildTaskViewEmbed,
       buildLocalSyncViewEmbeds: buildSyncViewEmbeds,
       // The same notice /raid-status opens with when there is no roster.
-      buildEmptyRosterEmbed: () => buildNoticeEmbed(EmbedBuilder, {
-        type: "info",
-        title: t("raid-status.notice.noRosterTitle", lang),
-        description: t("raid-status.notice.noRosterDescription", lang),
-      }),
+      buildEmptyRosterEmbed: () => buildNoticeEmbed(EmbedBuilder, buildNoRosterNotice(lang)),
       lang,
     });
 

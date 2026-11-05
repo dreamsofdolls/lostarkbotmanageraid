@@ -20,17 +20,20 @@ function rosterRefreshOutcome(result) {
  * The notice a surface shows after a manual roster refresh.
  * @param {object} result - runManualRosterRefresh's result
  * @param {string} lang
- * @param {Record<"updated"|"noUpdate"|"missing", {type: string, title: string, description: string}>} notices
- *   the surface's notice type and translation keys per outcome (titles may be variant pools)
+ * @param {Record<"updated"|"noUpdate"|"missing", {kind?: string, type?: string, title: string, description: string, tip?: string}>} notices
+ *   the surface's notice kind (or legacy type) and translation keys per
+ *   outcome (titles and descriptions may be variant pools)
  * @param {object} vars - description variables
- * @returns {{type: string, title: string, description: string}}
+ * @returns {{kind?: string, type?: string, title: string, description: string, tip?: string}}
  */
 function buildRosterRefreshNotice(result, lang, notices, vars) {
   const notice = notices[rosterRefreshOutcome(result)];
   return {
-    type: notice.type,
+    ...(notice.kind && { kind: notice.kind }),
+    ...(notice.type && { type: notice.type }),
     title: tPick(notice.title, lang),
     description: tPick(notice.description, lang, vars),
+    ...(notice.tip && { tip: tPick(notice.tip, lang) }),
   };
 }
 

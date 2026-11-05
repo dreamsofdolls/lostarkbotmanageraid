@@ -116,8 +116,8 @@ test("a throwing raid-status handler is reported to the clicker instead of rejec
 
   assert.equal(followUps.length, 1);
   // A failing button gets its own notice, not the Refresh progress one.
-  assert.match(followUps[0].embeds[0].toJSON().title, /This button did not run/);
-  assert.match(followUps[0].embeds[0].toJSON().description, /The card was left as it was/);
+  assert.match(followUps[0].embeds[0].toJSON().title, /^❌ {2}This button did not run$/);
+  assert.match(followUps[0].embeds[0].toJSON().description, /the card stays as it was/);
   assert.deepEqual(edits, []);
 });
 

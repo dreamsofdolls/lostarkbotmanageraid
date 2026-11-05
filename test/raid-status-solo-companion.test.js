@@ -177,7 +177,7 @@ test("raid-status collector rejects another user's Solo Companion click before d
   assert.equal(ackOrder[0][0], "defer");
   assert.equal(ackOrder[0][1].flags, 64);
   assert.equal(ackOrder[1][0], "edit");
-  assert.match(replyPayload.embeds[0].data.title, /only the command author/i);
+  assert.match(replyPayload.embeds[0].data.title, /^🔒 {2}Only the person who opened it can use it$/);
 });
 
 test("local-sync mode splits in-Discord actions from the web companion buttons", () => {

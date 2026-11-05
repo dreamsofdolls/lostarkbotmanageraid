@@ -50,6 +50,16 @@ class FakeEmbedBuilder {
     this.timestamp = value;
     return this;
   }
+
+  setFooter(value) {
+    this.footer = value;
+    return this;
+  }
+
+  addFields(...fields) {
+    this.fields = [...(this.fields || []), ...fields];
+    return this;
+  }
 }
 
 // The shares owner-1 still has with the viewer, as getAccessibleAccounts
@@ -129,11 +139,12 @@ function createHandlerHarness(overrides = {}) {
     }),
     buildEmbedAndCanvas: overrides.buildEmbedAndCanvas || (async () => ({})),
     buildComponents: overrides.buildComponents || (() => []),
-    runManualStatusSync: async () => ({ outcome: null }),
+    runManualStatusSync: overrides.runManualStatusSync || (async () => ({ outcome: null })),
     runManualRosterRefresh: overrides.runManualRosterRefresh || (async () => ({})),
+    runLocalSyncAction: overrides.runLocalSyncAction,
     canEditAccountFn: overrides.canEditAccountFn || (async (viewerId, ownerId) => viewerId === ownerId),
     getAccessibleAccountsFn: overrides.getAccessibleAccountsFn || VIEW_SHARE_OF_OWNER_1,
-    formatNextCooldownRemaining: () => "",
+    formatNextCooldownRemaining: overrides.formatNextCooldownRemaining || (() => ""),
     getAutoManageCooldownMs: () => 0,
     rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
     isReplyPrivate: overrides.isReplyPrivate || (() => true),
@@ -326,7 +337,10 @@ test("raid-status Solo Companion reports token failures only in the deferred pri
   assert.deepEqual(result, { redraw: false });
   assert.equal(originalEditCount, 0);
   assert.match(privatePayload.embeds[0].title, /Solo Local Reader/);
-  assert.match(privatePayload.embeds[0].description, /token unavailable/);
+  // The raw error moves out of the sentence into the code-font detail field.
+  assert.doesNotMatch(privatePayload.embeds[0].description, /token unavailable/);
+  const detail = privatePayload.embeds[0].fields.find((field) => field.name === "🧾 Chi tiết");
+  assert.match(detail.value, /token unavailable/);
   assert.equal(privatePayload.components, undefined);
 });
 
@@ -566,7 +580,7 @@ test("goldReceive auto resets the selected characters", async () => {
   assert.ok(!assignedRaids.kazeros.goldOverride);
   assert.equal(doc.saves, 1);
   assert.equal(followUps.length, 1);
-  assert.match(followUps[0].embeds[0].title, /Artist tự chọn gold lại cho 1 con/);
+  assert.match(followUps[0].embeds[0].title, /Tớ tự chọn gold lại cho 1 con/);
   // A raid ticked on top of the pre-ticked set, together with auto, is named as ignored.
   assert.match(followUps[0].embeds[0].description, /bỏ qua/);
 });
@@ -686,7 +700,8 @@ test("goldReceive warns once when the save fails and still redraws", async (t) =
 
   assert.deepEqual(result, { redraw: true });
   assert.equal(followUps.length, 1);
-  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.bulkSaveFailedTitle));
+  assert.ok(followUps[0].embeds[0].title.includes(TRANSLATIONS.vi["raid-status"].goldView.saveFailedTitle));
+  assert.equal(followUps[0].embeds[0].color, UI.colors.danger);
 });
 
 test("raid-status component handlers reject gold mode writes on view-only shares", async () => {
@@ -723,7 +738,7 @@ test("raid-status component handlers reject gold mode writes on view-only shares
   assert.equal(queried, false);
   assert.equal(harness.reloadCount, 0);
   assert.equal(followUps.length, 1);
-  assert.match(followUps[0].embeds[0].title, /Share view-only$/);
+  assert.ok(followUps[0].embeds[0].title.endsWith(TRANSLATIONS.vi["raid-task"].shareViewOnly.title));
   assert.match(followUps[0].embeds[0].description, /cài đặt gold/);
 });
 
@@ -890,10 +905,10 @@ test("raid-status roster refresh re-checks a share downgraded after the card ope
 
   assert.deepEqual(result, { redraw: false });
   assert.equal(refreshed, false);
-  assert.ok(
-    noticePayload.embeds[0].title.includes(
-      TRANSLATIONS.vi["raid-status"].sync.rosterRefreshSharedLockedTitle,
-    ),
+  assert.ok(noticePayload.embeds[0].title.includes(TRANSLATIONS.vi["raid-task"].shareViewOnly.title));
+  assert.equal(
+    noticePayload.embeds[0].description,
+    TRANSLATIONS.vi["raid-status"].sync.rosterRefreshSharedLockedDescription.replace("{owner}", "Mira"),
   );
 });
 
@@ -917,11 +932,10 @@ for (const [name, canEditAccountFn, runManualRosterRefresh] of [
       },
     });
 
-    const { rosterRefreshShareRevokedTitle, rosterRefreshShareRevokedDescription } =
-      TRANSLATIONS.vi["raid-status"].sync;
+    const { rosterRefreshShareRevokedDescription } = TRANSLATIONS.vi["raid-status"].sync;
     assert.deepEqual(result, { redraw: false });
-    assert.ok(noticePayload.embeds[0].title.includes(rosterRefreshShareRevokedTitle));
-    assert.equal(noticePayload.embeds[0].description, rosterRefreshShareRevokedDescription);
+    assert.ok(noticePayload.embeds[0].title.includes(TRANSLATIONS.vi["raid-task"].shareRevoked.title));
+    assert.equal(noticePayload.embeds[0].description, rosterRefreshShareRevokedDescription.replace("{owner}", "Mira"));
   });
 }
 
@@ -980,7 +994,7 @@ test("raid-status component handlers show the view-only lock when a task is togg
   assert.equal(harness.reloadCount, 0);
   assert.ok(followUpPayload, "expected the view-only lock notice");
   assert.equal(followUpPayload.flags, 64);
-  assert.match(followUpPayload.embeds[0].title, /Share view-only$/);
+  assert.ok(followUpPayload.embeds[0].title.endsWith(TRANSLATIONS.vi["raid-task"].shareViewOnly.title));
   assert.match(followUpPayload.embeds[0].description, /\*\*Mira\*\*/);
 });
 
@@ -1039,4 +1053,69 @@ test("raid-status component handlers warn when a task toggle cannot be saved", a
     followUpPayload.embeds[0].description,
     TRANSLATIONS.vi["raid-status"].taskView.toggleFailedDescription,
   );
+  // A failed save is a failure card; it showed no error text before, so it
+  // gains no detail field.
+  assert.ok(followUpPayload.embeds[0].title.startsWith("❌  "));
+  assert.equal(followUpPayload.embeds[0].color, UI.colors.danger);
+  assert.equal(followUpPayload.embeds[0].fields, undefined);
+});
+
+test("raid-status sync cooldown is a busy card with the time left in a field", async () => {
+  let replyPayload = null;
+  const harness = createHandlerHarness({
+    session: { statusUserMeta: { autoManageEnabled: true, lastAutoManageAttemptAt: 1 } },
+    runManualStatusSync: async () => ({ status: "cooldown", outcome: null }),
+    formatNextCooldownRemaining: () => "4 phút",
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.sync]({
+    async reply(payload) {
+      replyPayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  const embed = replyPayload.embeds[0];
+  assert.ok(embed.title.startsWith("🚦  "));
+  assert.equal(embed.color, UI.colors.progress);
+  assert.deepEqual(embed.fields.map((field) => [field.name, field.value]), [["⏱️ Còn lại", "4 phút"]]);
+  assert.ok(embed.footer.text.startsWith("💡 "));
+});
+
+test("raid-status roster refresh of a roster no longer there is an expired card", async () => {
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    runManualRosterRefresh: async () => ({ status: "missing" }),
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.rosterRefresh]({
+    async deferUpdate() {},
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  const embed = followUpPayload.embeds[0];
+  assert.ok(embed.title.startsWith("⌛  "));
+  assert.equal(embed.color, UI.colors.muted);
+  assert.ok(embed.footer.text.startsWith("💡 "));
+});
+
+test("raid-status Local Sync buttons pressed by someone else answer with a guard card", async () => {
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    runLocalSyncAction: async () => ({ ok: false, reason: "notOwner", job: null, applied: false }),
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+    customId: "status-local:apply:job-1",
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  const embed = followUpPayload.embeds[0];
+  assert.ok(embed.title.startsWith("🔒  "));
+  assert.equal(embed.color, UI.colors.progress);
+  assert.ok(embed.footer.text.startsWith("💡 "));
 });

@@ -8,7 +8,7 @@ const {
   getRaidLabel,
   getRaidSpecificModeLabel,
 } = require("../../../utils/raid/common/labels");
-const { truncateText } = require("../../../utils/raid/common/shared");
+const { NoticeKind, truncateText } = require("../../../utils/raid/common/shared");
 const { t } = require("../../../services/i18n");
 const { GOLD_RECEIVE_AUTO } = require("./gold-actions");
 
@@ -96,8 +96,9 @@ function skippedModeItems(entry, lang) {
  * @param {Array<{raidKey: string, keptModeKey: string}>} [args.collapsed] - from parseGoldModeValues
  * @param {string} args.lang - viewer language
  * @param {(className: string) => string} args.getClassEmoji - class icon lookup
- * @returns {{type: "success"|"warn", title: string, description: string}|null}
- *   null when nothing changed and nothing was ineligible or missing
+ * @returns {{kind: "done"|"input", title: string, description: string}|null}
+ *   input when nothing changed but a pick was skipped or a character is
+ *   missing; null when nothing changed and nothing was ineligible or missing
  */
 function buildModeSummaryNotice({ result, collapsed = [], lang, getClassEmoji }) {
   const entries = Array.isArray(result?.results) ? result.results : [];
@@ -120,14 +121,14 @@ function buildModeSummaryNotice({ result, collapsed = [], lang, getClassEmoji })
 
   if (changedLines.length > 0) {
     return {
-      type: "success",
+      kind: NoticeKind.DONE,
       title: goldViewText("modeSummaryTitle", lang, { n: changedLines.length }),
       description: clampDescription([...changedLines, ...tailLines]),
     };
   }
   if (skipped.length === 0 && !missing) return null;
   return {
-    type: "warn",
+    kind: NoticeKind.INPUT,
     title: goldViewText("nothingChangedTitle", lang),
     description: clampDescription([goldViewText("nothingChangedDescription", lang), ...tailLines]),
   };
@@ -163,8 +164,8 @@ function goldSkippedTail(entry, lang) {
  * @param {boolean} [args.ignoredTicks] - raids were ticked together with auto
  * @param {string} args.lang - viewer language
  * @param {(className: string) => string} args.getClassEmoji - class icon lookup
- * @returns {{type: "success"|"info"|"warn", title: string, description: string}|null}
- *   warn when nothing changed but a character was left as is or is missing;
+ * @returns {{kind: "done"|"input", title: string, description: string}|null}
+ *   input when nothing changed but a character was left as is or is missing;
  *   null when nothing changed and nobody needs naming
  */
 function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, lang, getClassEmoji }) {
@@ -182,7 +183,7 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
   if (touched.length === 0) {
     if (keptLines.length === 0 && !missing) return null;
     return {
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: goldViewText("nothingChangedTitle", lang),
       description: clampDescription([...keptLines, missing]),
     };
@@ -190,7 +191,7 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
 
   if (receive?.kind === GOLD_RECEIVE_AUTO) {
     return {
-      type: "info",
+      kind: NoticeKind.DONE,
       title: goldViewText("goldAutoSummaryTitle", lang, { n: touched.length }),
       description: clampDescription([
         ...touched.map((entry) => `${characterPrefix(entry, getClassEmoji)}: ${raidList(entry.kept, lang)}`),
@@ -202,7 +203,7 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
 
   const ticked = [...(receive?.raidKeys || [])].sort(byRaidOrder);
   return {
-    type: "success",
+    kind: NoticeKind.DONE,
     title: goldViewText("goldSummaryTitle", lang, { n: touched.length }),
     description: clampDescription([
       goldViewText("goldSetLine", lang, { raids: raidList(ticked, lang) }),

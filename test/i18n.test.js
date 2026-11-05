@@ -141,8 +141,11 @@ test("Solo Companion launcher copy is complete in all three first-class language
     "soloCompanionTitle",
     "soloCompanionDescription",
     "soloCompanionOpenButtonLabel",
-    "soloCompanionUnavailableTitle",
-    "soloCompanionUnavailableDescription",
+    "soloCompanionLifetimeLabel",
+    "soloCompanionLifetimeValue",
+    "soloCompanionTip",
+    "localReaderUnavailableTitle",
+    "localReaderUnavailableDescription",
     "soloCompanionFailedTitle",
     "soloCompanionFailedDescription",
   ];

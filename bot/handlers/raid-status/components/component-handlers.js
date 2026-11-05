@@ -27,6 +27,9 @@ const {
 const { getClassEmoji: defaultGetClassEmoji } = require("../../../models/Class");
 const { createStatusRedraw } = require("../view/redraw");
 const {
+  NoticeKind,
+  buildDetailField,
+  buildNoticeEmbed,
   deferEphemeralReply,
   editEmbed,
   editNotice,
@@ -67,56 +70,48 @@ function redraw() {
   return { redraw: true };
 }
 
+const STALE_CARD_KEYS = Object.freeze({
+  title: "raid-status.notice.staleCardTitle",
+  description: "raid-status.notice.staleCardDescription",
+  tip: "raid-status.notice.staleCardTip",
+});
+
 const ROSTER_REFRESH_NOTICES = Object.freeze({
   updated: {
-    type: "success",
+    kind: NoticeKind.DONE,
     title: "raid-status.sync.rosterRefreshSuccessTitle",
     description: "raid-status.sync.rosterRefreshSuccessDescription",
   },
   noUpdate: {
-    type: "warn",
+    kind: NoticeKind.BUSY,
     title: "raid-status.sync.rosterRefreshNoUpdateTitle",
     description: "raid-status.sync.rosterRefreshNoUpdateDescription",
+    tip: "raid-status.sync.rosterRefreshRetryTip",
   },
-  missing: {
-    type: "warn",
-    title: "raid-status.sync.rosterRefreshMissingTitle",
-    description: "raid-status.sync.rosterRefreshMissingDescription",
-  },
+  // The refresh found no such user or roster: the card is older than the data.
+  missing: { kind: NoticeKind.EXPIRED, ...STALE_CARD_KEYS },
 });
 
-// Notice keys per refused action. The view-only pair shows while the owner
-// still shares a roster with the viewer; the revoked pair once nothing is shared.
-const SHARE_REFUSAL_NOTICES = Object.freeze({
+// Title and tip per share state: the view-only pair shows while the owner
+// still shares a roster with the viewer, the revoked pair once nothing is
+// shared. The sentence names the refused action.
+const SHARE_REFUSAL_STATE_KEYS = Object.freeze({
+  viewOnly: { title: "raid-task.shareViewOnly.title", tip: "raid-task.shareViewOnly.tip" },
+  revoked: { title: "raid-task.shareRevoked.title", tip: "raid-task.shareRevoked.tip" },
+});
+
+const SHARE_REFUSAL_DESCRIPTIONS = Object.freeze({
   task: {
-    viewOnly: {
-      title: "raid-task.shareViewOnly.title",
-      description: "raid-task.shareViewOnly.description",
-    },
-    revoked: {
-      title: "raid-task.shareRevoked.title",
-      description: "raid-task.shareRevoked.description",
-    },
+    viewOnly: "raid-task.shareViewOnly.description",
+    revoked: "raid-task.shareRevoked.description",
   },
   gold: {
-    viewOnly: {
-      title: "raid-task.shareViewOnly.title",
-      description: "raid-status.goldView.shareViewOnlyDescription",
-    },
-    revoked: {
-      title: "raid-task.shareRevoked.title",
-      description: "raid-status.goldView.shareRevokedDescription",
-    },
+    viewOnly: "raid-status.goldView.shareViewOnlyDescription",
+    revoked: "raid-status.goldView.shareRevokedDescription",
   },
   rosterRefresh: {
-    viewOnly: {
-      title: "raid-status.sync.rosterRefreshSharedLockedTitle",
-      description: "raid-status.sync.rosterRefreshSharedLockedDescription",
-    },
-    revoked: {
-      title: "raid-status.sync.rosterRefreshShareRevokedTitle",
-      description: "raid-status.sync.rosterRefreshShareRevokedDescription",
-    },
+    viewOnly: "raid-status.sync.rosterRefreshSharedLockedDescription",
+    revoked: "raid-status.sync.rosterRefreshShareRevokedDescription",
   },
 });
 
@@ -141,7 +136,6 @@ function createStatusComponentRouteHandlers(ctx) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    UI,
     User,
     saveWithRetry,
     interaction,
@@ -214,13 +208,44 @@ function createStatusComponentRouteHandlers(ctx) {
     const stillShared = await isShareStillListed(discordId, sharedFrom?.ownerDiscordId, {
       getAccessibleAccounts: getAccessibleAccountsFn,
     });
-    const keys = SHARE_REFUSAL_NOTICES[kind][stillShared ? "viewOnly" : "revoked"];
+    const state = stillShared ? "viewOnly" : "revoked";
+    const keys = SHARE_REFUSAL_STATE_KEYS[state];
     return {
-      type: "lock",
+      kind: NoticeKind.GUARD,
       title: t(keys.title, lang),
-      description: t(keys.description, lang, {
+      description: t(SHARE_REFUSAL_DESCRIPTIONS[kind][state], lang, {
         owner: sharedFrom?.ownerLabel || "(unknown)",
       }),
+      tip: t(keys.tip, lang),
+    };
+  }
+
+  function staleCardNotice() {
+    return {
+      kind: NoticeKind.EXPIRED,
+      title: t(STALE_CARD_KEYS.title, lang),
+      description: t(STALE_CARD_KEYS.description, lang),
+      tip: t(STALE_CARD_KEYS.tip, lang),
+    };
+  }
+
+  // Both Local Reader link buttons need PUBLIC_BASE_URL.
+  function localReaderUnavailableNotice() {
+    return {
+      kind: NoticeKind.FAILURE,
+      title: t("raid-status.sync.localReaderUnavailableTitle", lang),
+      description: t("raid-status.sync.localReaderUnavailableDescription", lang),
+      tip: t("raid-status.sync.localReaderUnavailableTip", lang),
+    };
+  }
+
+  function linkFailedNotice(titleKey, descriptionKey, err) {
+    return {
+      kind: NoticeKind.FAILURE,
+      title: t(titleKey, lang),
+      description: t(descriptionKey, lang),
+      fields: [buildDetailField(err?.message || String(err), lang)],
+      tip: t("raid-status.sync.linkFailedTip", lang),
     };
   }
 
@@ -237,11 +262,12 @@ function createStatusComponentRouteHandlers(ctx) {
     await followUpShareRefusal(component, "gold", sharedFrom);
   }
 
-  function goldViewNotice(type, titleKey, descriptionKey) {
+  function goldSaveFailedNotice() {
     return {
-      type,
-      title: t(`raid-status.goldView.${titleKey}`, lang),
-      description: t(`raid-status.goldView.${descriptionKey}`, lang),
+      kind: NoticeKind.FAILURE,
+      title: t("raid-status.goldView.saveFailedTitle", lang),
+      description: t("raid-status.goldView.saveFailedDescription", lang),
+      tip: t("raid-status.goldView.saveFailedTip", lang),
     };
   }
 
@@ -319,11 +345,7 @@ function createStatusComponentRouteHandlers(ctx) {
 
       const baseUrl = publicBaseUrl();
       if (!baseUrl) {
-        await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.sync.localNewLinkUnavailableTitle", lang),
-          description: t("raid-status.sync.localNewLinkUnavailableDescription", lang),
-        }).catch(() => {});
+        await followUpNotice(component, EmbedBuilder, localReaderUnavailableNotice()).catch(() => {});
         return noRedraw();
       }
 
@@ -339,13 +361,11 @@ function createStatusComponentRouteHandlers(ctx) {
         });
       } catch (err) {
         console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
-        await followUpNotice(component, EmbedBuilder, {
-          type: "error",
-          title: t("raid-status.sync.localNewLinkFailedTitle", lang),
-          description: t("raid-status.sync.localNewLinkFailedDescription", lang, {
-            error: err?.message || String(err),
-          }),
-        }).catch(() => {});
+        await followUpNotice(component, EmbedBuilder, linkFailedNotice(
+          "raid-status.sync.localNewLinkFailedTitle",
+          "raid-status.sync.localNewLinkFailedDescription",
+          err,
+        )).catch(() => {});
         return noRedraw();
       }
 
@@ -360,11 +380,12 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       await followUpNotice(component, EmbedBuilder, {
-        type: "success",
+        kind: NoticeKind.DONE,
         title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
         description: isReplyPrivate()
           ? t("raid-status.sync.localNewLinkSuccessDescription", lang)
           : t("raid-status.sync.localNewLinkSuccessPublicDescription", lang, { url: freshUrl }),
+        tip: t("raid-status.sync.localNewLinkSuccessTip", lang),
       }).catch(() => {});
       return noRedraw();
     },
@@ -378,11 +399,7 @@ function createStatusComponentRouteHandlers(ctx) {
 
       const baseUrl = publicBaseUrl();
       if (!baseUrl) {
-        await editNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.sync.soloCompanionUnavailableTitle", lang),
-          description: t("raid-status.sync.soloCompanionUnavailableDescription", lang),
-        }).catch(() => {});
+        await editNotice(component, EmbedBuilder, localReaderUnavailableNotice()).catch(() => {});
         return noRedraw();
       }
 
@@ -398,11 +415,17 @@ function createStatusComponentRouteHandlers(ctx) {
         });
         if (!companionUrl) throw new Error("solo companion URL unavailable");
 
-        const embed = new EmbedBuilder()
-          .setColor(UI.colors.neutral)
-          .setTitle(`${UI.icons.info} ${t("raid-status.sync.soloCompanionTitle", lang)}`)
-          .setDescription(t("raid-status.sync.soloCompanionDescription", lang))
-          .setTimestamp();
+        const embed = buildNoticeEmbed(EmbedBuilder, {
+          kind: NoticeKind.DONE,
+          title: t("raid-status.sync.soloCompanionTitle", lang),
+          description: t("raid-status.sync.soloCompanionDescription", lang),
+          fields: [{
+            name: t("raid-status.sync.soloCompanionLifetimeLabel", lang),
+            value: t("raid-status.sync.soloCompanionLifetimeValue", lang),
+            inline: true,
+          }],
+          tip: t("raid-status.sync.soloCompanionTip", lang),
+        });
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setStyle(ButtonStyle.Link)
@@ -414,13 +437,11 @@ function createStatusComponentRouteHandlers(ctx) {
         await editEmbed(component, embed, { components: [row] });
       } catch (err) {
         console.error("[raid-status] solo-companion link failed:", err?.message || err);
-        await editNotice(component, EmbedBuilder, {
-          type: "error",
-          title: t("raid-status.sync.soloCompanionFailedTitle", lang),
-          description: t("raid-status.sync.soloCompanionFailedDescription", lang, {
-            error: err?.message || String(err),
-          }),
-        }).catch(() => {});
+        await editNotice(component, EmbedBuilder, linkFailedNotice(
+          "raid-status.sync.soloCompanionFailedTitle",
+          "raid-status.sync.soloCompanionFailedDescription",
+          err,
+        )).catch(() => {});
       }
       return noRedraw();
     },
@@ -442,15 +463,16 @@ function createStatusComponentRouteHandlers(ctx) {
       } catch (err) {
         console.error("[raid-status] local-refresh failed:", err?.message || err);
         await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
+          kind: NoticeKind.FAILURE,
           title: t("raid-status.sync.localRefreshFailedTitle", lang),
           description: t("raid-status.sync.localRefreshFailedDescription", lang),
+          tip: t("raid-status.sync.localRefreshFailedTip", lang),
         }).catch(() => {});
         return noRedraw();
       }
 
       await followUpNotice(component, EmbedBuilder, {
-        type: "success",
+        kind: NoticeKind.DONE,
         title: t("raid-status.sync.localRefreshSuccessTitle", lang),
         description: t("raid-status.sync.localRefreshSuccessDescription", lang),
       }).catch(() => {});
@@ -462,13 +484,7 @@ function createStatusComponentRouteHandlers(ctx) {
       const targetAccountName = targetAccount?.accountName || "";
       const sharedFrom = targetAccount?._sharedFrom;
       if (!targetAccountName) {
-        await replyNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-status.sync.rosterRefreshMissingTitle", lang),
-          description: t("raid-status.sync.rosterRefreshMissingDescription", lang, {
-            accountName: "?",
-          }),
-        }).catch(() => {});
+        await replyNotice(component, EmbedBuilder, staleCardNotice()).catch(() => {});
         return noRedraw();
       }
       const deferred = await component.deferUpdate().then(() => true).catch((err) => {
@@ -511,11 +527,13 @@ function createStatusComponentRouteHandlers(ctx) {
       } catch (err) {
         console.error("[raid-status] roster-refresh failed:", err?.message || err);
         await followUpNotice(component, EmbedBuilder, {
-          type: "error",
+          kind: NoticeKind.FAILURE,
           title: t("raid-status.sync.rosterRefreshFailedTitle", lang),
           description: t("raid-status.sync.rosterRefreshFailedDescription", lang, {
-            error: err?.message || String(err),
+            accountName: targetAccountName,
           }),
+          fields: [buildDetailField(err?.message || String(err), lang)],
+          tip: t("raid-status.sync.rosterRefreshRetryTip", lang),
         }).catch(() => {});
       }
       return noRedraw();
@@ -524,9 +542,10 @@ function createStatusComponentRouteHandlers(ctx) {
     [STATUS_COMPONENT_ACTION.sync]: async (component) => {
       if (!session.statusUserMeta.autoManageEnabled) {
         await replyNotice(component, EmbedBuilder, {
-          type: "info",
+          kind: NoticeKind.INPUT,
           title: t("raid-status.sync.noAutoSyncTitle", lang),
           description: t("raid-status.sync.noAutoSyncDescription", lang),
+          tip: t("raid-status.sync.noAutoSyncTip", lang),
         }).catch(() => {});
         return noRedraw();
       }
@@ -543,9 +562,11 @@ function createStatusComponentRouteHandlers(ctx) {
             cooldownMs
           ) || t("raid-status.sync.cooldownFallback", lang);
         await replyNotice(component, EmbedBuilder, {
-          type: "info",
+          kind: NoticeKind.BUSY,
           title: t("raid-status.sync.cooldownTitle", lang),
-          description: t("raid-status.sync.cooldownDescription", lang, { remain }),
+          description: t("raid-status.sync.cooldownDescription", lang),
+          fields: [{ name: t("raid-status.sync.cooldownRemainingLabel", lang), value: remain, inline: true }],
+          tip: t("raid-status.sync.cooldownTip", lang),
         }).catch(() => {});
         return noRedraw();
       }
@@ -627,9 +648,10 @@ function createStatusComponentRouteHandlers(ctx) {
       if (!result.ok) {
         if (result.reason === "notOwner") {
           await followUpNotice(component, EmbedBuilder, {
-            type: "lock",
-            title: t("raid-status.sync.noControlTitle", lang),
+            kind: NoticeKind.GUARD,
+            title: t("local-sync-discord.notOwnerTitle", lang),
             description: t("local-sync-discord.notOwner", lang),
+            tip: t("local-sync-discord.notOwnerTip", lang),
           }).catch(() => {});
         }
         // A vanished job still redraws · refreshing pulls whatever
@@ -676,11 +698,7 @@ function createStatusComponentRouteHandlers(ctx) {
         const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
         await followUpNotice(component, EmbedBuilder, sharedFrom
           ? await shareRefusalNotice("task", sharedFrom)
-          : {
-            type: "warn",
-            title: t("raid-status.taskView.toggleFailedTitle", lang),
-            description: t("raid-status.taskView.toggleFailedDescription", lang),
-          }).catch(() => {});
+          : staleCardNotice()).catch(() => {});
         return noRedraw();
       }
       const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
@@ -699,9 +717,10 @@ function createStatusComponentRouteHandlers(ctx) {
       }
       if (!toggleResult.ok) {
         await followUpNotice(component, EmbedBuilder, {
-          type: "warn",
+          kind: NoticeKind.FAILURE,
           title: t("raid-status.taskView.toggleFailedTitle", lang),
           description: t("raid-status.taskView.toggleFailedDescription", lang),
+          tip: t("raid-status.taskView.toggleFailedTip", lang),
         }).catch(() => {});
         return noRedraw();
       }
@@ -734,7 +753,7 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status gold receive",
         selection,
         write: (target) => saveBulkGoldReceive({ ...target, receive }),
-        onSaveError: goldViewNotice("warn", "bulkSaveFailedTitle", "bulkSaveFailedDescription"),
+        onSaveError: goldSaveFailedNotice(),
         summarize: (result) => ({
           isMissing: (entry) => entry.status === "missing",
           notice: buildGoldReceiveSummaryNotice({
@@ -761,7 +780,7 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status gold mode",
         selection,
         write: (target) => saveBulkRaidModes({ ...target, decisions }),
-        onSaveError: goldViewNotice("warn", "modeFailedTitle", "modeFailedDescription"),
+        onSaveError: goldSaveFailedNotice(),
         summarize: (result) => ({
           isMissing: (entry) => entry.missing,
           notice: buildModeSummaryNotice({ result, collapsed, lang, getClassEmoji }),

@@ -116,13 +116,13 @@ test("a raid-status task toggle retried after the share was revoked writes nothi
 
   assert.match(notices, /Share removed/);
   assert.match(notices, /can't update side tasks/);
-  assert.doesNotMatch(notices, /Share is view-only/);
+  assert.doesNotMatch(notices, /This share is view-only/);
 });
 
 test("a raid-status task toggle retried after the share was downgraded writes nothing and says the share is view-only", async () => {
   const notices = await toggleTaskWhileShareIsCutDuringRetry(VIEW_SHARE);
 
-  assert.match(notices, /Share is view-only/);
+  assert.match(notices, /This share is view-only/);
   assert.doesNotMatch(notices, /Share removed/);
 });
 
@@ -198,12 +198,12 @@ const GOLD_SELECTS = {
   receive: {
     action: STATUS_COMPONENT_ACTION.goldReceive,
     value: "horizon",
-    failedNotice: /couldn't save the change/,
+    failedNotice: /Saving the gold settings failed partway/,
   },
   mode: {
     action: STATUS_COMPONENT_ACTION.goldMode,
     value: "armoche::hard",
-    failedNotice: /Couldn't save/,
+    failedNotice: /Saving the gold settings failed partway/,
   },
 };
 
@@ -225,7 +225,7 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
       followUp: async (payload) => { notices.push(payload); },
     });
 
-    assert.match(JSON.stringify(notices), /Share is view-only/);
+    assert.match(JSON.stringify(notices), /This share is view-only/);
     assert.match(JSON.stringify(notices), GOLD_VIEW_ONLY_DESCRIPTION);
     assert.doesNotMatch(JSON.stringify(notices), GOLD_REVOKED_TITLE);
   });
@@ -246,7 +246,7 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
     assert.match(JSON.stringify(notices), GOLD_REVOKED_TITLE);
     assert.match(JSON.stringify(notices), GOLD_REVOKED_DESCRIPTION);
     assert.match(JSON.stringify(notices), /Owner/);
-    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+    assert.doesNotMatch(JSON.stringify(notices), /This share is view-only/);
   });
 
   test(`raid-status gold ${label} retried after the share was revoked says the share was removed`, async () => {
@@ -267,7 +267,7 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
     assert.equal(stats.committedAfterRevocation, 0);
     assert.match(JSON.stringify(notices), GOLD_REVOKED_TITLE);
     assert.match(JSON.stringify(notices), GOLD_REVOKED_DESCRIPTION);
-    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+    assert.doesNotMatch(JSON.stringify(notices), /This share is view-only/);
     assert.doesNotMatch(JSON.stringify(notices), select.failedNotice);
   });
 
@@ -287,7 +287,7 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
 
     assert.equal(stats.saves, 1);
     assert.equal(stats.committedAfterRevocation, 0);
-    assert.match(JSON.stringify(notices), /Share is view-only/);
+    assert.match(JSON.stringify(notices), /This share is view-only/);
     assert.match(JSON.stringify(notices), GOLD_VIEW_ONLY_DESCRIPTION);
     assert.doesNotMatch(JSON.stringify(notices), select.failedNotice);
   });
@@ -309,7 +309,7 @@ for (const [label, select] of Object.entries(GOLD_SELECTS)) {
     });
 
     assert.match(JSON.stringify(notices), select.failedNotice);
-    assert.doesNotMatch(JSON.stringify(notices), /Share is view-only/);
+    assert.doesNotMatch(JSON.stringify(notices), /This share is view-only/);
   });
 
   test(`raid-status gold ${label} stays silent when the card has no roster to write`, async () => {

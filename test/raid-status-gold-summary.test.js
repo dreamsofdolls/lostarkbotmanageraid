@@ -52,7 +52,7 @@ const SPEC_EXAMPLE = [
 
 test("mode summary groups raids by outcome per character", () => {
   const notice = modeNotice(SPEC_EXAMPLE);
-  assert.equal(notice.type, "success");
+  assert.equal(notice.kind, "done");
   assert.equal(notice.title, "Đổi độ khó xong cho 3 con");
   const lines = notice.description.split("\n");
   assert.equal(lines[0], "[Destroyer] **Soulrano**: Act 4, Kazeros, Belgardin → Hard · đổi ngay");
@@ -87,7 +87,7 @@ test("mode summary with only ineligible picks warns that nothing changed", () =>
     modeEntry("Soulrano", "Destroyer", 1771, [["belgardin", "nightmare", "ineligible", 1780]]),
     modeEntry("Nailaduk", "Bard", 1772, [["belgardin", "nightmare", "ineligible", 1780]]),
   ]);
-  assert.equal(notice.type, "warn");
+  assert.equal(notice.kind, "input");
   assert.equal(notice.title, "Chưa đổi được gì");
   assert.match(notice.description, /Soulrano · Belgardin Nightmare cần 1780 \(đang 1771\)/);
   assert.match(notice.description, /Nailaduk · Belgardin Nightmare cần 1780 \(đang 1772\)/);
@@ -136,7 +136,7 @@ test("gold summary lists the ticked set and each character's raids in and out", 
     goldEntry("Nailaduk", "Bard", "changed", moved),
     goldEntry("Priscilladuk", "Paladin", "changed", moved),
   ], { kind: "set", raidKeys: ["serca", "armoche", "kazeros"] });
-  assert.equal(notice.type, "success");
+  assert.equal(notice.kind, "done");
   assert.equal(notice.title, "Gold nhận đổi xong cho 3 con");
   assert.deepEqual(notice.description.split("\n"), [
     "Nhận gold: **Act 4 · Kazeros · Serca**",
@@ -168,8 +168,8 @@ test("gold auto summary lists each character's new raids and the ignored ticks",
     }),
     goldEntry("Nailaduk", "Bard", "pinned", { kept: ["belgardin", "kazeros", "armoche"] }),
   ], { kind: "auto" }, true);
-  assert.equal(notice.type, "info");
-  assert.equal(notice.title, "Artist tự chọn gold lại cho 2 con");
+  assert.equal(notice.kind, "done");
+  assert.equal(notice.title, "Tớ tự chọn gold lại cho 2 con");
   const lines = notice.description.split("\n");
   assert.equal(lines[0], "[Destroyer] **Soulrano**: Belgardin · Kazeros · Act 4");
   assert.equal(lines[1], "[Bard] **Nailaduk**: Belgardin · Kazeros · Act 4");
@@ -192,7 +192,7 @@ test("gold summary warns when nothing changed but a character was skipped or mis
     goldEntry("Lowbie", "Paladin", "unchanged", { kept: ["armoche"], skipped: ["belgardin"] }),
     goldEntry("Ghost", "", "missing"),
   ], { kind: "set", raidKeys: ["belgardin"] });
-  assert.equal(notice.type, "warn");
+  assert.equal(notice.kind, "input");
   assert.equal(notice.title, "Chưa đổi được gì");
   assert.match(notice.description, /Lowbie/);
   assert.match(notice.description, /Ghost/);
