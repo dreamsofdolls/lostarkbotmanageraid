@@ -10,7 +10,8 @@ const {
   StringSelectMenuBuilder,
 } = require("discord.js");
 
-const { UI, formatGold } = require("../bot/utils/raid/common/shared");
+const { UI, NoticeKind, buildNoticeEmbed, formatGold } = require("../bot/utils/raid/common/shared");
+const { t } = require("../bot/services/i18n");
 const {
   buildLocalSyncConsolePayload,
 } = require("../bot/handlers/local-sync/discord-console-ui");
@@ -463,7 +464,13 @@ test("global Local Sync buttons acknowledge quickly but reject a different Disco
   assert.equal(interaction.deferredUpdates, 1);
   assert.equal(replies.length, 1);
   assert.equal(replies[0].flags, 64);
-  assert.match(replies[0].content, /different Discord account/);
+  assert.equal(replies[0].content, undefined);
+  // A guard card with the shared owner copy.
+  const guardIcon = buildNoticeEmbed(EmbedBuilder, { kind: NoticeKind.GUARD, title: "x" }).toJSON().title.slice(0, -1);
+  const card = replies[0].embeds[0].toJSON();
+  assert.equal(card.title, `${guardIcon}${t("local-sync-discord.notOwnerTitle", "en")}`);
+  assert.match(card.description, /different Discord account/);
+  assert.equal(card.footer.text, `💡 ${t("local-sync-discord.notOwnerTip", "en")}`);
 });
 
 function matchesFilter(doc, filter) {

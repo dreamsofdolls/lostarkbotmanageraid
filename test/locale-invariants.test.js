@@ -277,6 +277,7 @@ const FAILURE_NOTICE_STEMS = [
   "raid-gold-earner.auth.notYourSession",
   "raid-gold-earner.expired.staleSession",
   "raid-gold-earner.notice.gone",
+  "common.notice.commandFailed",
 ];
 
 // /raid-log copy is `raid-log.notices.<code>.title|description|tip`.

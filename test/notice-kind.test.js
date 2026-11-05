@@ -92,8 +92,10 @@ test("buildDetailField wraps the error in code font and skips empty", () => {
   assert.equal(buildDetailField("x".repeat(2000), "vi").value.length, 1024);
 });
 
-test("legacy type still renders as before", () => {
-  const embed = buildNoticeEmbed(EmbedBuilder, { type: "warn", title: "T" }).toJSON();
-  assert.equal(embed.title, `${UI.icons.warn} T`);
-  assert.equal(embed.color, UI.colors.progress);
+test("a notice without a known kind still reaches the user, plain and neutral", () => {
+  for (const options of [{ title: "T" }, { kind: "warn", title: "T" }, { type: "warn", title: "T" }]) {
+    const embed = buildNoticeEmbed(EmbedBuilder, options).toJSON();
+    assert.equal(embed.title, "T");
+    assert.equal(embed.color, UI.colors.neutral);
+  }
 });

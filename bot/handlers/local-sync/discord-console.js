@@ -18,6 +18,7 @@ const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekl
 const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
 const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { NoticeKind, followUpNotice } = require("../../utils/raid/common/shared");
 const { buildLocalSyncConsolePayload } = require("./discord-console-ui");
 
 const RAID_STATUS_HANDOFF_STATES = new Set([
@@ -138,7 +139,6 @@ function createLocalSyncDiscordConsole({
   ButtonStyle,
   StringSelectMenuBuilder = null,
   truncateText = (value) => String(value),
-  MessageFlags,
   UI,
   User,
   formatGold,
@@ -293,9 +293,11 @@ function createLocalSyncDiscordConsole({
       return;
     }
     if (existing.discordId !== interaction.user.id) {
-      await interaction.followUp({
-        content: t("local-sync-discord.notOwner", lang),
-        flags: MessageFlags.Ephemeral,
+      await followUpNotice(interaction, EmbedBuilder, {
+        kind: NoticeKind.GUARD,
+        title: t("local-sync-discord.notOwnerTitle", lang),
+        description: t("local-sync-discord.notOwner", lang),
+        tip: t("local-sync-discord.notOwnerTip", lang),
       }).catch(() => {});
       return;
     }

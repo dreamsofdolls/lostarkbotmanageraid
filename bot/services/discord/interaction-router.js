@@ -20,7 +20,7 @@ const {
   buildRuntimeInstanceIdentity,
 } = require("../runtime/instance-identity");
 const { t, getUserLanguage, DEFAULT_LANGUAGE } = require("../i18n");
-const { waitWithBudget } = require("../../utils/raid/common/shared");
+const { NoticeKind, buildNoticeEmbed, waitWithBudget } = require("../../utils/raid/common/shared");
 
 const INITIAL_ACK_DEADLINE_MS = 3_000;
 // The generic error reply waits at most this long for the user's language,
@@ -127,6 +127,7 @@ function createInteractionDeduper({
 /**
  * @typedef {object} InteractionRouterDeps
  * @property {object} MessageFlags - discord.js MessageFlags enum (need .Ephemeral)
+ * @property {Function} EmbedBuilder - discord.js EmbedBuilder, for the catch-all failure card
  * @property {string[]} allowedCommands - Slash command allowlist; non-matching commands are ignored.
  * @property {(interaction) => Promise<void>} handleSlashCommand - Dispatcher for any slash command in `allowedCommands`.
  * @property {Record<string, (interaction) => Promise<void>>} autocompleteHandlers - Per-command autocomplete handlers, keyed by commandName.
@@ -135,7 +136,7 @@ function createInteractionDeduper({
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [modalRoutes] - Modal submission handlers matched by customId prefix.
  * @property {string} [instanceIdentity] - secret-free runtime fingerprint for diagnostics
  * @property {{warn: Function, error: Function}} [log] - injectable logger
- * @property {object} [UserModel] - Mongoose User model, read for the generic error reply's language
+ * @property {object} [UserModel] - Mongoose User model, read for the failure card's language
  */
 
 /**
@@ -144,6 +145,7 @@ function createInteractionDeduper({
  */
 function createInteractionRouter({
   MessageFlags,
+  EmbedBuilder,
   allowedCommands,
   handleSlashCommand,
   autocompleteHandlers,
@@ -237,14 +239,20 @@ function createInteractionRouter({
 
     log.error("[interaction-router] error:", error);
 
-    // Best-effort generic error reply. If the interaction was already
+    // Best-effort failure card. If the interaction was already
     // acknowledged (deferReply / reply / update), follow up; otherwise
     // try a fresh reply. Both paths swallow secondary failures because
     // the user has already seen *something* go wrong - don't compound
-    // the bug with an unhandled rejection.
+    // the bug with an unhandled rejection. The error itself stays in the
+    // log: an unexpected error can carry internals the user should not see.
     const lang = await resolveErrorLanguage(interaction);
     const payload = {
-      content: t("common.genericError", lang),
+      embeds: [buildNoticeEmbed(EmbedBuilder, {
+        kind: NoticeKind.FAILURE,
+        title: t("common.notice.commandFailedTitle", lang),
+        description: t("common.notice.commandFailedDescription", lang),
+        tip: t("common.notice.commandFailedTip", lang),
+      })],
       flags: MessageFlags.Ephemeral,
     };
     if (interaction.replied || interaction.deferred) {

@@ -441,7 +441,7 @@ test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag
     setDescription() { return this; }
   }
   await replyNotice(interaction, StubEmbed, {
-    type: "warn",
+    kind: "input",
     title: "T",
     description: "D",
   });
@@ -462,7 +462,7 @@ test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices"
     setTitle() { return this; }
     setDescription() { return this; }
   }
-  await replyNotice(interaction, StubEmbed, { type: "info", title: "X" }, { ephemeral: false });
+  await replyNotice(interaction, StubEmbed, { kind: "empty", title: "X" }, { ephemeral: false });
   assert.equal(calls[0].flags, undefined);
 });
 
@@ -482,7 +482,7 @@ test("replyNotice passes through extra reply payload fields", async () => {
   await replyNotice(
     interaction,
     StubEmbed,
-    { type: "warn", title: "Confirm" },
+    { kind: "confirm", title: "Confirm" },
     { components }
   );
   assert.equal(calls[0].flags, 64);
@@ -529,7 +529,7 @@ test("followUpNotice wraps interaction.followUp with the same notice payload sha
     setTitle() { return this; }
     setDescription() { return this; }
   }
-  await followUpNotice(interaction, StubEmbed, { type: "success", title: "Done" });
+  await followUpNotice(interaction, StubEmbed, { kind: "done", title: "Done" });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].flags, 64);
   assert.equal(calls[0].embeds.length, 1);
@@ -547,13 +547,13 @@ test("updateNotice clears components by default and accepts override via extras"
     setTitle() { return this; }
     setDescription() { return this; }
   }
-  await updateNotice(component, StubEmbed, { type: "muted", title: "X" });
+  await updateNotice(component, StubEmbed, { kind: "expired", title: "X" });
   assert.deepEqual(calls[0].components, []);
 
   await updateNotice(
     component,
     StubEmbed,
-    { type: "info", title: "Y" },
+    { kind: "empty", title: "Y" },
     { components: [{ keep: "row" }] }
   );
   assert.deepEqual(calls[1].components, [{ keep: "row" }]);

@@ -89,7 +89,7 @@ test("oversized notice descriptions are clamped to the embed limit instead of th
   // throws at the 4096-char description limit and 8 commands degrade to a
   // generic failure reply.
   const embed = buildNoticeEmbed(EmbedBuilder, {
-    type: "error",
+    kind: "failure",
     title: "x",
     description: "x".repeat(5000),
   }).toJSON();

@@ -27,15 +27,6 @@ const UI = {
   },
 };
 
-const NOTICE_STYLE_BY_TYPE = Object.freeze({
-  error: { color: UI.colors.danger, icon: UI.icons.warn },
-  info: { color: UI.colors.neutral, icon: UI.icons.info },
-  lock: { color: UI.colors.danger, icon: UI.icons.lock },
-  muted: { color: UI.colors.muted, icon: UI.icons.info },
-  success: { color: UI.colors.success, icon: UI.icons.done },
-  warn: { color: UI.colors.progress, icon: UI.icons.warn },
-});
-
 /**
  * Kinds of notice. Each kind has one icon and one colour, so a situation
  * reads the same in every command; red is kept for real failures. ✅ is the
@@ -276,30 +267,30 @@ function stripInlineMarkdown(value) {
  * a progress line, a confirmation or a prompt.
  *
  * A `kind` (NoticeKind) sets the title icon and the colour from one table,
- * so the same situation looks the same in every command. `type` is the
- * older severity option, kept until every caller names a kind. Every text
- * part is clamped to Discord's limits, since titles and errors can carry
- * user input and an over-long part would make the builder throw.
+ * so the same situation looks the same in every command. A missing or
+ * unknown kind still sends the notice, in the neutral colour with no icon,
+ * because the message matters more than its look; the notice drift guard
+ * test keeps callers on a kind. Every text part is clamped to Discord's
+ * limits, since titles and errors can carry user input and an over-long part
+ * would make the builder throw.
  *
  * Caller passes EmbedBuilder so this helper stays free of a discord.js
  * import.
  *
  * @param {Function} EmbedBuilder - discord.js EmbedBuilder class
  * @param {object} options
- * @param {string} [options.kind] - one of NoticeKind.*
- * @param {string} [options.type] - legacy severity (info, warn, lock, muted, success, error)
+ * @param {string} options.kind - one of NoticeKind.*
  * @param {string} [options.title] - short result, shown behind the icon
  * @param {string} [options.description] - hero sentence, markdown allowed
  * @param {Array<{name: string, value: string, inline?: boolean}|null>} [options.fields] - concrete data; empty values and nulls are dropped
  * @param {string} [options.tip] - next step, shown as the footer behind 💡 with markdown removed
  * @returns {object} the EmbedBuilder instance
  */
-function buildNoticeEmbed(EmbedBuilder, { kind, type = "info", title, description, fields = [], tip } = {}) {
-  const kindStyle = NOTICE_STYLE_BY_KIND[kind];
-  const { color, icon } = kindStyle || NOTICE_STYLE_BY_TYPE[type] || NOTICE_STYLE_BY_TYPE.info;
-  const separator = kindStyle ? "  " : " ";
-  const embed = new EmbedBuilder().setColor(color).setTimestamp(new Date());
-  if (title) embed.setTitle(truncateText(`${icon}${separator}${title}`, EMBED_TITLE_MAX_LENGTH));
+function buildNoticeEmbed(EmbedBuilder, { kind, title, description, fields = [], tip } = {}) {
+  const style = NOTICE_STYLE_BY_KIND[kind];
+  const embed = new EmbedBuilder().setColor(style?.color ?? UI.colors.neutral).setTimestamp(new Date());
+  const shownTitle = style ? `${style.icon}  ${title}` : title;
+  if (title) embed.setTitle(truncateText(shownTitle, EMBED_TITLE_MAX_LENGTH));
   if (description) embed.setDescription(truncateText(description, EMBED_DESCRIPTION_MAX_LENGTH));
   // Discord rejects a field with an empty value.
   const cleanFields = fields
@@ -463,7 +454,7 @@ const MESSAGE_FLAG_EPHEMERAL = 1 << 6; // 64
  * Reply with a notice embed, ephemeral by default. Wrapper around the
  * common 7-line pattern:
  *   await interaction.reply({
- *     embeds: [buildNoticeEmbed(EmbedBuilder, { type, title, description })],
+ *     embeds: [buildNoticeEmbed(EmbedBuilder, { kind, title, description })],
  *     flags: MessageFlags.Ephemeral,
  *   });
  *

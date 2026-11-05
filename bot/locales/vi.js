@@ -26,6 +26,9 @@ module.exports = {
       rosterNotFoundTitle: "Không thấy roster này",
       rosterNotFoundDescription: "Tớ không thấy roster **{rosterName}** trong danh sách của cậu.",
       rosterNotFoundTip: "Gõ roster: rồi chọn tên từ gợi ý cho đúng nhé",
+      commandFailedTitle: "Lệnh chưa chạy xong",
+      commandFailedDescription: "Tớ gặp lỗi khi xử lý lệnh này.",
+      commandFailedTip: "Thử lại sau một lúc; nếu vẫn lỗi thì báo admin",
     },
     pagination: {
       previous: "◀ Trước",
@@ -45,7 +48,6 @@ module.exports = {
       notFound: "Không tìm thấy trên Bible",
     },
     // Last-resort reply when a command or button throws an unhandled error.
-    genericError: "Có lỗi xảy ra khi xử lý lệnh. Cậu thử lại giúp tớ nhé.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -1021,7 +1023,7 @@ module.exports = {
       statusTitle: "Status không hợp lệ",
       statusDescription: "Tớ chỉ hiểu ba status: `complete` (cả raid), `process` (một gate) và `reset` (xoá hết).",
       statusTip: "Gõ status: rồi chọn từ gợi ý nhé",
-      processNeedsGateTitle: "`process` cần chọn gate",
+      processNeedsGateTitle: "Status process cần chọn gate",
       processNeedsGateDescription: "Status `process` ghi một gate cụ thể, nên tớ cần biết là gate nào (G1, G2, ...).",
       processNeedsGateTip: "Thêm gate:, hoặc đổi sang status complete để ghi cả raid",
       gateTitle: "Gate không tồn tại",
@@ -1602,7 +1604,6 @@ module.exports = {
       noNewRosterTip: "Xem task chung hiện có trong /raid-status, mục 📝 Side tasks",
       capReachedTitle: "Hết slot task chung",
       duplicateTitle: "Task chung này có rồi",
-      duplicateDescription: "Roster **{rosterName}** đã có task chung **{taskName}** rồi.",
       duplicateTip: "Đổi tên bằng name:, hoặc xoá task cũ trước nhé",
       successTitle: "Đã thêm task chung",
       successDescriptionSingle: {

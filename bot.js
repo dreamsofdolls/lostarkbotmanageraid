@@ -18,6 +18,7 @@ if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
 
 const {
   Client,
+  EmbedBuilder,
   GatewayIntentBits,
   Events,
   MessageFlags,
@@ -246,8 +247,9 @@ async function startBot() {
   // on lifecycle and startup wiring.
   const router = createRaidInteractionRouter({
     MessageFlags,
+    EmbedBuilder,
     instanceIdentity: runtimeInstanceIdentity,
-    // Read for the language of the generic error reply.
+    // Read for the language of the failure card.
     UserModel: User,
     // Pass the command facade directly so newly exported interaction
     // handlers cannot be forgotten in a second hand-maintained list.

@@ -38,11 +38,12 @@ const RAID_COMMAND_NAMES = Object.freeze([
  * the slash dispatcher + per-command autocomplete handlers +
  * prefix-routed select/button handlers into a single Interaction
  * dispatcher consumed by bot.js.
- * @param {{MessageFlags: object, handlers: object, instanceIdentity?: string, log?: object, UserModel?: object}} deps - handlers must expose every method named below
+ * @param {{MessageFlags: object, EmbedBuilder: Function, handlers: object, instanceIdentity?: string, log?: object, UserModel?: object}} deps - handlers must expose every method named below
  * @returns {Function} interaction dispatcher · async (interaction) => void
  */
 function createRaidInteractionRouter({
   MessageFlags,
+  EmbedBuilder,
   handlers,
   instanceIdentity,
   log,
@@ -50,6 +51,7 @@ function createRaidInteractionRouter({
 }) {
   return createInteractionRouter({
     MessageFlags,
+    EmbedBuilder,
     instanceIdentity,
     log,
     UserModel,

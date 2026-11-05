@@ -21,6 +21,9 @@ module.exports = {
       rosterNotFoundTitle: "ロスターが見つかりませんわ",
       rosterNotFoundDescription: "あなたの一覧にロスター **{rosterName}** が見つかりませんわ。",
       rosterNotFoundTip: "roster: を入力して候補から名前を選んでね",
+      commandFailedTitle: "コマンドを完了できませんでしたわ",
+      commandFailedDescription: "このコマンドの処理中にエラーが出ましたの。",
+      commandFailedTip: "少し経ってから再試行して、まだ失敗するなら管理者にお知らせくださいませ",
     },
     pagination: {
       previous: "◀ 前へ",
@@ -38,7 +41,6 @@ module.exports = {
       blocked: "Bible にブロックされました (HTTP 403)",
       notFound: "Bible に見つかりません",
     },
-    genericError: "コマンドの処理中にエラーが発生しましたわ。もう一度お試しくださいませ。",
   },
   "local-sync-discord": {
     title: "ローカル同期コンソール",
@@ -1002,7 +1004,7 @@ module.exports = {
       statusTitle: "ステータスが無効ですわ",
       statusDescription: "わたくしが分かるステータスは `complete` (レイド全体)、`process` (1ゲート)、`reset` (全消去) の3つですわ。",
       statusTip: "status: を入力して候補から選んでね",
-      processNeedsGateTitle: "`process` はゲート選択が必要ですわ",
+      processNeedsGateTitle: "ステータス process はゲート選択が必要ですわ",
       processNeedsGateDescription: "ステータス `process` は特定のゲートを記録するので、どのゲート (G1, G2, ...) か教えてくださいませ。",
       processNeedsGateTip: "gate: を追加するか、レイド全体なら status complete に変えてね",
       gateTitle: "ゲートが存在しませんわ",
@@ -1583,7 +1585,6 @@ module.exports = {
       noNewRosterTip: "今の共通タスクは /raid-status の 📝 サイドタスクで見られますわ",
       capReachedTitle: "共通タスクスロットが満杯ですわ",
       duplicateTitle: "この共通タスクはもうありますわ",
-      duplicateDescription: "ロスター **{rosterName}** には共通タスク **{taskName}** がもうありますわ。",
       duplicateTip: "name: で名前を変えるか、古いタスクを先に消してね",
       successTitle: "共通タスクを追加しましたわ",
       successDescriptionSingle: {

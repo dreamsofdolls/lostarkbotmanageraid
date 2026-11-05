@@ -19,6 +19,9 @@ module.exports = {
       rosterNotFoundTitle: "Roster not found",
       rosterNotFoundDescription: "I can't find roster **{rosterName}** in your list.",
       rosterNotFoundTip: "Type roster: and pick the name from the suggestions",
+      commandFailedTitle: "The command didn't finish",
+      commandFailedDescription: "I hit an error while handling this command.",
+      commandFailedTip: "Try again in a moment; if it keeps failing, tell an admin",
     },
     pagination: {
       previous: "◀ Previous",
@@ -36,7 +39,6 @@ module.exports = {
       blocked: "Bible blocked the request (HTTP 403)",
       notFound: "Not found on Bible",
     },
-    genericError: "Something went wrong while handling this command. Please try again.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -1001,7 +1003,7 @@ module.exports = {
       statusTitle: "Invalid status",
       statusDescription: "I only know three statuses: `complete` (whole raid), `process` (one gate) and `reset` (clear everything).",
       statusTip: "Type status: and pick one from the suggestions",
-      processNeedsGateTitle: "`process` needs a gate",
+      processNeedsGateTitle: "Status process needs a gate",
       processNeedsGateDescription: "Status `process` marks one specific gate, so I need to know which one (G1, G2, ...).",
       processNeedsGateTip: "Add gate:, or switch to status complete to mark the whole raid",
       gateTitle: "Gate doesn't exist",
@@ -1582,7 +1584,6 @@ module.exports = {
       noNewRosterTip: "See the current shared tasks in /raid-status, 📝 Side tasks",
       capReachedTitle: "Shared task slots full",
       duplicateTitle: "This shared task already exists",
-      duplicateDescription: "Roster **{rosterName}** already has shared task **{taskName}**.",
       duplicateTip: "Rename it with name:, or remove the old one first",
       successTitle: "Shared task added",
       successDescriptionSingle: {

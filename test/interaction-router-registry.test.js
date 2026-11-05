@@ -156,9 +156,11 @@ test("the generic error reply reads the user's language through the passed UserM
   t.mock.method(console, "error", () => {});
   const { clearUserLanguageCache, t: translate } = require("../bot/services/i18n");
   clearUserLanguageCache();
+  const { EmbedBuilder } = require("discord.js");
   const replies = [];
   const router = createRaidInteractionRouter({
     MessageFlags: { Ephemeral: 64 },
+    EmbedBuilder,
     UserModel: { findOne: () => ({ lean: async () => ({ language: "en" }) }) },
     handlers: {
       handleRaidManagementCommand: async () => {
@@ -176,8 +178,9 @@ test("the generic error reply reads the user's language through the passed UserM
     reply: async (payload) => replies.push(payload),
   });
 
-  assert.deepEqual(replies, [
-    { content: translate("common.genericError", "en"), flags: 64 },
-  ]);
+  // The registry passes EmbedBuilder through, so the card renders in English.
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].flags, 64);
+  assert.match(replies[0].embeds[0].toJSON().title, new RegExp(`${translate("common.notice.commandFailedTitle", "en")}$`));
   clearUserLanguageCache();
 });

@@ -12,6 +12,34 @@ const {
   clearUserLanguageCache,
   t: translate,
 } = require("../bot/services/i18n");
+const { EmbedBuilder } = require("discord.js");
+const { NoticeKind, buildNoticeEmbed } = require("../bot/utils/raid/common/shared");
+
+const FAILURE_ICON = buildNoticeEmbed(EmbedBuilder, { kind: NoticeKind.FAILURE, title: "x" }).toJSON().title.slice(0, -1);
+
+// The catch-all reply as the user reads it: a failure card, no detail field.
+function failureReply(method, lang) {
+  return [method, {
+    flags: 64,
+    content: undefined,
+    title: `${FAILURE_ICON}${translate("common.notice.commandFailedTitle", lang)}`,
+    description: translate("common.notice.commandFailedDescription", lang),
+    tip: `💡 ${translate("common.notice.commandFailedTip", lang)}`,
+    fields: undefined,
+  }];
+}
+
+function readReply([method, payload]) {
+  const card = payload.embeds?.[0]?.toJSON();
+  return [method, {
+    flags: payload.flags,
+    content: payload.content,
+    title: card?.title,
+    description: card?.description,
+    tip: card?.footer?.text,
+    fields: card?.fields,
+  }];
+}
 
 function createLogCapture() {
   const warnings = [];
@@ -59,6 +87,7 @@ function createChatInteraction({
 function createTestRouter({ handleSlashCommand, log, UserModel }) {
   return createInteractionRouter({
     MessageFlags: { Ephemeral: 64 },
+    EmbedBuilder,
     allowedCommands: ["raid-status"],
     handleSlashCommand,
     autocompleteHandlers: {},
@@ -217,15 +246,11 @@ test("interaction router answers an unhandled error in the user's language", asy
   await router.handle(english);
   await router.handle(japanese);
 
-  assert.deepEqual(english.payloads, [
-    ["reply", { content: translate("common.genericError", "en"), flags: 64 }],
-  ]);
-  assert.deepEqual(japanese.payloads, [
-    ["followUp", { content: translate("common.genericError", "jp"), flags: 64 }],
-  ]);
+  assert.deepEqual(english.payloads.map(readReply), [failureReply("reply", "en")]);
+  assert.deepEqual(japanese.payloads.map(readReply), [failureReply("followUp", "jp")]);
   assert.notEqual(
-    translate("common.genericError", "en"),
-    translate("common.genericError", "vi")
+    translate("common.notice.commandFailedTitle", "en"),
+    translate("common.notice.commandFailedTitle", "vi")
   );
 });
 
@@ -251,9 +276,7 @@ test("interaction router falls back to the default language when the lookup fail
   await router.handle(interaction);
 
   assert.equal(capture.errors.length, 1);
-  assert.deepEqual(interaction.payloads, [
-    ["reply", { content: translate("common.genericError", "vi"), flags: 64 }],
-  ]);
+  assert.deepEqual(interaction.payloads.map(readReply), [failureReply("reply", "vi")]);
 });
 
 test("interaction router does not hold the error reply for a stalled language lookup", async (t) => {
@@ -280,9 +303,7 @@ test("interaction router does not hold the error reply for a stalled language lo
   t.mock.timers.tick(1_000);
   await handled;
 
-  assert.deepEqual(interaction.payloads, [
-    ["reply", { content: translate("common.genericError", "vi"), flags: 64 }],
-  ]);
+  assert.deepEqual(interaction.payloads.map(readReply), [failureReply("reply", "vi")]);
   clearUserLanguageCache();
 });
 
