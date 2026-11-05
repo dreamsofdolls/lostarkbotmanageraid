@@ -319,7 +319,7 @@ test("remove-roster: rejects remove_char without a character argument", async ()
   assert.match(embedJson.title, /character/i);
 });
 
-test("remove-roster: surfaces 'Chưa có roster' when user has no accounts", async () => {
+test("remove-roster: surfaces the shared no-roster notice when user has no accounts", async () => {
   const { factory } = makeFactory();
   // No user doc seeded.
 
@@ -330,10 +330,10 @@ test("remove-roster: surfaces 'Chưa có roster' when user has no accounts", asy
 
   const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Chưa có roster/);
+  assert.equal(embedJson.title, `🔍  ${t("common.notice.noRosterTitle", "vi")}`);
 });
 
-test("remove-roster: surfaces 'Không tìm thấy roster' when accountName mismatch", async () => {
+test("remove-roster: surfaces the shared roster-not-found notice when accountName mismatch", async () => {
   const { factory, docs } = makeFactory();
   seedUser(docs, [
     { accountName: "Alpha", characters: [makeChar("Cyrano")] },
@@ -346,12 +346,13 @@ test("remove-roster: surfaces 'Không tìm thấy roster' when accountName misma
 
   const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Không tìm thấy roster/);
+  assert.equal(embedJson.title, `🔍  ${t("common.notice.rosterNotFoundTitle", "vi")}`);
+  assert.match(embedJson.description, /\*\*Charlie\*\*/u);
   // Original account untouched.
   assert.equal(docs.get("user-1").accounts.length, 1);
 });
 
-test("remove-roster: surfaces 'Character Not Found' when char missing in roster", async () => {
+test("remove-roster: surfaces the character-not-found notice when char missing in roster", async () => {
   const { factory, docs } = makeFactory();
   seedUser(docs, [
     { accountName: "Alpha", characters: [makeChar("Cyrano")] },
@@ -364,7 +365,8 @@ test("remove-roster: surfaces 'Character Not Found' when char missing in roster"
 
   const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Không tìm thấy character/);
+  assert.equal(embedJson.title, `🔍  ${t("raid-remove-roster.notFound.charNotFoundTitle", "vi")}`);
+  assert.match(embedJson.description, /\*\*Bardella\*\*/u);
   // Roster + char untouched.
   assert.equal(docs.get("user-1").accounts[0].characters.length, 1);
 });
@@ -423,7 +425,7 @@ test("remove-roster: the Vietnamese card drops the English plural suffix", async
   assert.doesNotMatch(embedJson.description, /characters/u);
 });
 
-test("remove-roster: the roster name reaches the title and the re-add command the footer", async () => {
+test("remove-roster: the roster name reaches the title and the re-add command the tip", async () => {
   // Collapsed in the client, the title is all that stays visible, and it
   // used to say nothing about which roster went.
   const { factory, docs } = makeFactory();
@@ -435,8 +437,8 @@ test("remove-roster: the roster name reaches the title and the re-add command th
   await factory.handleRemoveRosterCommand(interaction);
 
   const embedJson = interaction._calls.editReply[0].embeds[0].toJSON();
-  assert.match(embedJson.title, /Đã xoá roster · Alpha/u);
-  assert.equal(embedJson.footer.text, "/raid-add-roster name:Alpha");
+  assert.equal(embedJson.title, "✅  Đã xoá roster · Alpha");
+  assert.equal(embedJson.footer.text, "💡 Muốn thêm lại thì gõ /raid-add-roster name:Alpha");
   // The recovery hint used to eat half the description.
   assert.doesNotMatch(embedJson.description, /raid-add-roster/u);
 });

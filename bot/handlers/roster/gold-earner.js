@@ -1,7 +1,9 @@
 "use strict";
 
 const {
+  NoticeKind,
   buildNoticeEmbed,
+  buildRosterNotFoundNotice,
   deferEphemeralReply,
   editEmbed,
   editNotice,
@@ -70,6 +72,16 @@ function createRaidGoldEarnerCommand({
     return editNotice(interaction, EmbedBuilder, notice, extras);
   }
 
+  // A notice whose copy lives at `raid-gold-earner.<stem>{Title,Description,Tip}`.
+  function goldEarnerNotice(kind, stem, lang, vars) {
+    return {
+      kind,
+      title: t(`raid-gold-earner.${stem}Title`, lang, vars),
+      description: t(`raid-gold-earner.${stem}Description`, lang, vars),
+      tip: t(`raid-gold-earner.${stem}Tip`, lang, vars),
+    };
+  }
+
   const handleRaidGoldEarnerAutocomplete = createAutocompleteDispatcher("raid-gold-earner", {
     async roster(interaction, focused) {
       const userDoc = await loadUserForAutocomplete(interaction.user.id);
@@ -92,11 +104,7 @@ function createRaidGoldEarnerCommand({
 
     if (!rosterInput) {
       const lang = await getUserLanguage(discordId, { UserModel: User });
-      await editPickerNotice(interaction, {
-        type: "warn",
-        title: t("raid-gold-earner.notice.missingRosterTitle", lang),
-        description: t("raid-gold-earner.notice.missingRosterDescription", lang),
-      });
+      await editPickerNotice(interaction, goldEarnerNotice(NoticeKind.INPUT, "notice.missingRoster", lang));
       return;
     }
 
@@ -105,25 +113,15 @@ function createRaidGoldEarnerCommand({
     const target = findAccountByName(userDoc, rosterInput, normalizeName);
 
     if (!target) {
-      await editPickerNotice(interaction, {
-        type: "warn",
-        title: t("raid-gold-earner.notice.notFoundTitle", lang),
-        description: t("raid-gold-earner.notice.notFoundDescription", lang, {
-          rosterName: rosterInput,
-        }),
-      });
+      await editPickerNotice(interaction, buildRosterNotFoundNotice(rosterInput, lang));
       return;
     }
 
     const allChars = Array.isArray(target.characters) ? target.characters : [];
     if (allChars.length === 0) {
-      await editPickerNotice(interaction, {
-        type: "info",
-        title: t("raid-gold-earner.notice.emptyTitle", lang),
-        description: t("raid-gold-earner.notice.emptyDescription", lang, {
-          accountName: target.accountName,
-        }),
-      });
+      await editPickerNotice(interaction, goldEarnerNotice(NoticeKind.EMPTY, "notice.empty", lang, {
+        accountName: target.accountName,
+      }));
       return;
     }
 
@@ -161,11 +159,7 @@ function createRaidGoldEarnerCommand({
   async function renderStaleSession(interaction) {
     await interaction.deferUpdate();
     const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await editPickerNotice(interaction, {
-      type: "warn",
-      title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
-      description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
-    }, {
+    await editPickerNotice(interaction, goldEarnerNotice(NoticeKind.EXPIRED, "expired.staleSession", clickerLang), {
       components: [],
     }).catch(() => {});
   }
@@ -182,6 +176,7 @@ function createRaidGoldEarnerCommand({
       t,
       titleKey: "raid-gold-earner.auth.notYourSessionTitle",
       descriptionKey: "raid-gold-earner.auth.notYourSessionDescription",
+      tipKey: "raid-gold-earner.auth.notYourSessionTip",
     }).catch(() => true);
   }
 
@@ -197,13 +192,14 @@ function createRaidGoldEarnerCommand({
     } else {
       if (session.selectedIndices.size >= GOLD_EARNER_CAP_PER_ACCOUNT) {
         await replyNotice(interaction, EmbedBuilder, {
-          type: "warn",
+          kind: NoticeKind.INPUT,
           title: t("raid-gold-earner.capWarn.title", session.lang, {
             cap: GOLD_EARNER_CAP_PER_ACCOUNT,
           }),
           description: t("raid-gold-earner.capWarn.description", session.lang, {
             cap: GOLD_EARNER_CAP_PER_ACCOUNT,
           }),
+          tip: t("raid-gold-earner.capWarn.tip", session.lang),
         }).catch(() => {});
         return;
       }
@@ -259,23 +255,21 @@ function createRaidGoldEarnerCommand({
       savedNames = await persistGoldEarnerSelection(session);
     } catch (err) {
       console.error("[raid-gold-earner confirm] save failed:", err?.message || err);
+      // This card has never shown the error text, so it gains no detail field.
       await editPickerNotice(interaction, {
-        type: "warn",
+        kind: NoticeKind.FAILURE,
         title: t("raid-gold-earner.saveFail.title", session.lang),
         description: t("raid-gold-earner.saveFail.description", session.lang),
+        tip: t("raid-gold-earner.saveFail.tip", session.lang),
       }, {
         components: [],
       }).catch(() => {});
       return;
     }
     if (savedNames === null) {
-      await editPickerNotice(interaction, {
-        type: "warn",
-        title: t("raid-gold-earner.notice.notFoundTitle", session.lang),
-        description: t("raid-gold-earner.notice.notFoundDescription", session.lang, {
-          rosterName: session.accountName,
-        }),
-      }, {
+      await editPickerNotice(interaction, goldEarnerNotice(NoticeKind.EXPIRED, "notice.gone", session.lang, {
+        rosterName: session.accountName,
+      }), {
         components: [],
       }).catch(() => {});
       return;

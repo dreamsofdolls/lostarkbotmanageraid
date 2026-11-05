@@ -1,5 +1,7 @@
 "use strict";
 
+const { NoticeKind, buildManagerOnlyField } = require("../../../utils/raid/common/shared");
+
 function createAddRosterTargetResolver({
   isManagerId,
   t,
@@ -18,18 +20,21 @@ function createAddRosterTargetResolver({
 
     if (!isManagerId(callerId)) {
       await replyNotice(interaction, {
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-add-roster.auth.managerOnlyTitle", lang),
         description: t("raid-add-roster.auth.managerOnlyDescription", lang),
+        fields: [buildManagerOnlyField(lang)],
+        tip: t("raid-add-roster.auth.managerOnlyTip", lang),
       });
       return { handled: true };
     }
 
     if (targetUser.bot) {
       await replyNotice(interaction, {
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-add-roster.auth.botTargetTitle", lang),
         description: t("raid-add-roster.auth.botTargetDescription", lang),
+        tip: t("raid-add-roster.auth.botTargetTip", lang),
       });
       return { handled: true };
     }

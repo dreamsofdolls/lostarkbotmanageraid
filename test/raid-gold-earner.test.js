@@ -483,7 +483,7 @@ function confirmSession(cmd, accountName) {
   };
 }
 
-test("handleRaidGoldEarnerButton confirm: a roster renamed or removed meanwhile gets the not-found notice, not a success card", async () => {
+test("handleRaidGoldEarnerButton confirm: a roster renamed or removed meanwhile gets the roster-changed notice, not a success card", async () => {
   const userDoc = {
     discordId: "user-1",
     // A background refresh renamed "Alpha" to its seed character meanwhile.
@@ -496,7 +496,7 @@ test("handleRaidGoldEarnerButton confirm: a roster renamed or removed meanwhile 
   await cmd.handleRaidGoldEarnerButton(interaction);
 
   const title = edits.at(-1).embeds[0].toJSON().title;
-  assert.match(title, new RegExp(t("raid-gold-earner.notice.notFoundTitle", "vi").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(title, `⌛  ${t("raid-gold-earner.notice.goneTitle", "vi")}`);
   assert.equal(userDoc.accounts[0].characters[0].isGoldEarner, false);
 });
 

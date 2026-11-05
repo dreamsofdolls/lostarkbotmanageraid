@@ -1,6 +1,11 @@
 "use strict";
 
-const { buildNoticeEmbed, replyNotice: replySharedNotice } = require("../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoticeEmbed,
+  replyNotice: replySharedNotice,
+} = require("../../utils/raid/common/shared");
 const {
   handlePickerSessionTimeout,
   newPickerSessionId,
@@ -172,9 +177,10 @@ function createAddRosterCommand({
       if (matched) {
         const vars = savedAccountVars(matched.accountName, matched.characters);
         await replyNotice(interaction, {
-          type: "warn",
+          kind: NoticeKind.INPUT,
           title: t("raid-add-roster.duplicate.preFetchTitle", lang, vars),
           description: t("raid-add-roster.duplicate.preFetchDescription", lang, vars),
+          tip: t("raid-add-roster.duplicate.preFetchTip", lang, vars),
         });
         return;
       }
@@ -190,18 +196,22 @@ function createAddRosterCommand({
     try {
       rosterCharacters = await fetchRosterCharacters(seedCharName);
     } catch (error) {
+      // A Bible label (or the raw message in a code span) stays in the
+      // sentence: it reads as the reason, not as a technical detail.
       await editNotice(interaction, {
-        type: "error",
+        kind: NoticeKind.BUSY,
         title: t("raid-add-roster.fetch.failedTitle", lang, seedVars),
         description: t("raid-add-roster.fetch.failed", lang, { error: formatBibleError(error, lang) }),
+        tip: t("raid-add-roster.fetch.failedTip", lang),
       });
       return;
     }
     if (rosterCharacters.length === 0) {
       await editNotice(interaction, {
-        type: "warn",
+        kind: NoticeKind.EMPTY,
         title: t("raid-add-roster.fetch.emptyTitle", lang, seedVars),
         description: t("raid-add-roster.fetch.empty", lang, seedVars),
+        tip: t("raid-add-roster.fetch.emptyTip", lang),
       });
       return;
     }
@@ -232,9 +242,10 @@ function createAddRosterCommand({
       if (collidingAccount) {
         const vars = savedAccountVars(collidingAccount.accountName, collidingAccount.characters);
         await editNotice(interaction, {
-          type: "warn",
+          kind: NoticeKind.INPUT,
           title: t("raid-add-roster.duplicate.postFetchTitle", lang, vars),
           description: t("raid-add-roster.duplicate.postFetchDescription", lang, vars),
+          tip: t("raid-add-roster.duplicate.postFetchTip", lang, vars),
         });
         return;
       }
@@ -301,8 +312,10 @@ function createAddRosterCommand({
       t,
       staleTitleKey: "raid-add-roster.expired.staleSessionTitle",
       staleDescriptionKey: "raid-add-roster.expired.staleSessionDescription",
+      staleTipKey: "raid-add-roster.expired.staleSessionTip",
       authTitleKey: "raid-add-roster.auth2.notYourPickerTitle",
       authDescriptionKey: "raid-add-roster.auth2.notYourPickerDescription",
+      authTipKey: "raid-add-roster.auth2.notYourPickerTip",
     });
     if (context.handled) return;
     const navigationHandled = await handleRosterPickerNavigationAction({
@@ -345,20 +358,22 @@ function createAddRosterCommand({
           );
           const vars = savedAccountVars(err.collidingAccountName, err.collidingCharacters);
           await editNotice(interaction, {
-            type: "warn",
+            kind: NoticeKind.EXPIRED,
             title: t("raid-add-roster.duplicate.raceTitle", session.lang, vars),
             description: t("raid-add-roster.duplicate.raceDescription", session.lang, vars),
+            tip: t("raid-add-roster.duplicate.raceTip", session.lang, vars),
           });
           return;
         }
         console.error(`[add-roster] persist failed:`, err);
+        // The reply is public, so the detail field shows in the channel, as
+        // the raw error in the sentence did.
         await editNotice(interaction, {
-          type: "error",
+          kind: NoticeKind.FAILURE,
           title: t("raid-add-roster.persistFail.title", session.lang, sessionTitleVars(session)),
-          description: t("raid-add-roster.persistFail.description", session.lang, {
-            error: err?.message || err,
-            adminMention,
-          }),
+          description: t("raid-add-roster.persistFail.description", session.lang, { adminMention }),
+          fields: [buildDetailField(err?.message || String(err), session.lang)],
+          tip: t("raid-add-roster.persistFail.tip", session.lang),
         });
         return;
       }

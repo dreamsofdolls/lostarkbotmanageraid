@@ -746,7 +746,7 @@ test("persistEditedRoster: throws when account vanished between command and Conf
   );
 });
 
-test("edit-roster Confirm on a roster removed meanwhile shows the not-found notice in the user's language", async () => {
+test("edit-roster Confirm on a roster removed meanwhile shows the expired roster-changed notice in the user's language", async () => {
   const { factory, docs } = makeFactory();
   docs.set("user-1", {
     discordId: "user-1",
@@ -771,7 +771,7 @@ test("edit-roster Confirm on a roster removed meanwhile shows the not-found noti
   const embed = edits.at(-1).embeds[0].toJSON();
   assert.equal(
     embed.title,
-    `⚠️ ${t("raid-edit-roster.notice.notFoundTitle", "en", { rosterIcon: "❓", rosterName: "Alpha" })}`
+    `⌛  ${t("raid-edit-roster.notice.goneTitle", "en", { rosterIcon: "❓", rosterName: "Alpha" })}`
   );
   assert.doesNotMatch(embed.description, /không còn tồn tại/);
 });

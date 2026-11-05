@@ -267,6 +267,16 @@ const FAILURE_NOTICE_STEMS = [
   "share.unknownSubcommand",
   "raidBg.set.downloadFailed",
   "raidBg.set.saveFailed",
+  "raid-add-roster.auth.managerOnly",
+  "raid-add-roster.auth2.notYourPicker",
+  "raid-add-roster.expired.staleSession",
+  "raid-add-roster.duplicate.race",
+  "raid-edit-roster.auth.notYourPicker",
+  "raid-edit-roster.expired.staleSession",
+  "raid-edit-roster.notice.gone",
+  "raid-gold-earner.auth.notYourSession",
+  "raid-gold-earner.expired.staleSession",
+  "raid-gold-earner.notice.gone",
 ];
 
 // /raid-log copy is `raid-log.notices.<code>.title|description|tip`.
@@ -304,6 +314,12 @@ const FAILURE_NOTICE_KEYS = [
   "raid-check.refreshFlow.retryTip",
   "raid-check.syncFlow.reportTitleFailed",
   "raid-check.syncFlow.reportHintAllFailed",
+  "raid-add-roster.persistFail.title",
+  "raid-add-roster.persistFail.tip",
+  "raid-edit-roster.persistFail.title",
+  "raid-edit-roster.persistFail.tip",
+  "raid-gold-earner.saveFail.title",
+  "raid-gold-earner.saveFail.tip",
 ];
 
 // A variant pool flattens to `<key>.variants`.

@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { NoticeKind } = require("./common/shared");
 
 function newPickerSessionId() {
   return crypto.randomBytes(8).toString("hex");
@@ -149,6 +150,15 @@ async function handlePickerSessionTimeout({
   }
 }
 
+/**
+ * Refuse a picker button pressed by anyone but the person who opened it,
+ * with a private guard notice in the clicker's language.
+ * @param {object} args - Discord and i18n dependencies, plus the notice copy keys
+ * @param {string} args.titleKey
+ * @param {string} args.descriptionKey
+ * @param {string} [args.tipKey]
+ * @returns {Promise<true|null>} true when the click was refused and answered
+ */
 async function authorizePickerSession({
   interaction,
   session,
@@ -160,6 +170,7 @@ async function authorizePickerSession({
   t,
   titleKey,
   descriptionKey,
+  tipKey,
 }) {
   if (interaction.user.id === session.callerId) return null;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -167,9 +178,10 @@ async function authorizePickerSession({
   await interaction.editReply({
     embeds: [
       buildNoticeEmbed(EmbedBuilder, {
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t(titleKey, clickerLang),
         description: t(descriptionKey, clickerLang),
+        tip: tipKey ? t(tipKey, clickerLang) : undefined,
       }),
     ],
   });

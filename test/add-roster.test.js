@@ -192,10 +192,10 @@ test("add pre-fetch duplicate names the saved roster with its class icon", async
   await factory.handleAddRosterCommand(commandInteraction("Perfectwings", replies));
 
   const embed = replies[0].embeds[0].toJSON();
-  assert.equal(embed.title, "⚠️ Roster đã có sẵn · <:x:1> Perfectwings");
-  const nextSteps = embed.description.split("\n\n")[1].split("\n");
-  assert.equal(nextSteps[0], "• Sửa char: `/raid-edit-roster` rồi chọn **Perfectwings**");
-  assert.equal(nextSteps[1], "• Làm lại từ đầu: `/raid-remove-roster` → `/raid-add-roster`");
+  assert.equal(embed.title, "✏️  Roster đã có sẵn · <:x:1> Perfectwings");
+  // The first next step is the tip, the second a sentence in the description.
+  assert.equal(embed.footer.text, "💡 Sửa char bằng /raid-edit-roster rồi chọn Perfectwings");
+  assert.match(embed.description, /`\/raid-remove-roster` rồi thêm lại bằng `\/raid-add-roster`/u);
 });
 
 test("add fetch failure is a notice embed with the question mark icon", async () => {
@@ -214,7 +214,7 @@ test("add fetch failure is a notice embed with the question mark icon", async ()
   assert.ok(embed.title.endsWith("Chưa lấy được roster · ❓ Spindazz"), embed.title);
 });
 
-test("add fetch with no roster is a warn notice naming the seed", async () => {
+test("add fetch with no roster is an empty notice naming the seed", async () => {
   clearUserLanguageCache();
   const { factory } = makeFactory({ fetchRosterCharacters: async () => [] });
   const edits = [];
@@ -223,7 +223,7 @@ test("add fetch with no roster is a warn notice naming the seed", async () => {
 
   assert.equal(edits[0].content, null);
   const embed = edits[0].embeds[0].toJSON();
-  assert.equal(embed.title, "⚠️ Không thấy roster · ❓ Spindazz");
+  assert.equal(embed.title, "🔍  Không thấy roster · ❓ Spindazz");
   assert.ok(embed.description.includes("**Spindazz**"), embed.description);
 });
 
@@ -253,7 +253,7 @@ test("add race duplicate uses the colliding account's characters for the icon", 
   });
 
   const embed = edits.at(-1).embeds[0].toJSON();
-  assert.equal(embed.title, "⚠️ Card khác vừa lưu trước · <:x:1> Perfectwings");
+  assert.equal(embed.title, "⌛  Card khác vừa lưu trước · <:x:1> Perfectwings");
 });
 
 test("handleAddRosterCommand hands its Bible roster names to the Confirm race guard", async () => {

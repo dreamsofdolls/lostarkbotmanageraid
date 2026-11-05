@@ -1,6 +1,11 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoRosterNotice,
+  buildNoticeEmbed,
+} = require("../../utils/raid/common/shared");
 const { findAccountByName } = require("../../utils/user-doc");
 const {
   handlePickerSessionTimeout,
@@ -43,12 +48,14 @@ function unknownRosterVars(rosterName) {
   return { rosterIcon: ROSTER_ICON_UNKNOWN, rosterName };
 }
 
-function notFoundNotice(rosterName, lang) {
+// A C+ roster notice whose copy lives at `raid-edit-roster.notice.<stem>{Title,Description,Tip}`.
+function rosterNotice(kind, stem, rosterName, lang) {
   const vars = unknownRosterVars(rosterName);
   return {
-    type: "warn",
-    title: t("raid-edit-roster.notice.notFoundTitle", lang, vars),
-    description: t("raid-edit-roster.notice.notFoundDescription", lang, vars),
+    kind,
+    title: t(`raid-edit-roster.notice.${stem}Title`, lang, vars),
+    description: t(`raid-edit-roster.notice.${stem}Description`, lang, vars),
+    tip: t(`raid-edit-roster.notice.${stem}Tip`, lang, vars),
   };
 }
 
@@ -156,13 +163,7 @@ function createEditRosterCommand({
     });
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       await interaction.editReply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-edit-roster.notice.noRostersTitle", lang),
-            description: t("raid-edit-roster.notice.noRostersDescription", lang),
-          }),
-        ],
+        embeds: [buildNoticeEmbed(EmbedBuilder, buildNoRosterNotice(lang))],
       });
       return;
     }
@@ -170,7 +171,7 @@ function createEditRosterCommand({
     const targetAccount = findAccountByName(userDoc, rosterArg, normalizeName);
     if (!targetAccount) {
       await interaction.editReply({
-        embeds: [buildNoticeEmbed(EmbedBuilder, notFoundNotice(rosterArg, lang))],
+        embeds: [buildNoticeEmbed(EmbedBuilder, rosterNotice(NoticeKind.EMPTY, "notFound", rosterArg, lang))],
       });
       return;
     }
@@ -195,15 +196,10 @@ function createEditRosterCommand({
     } = buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
 
     if (merged.length === 0) {
-      const vars = unknownRosterVars(targetAccount.accountName);
       await interaction.editReply({
         content: null,
         embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-edit-roster.notice.emptyMergedTitle", lang, vars),
-            description: t("raid-edit-roster.notice.emptyMergedDescription", lang, vars),
-          }),
+          buildNoticeEmbed(EmbedBuilder, rosterNotice(NoticeKind.EMPTY, "emptyMerged", targetAccount.accountName, lang)),
         ],
       });
       return;
@@ -280,8 +276,10 @@ function createEditRosterCommand({
       t,
       staleTitleKey: "raid-edit-roster.expired.staleSessionTitle",
       staleDescriptionKey: "raid-edit-roster.expired.staleSessionDescription",
+      staleTipKey: "raid-edit-roster.expired.staleSessionTip",
       authTitleKey: "raid-edit-roster.auth.notYourPickerTitle",
       authDescriptionKey: "raid-edit-roster.auth.notYourPickerDescription",
+      authTipKey: "raid-edit-roster.auth.notYourPickerTip",
     });
     if (context.handled) return;
 
@@ -320,16 +318,16 @@ function createEditRosterCommand({
       summary = await persistEditedRoster(session, selectedChars);
     } catch (err) {
       console.error("[edit-roster] persist failed:", err);
-      // A roster removed while the picker was open is not a save failure.
+      // A roster removed or renamed while the picker was open is not a save
+      // failure: the card itself went stale.
       const notice = err?.code === "ROSTER_NOT_FOUND"
-        ? notFoundNotice(session.accountName, session.lang)
+        ? rosterNotice(NoticeKind.EXPIRED, "gone", session.accountName, session.lang)
         : {
-          type: "error",
+          kind: NoticeKind.FAILURE,
           title: t("raid-edit-roster.persistFail.title", session.lang, sessionTitleVars(session)),
-          description: t("raid-edit-roster.persistFail.description", session.lang, {
-            error: err?.message || err,
-            adminMention,
-          }),
+          description: t("raid-edit-roster.persistFail.description", session.lang, { adminMention }),
+          fields: [buildDetailField(err?.message || String(err), session.lang)],
+          tip: t("raid-edit-roster.persistFail.tip", session.lang),
         };
       await interaction.editReply({
         content: null,

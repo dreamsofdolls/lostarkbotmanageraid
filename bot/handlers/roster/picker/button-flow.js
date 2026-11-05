@@ -4,6 +4,7 @@ const {
   authorizePickerSession,
   clearPickerSession,
 } = require("../../../utils/raid/roster-picker");
+const { NoticeKind } = require("../../../utils/raid/common/shared");
 const {
   getRosterPickerRoute,
 } = require("./picker-routes");
@@ -18,20 +19,30 @@ async function replyStaleRosterPicker({
   t,
   titleKey,
   descriptionKey,
+  tipKey,
 }) {
   const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
   await interaction.reply({
     embeds: [
       buildNoticeEmbed(EmbedBuilder, {
-        type: "muted",
+        kind: NoticeKind.EXPIRED,
         title: t(titleKey, clickerLang),
         description: t(descriptionKey, clickerLang),
+        tip: tipKey ? t(tipKey, clickerLang) : undefined,
       }),
     ],
     flags: MessageFlags.Ephemeral,
   });
 }
 
+/**
+ * Resolve a picker button press to its session, answering a stale card
+ * (expired notice) or a press by someone else (guard notice) itself.
+ * @param {object} args - Discord and i18n dependencies, the custom id prefix,
+ *   the session map, and the copy keys of the two refusals
+ * @returns {Promise<{handled: boolean, route: object|null, action: string, sessionId: string, session: object|null}>}
+ *   handled=true means a notice already answered the press
+ */
 async function loadRosterPickerButtonContext({
   interaction,
   prefix,
@@ -44,8 +55,10 @@ async function loadRosterPickerButtonContext({
   t,
   staleTitleKey,
   staleDescriptionKey,
+  staleTipKey,
   authTitleKey,
   authDescriptionKey,
+  authTipKey,
 }) {
   const route = getRosterPickerRoute(interaction.customId, { prefix });
   const action = route?.action || "";
@@ -62,6 +75,7 @@ async function loadRosterPickerButtonContext({
       t,
       titleKey: staleTitleKey,
       descriptionKey: staleDescriptionKey,
+      tipKey: staleTipKey,
     });
     return { handled: true, route, action, sessionId, session: null };
   }
@@ -77,6 +91,7 @@ async function loadRosterPickerButtonContext({
     t,
     titleKey: authTitleKey,
     descriptionKey: authDescriptionKey,
+    tipKey: authTipKey,
   });
   if (denied) return { handled: true, route, action, sessionId, session };
 
@@ -193,9 +208,10 @@ async function guardPickerConfirm({
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
+          kind: NoticeKind.INPUT,
           title: t(`${keyPrefix}.confirm.noSelectionTitle`, session.lang),
           description: t(`${keyPrefix}.confirm.noSelectionDescription`, session.lang, noSelectionVars),
+          tip: t(`${keyPrefix}.confirm.noSelectionTip`, session.lang),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -212,12 +228,13 @@ async function guardPickerConfirm({
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
+          kind: NoticeKind.INPUT,
           title: t(`${keyPrefix}.confirm.capExceededTitle`, session.lang, { cap: maxChars }),
           description: t(`${keyPrefix}.confirm.capExceededDescription`, session.lang, {
             cap: maxChars,
             count: selectedChars.length,
           }),
+          tip: t(`${keyPrefix}.confirm.capExceededTip`, session.lang),
         }),
       ],
       flags: MessageFlags.Ephemeral,

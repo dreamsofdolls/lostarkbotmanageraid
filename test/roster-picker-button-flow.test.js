@@ -29,7 +29,7 @@ test("guardPickerConfirm names the cap in the over-cap notice title", async () =
   });
 
   assert.equal(result.handled, true);
-  assert.equal(interaction.replies[0].embeds[0].toJSON().title, "⚠️ Quá 1 char");
+  assert.equal(interaction.replies[0].embeds[0].toJSON().title, "✏️  Quá 1 char");
 });
 
 function makeInteraction(customId, userId = "user-1") {

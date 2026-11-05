@@ -1,7 +1,10 @@
 const {
-  buildNoticeEmbed,
+  NoticeKind,
+  buildNoRosterNotice,
+  buildRosterNotFoundNotice,
   deferEphemeralReply,
-  editEmbed,
+  editNotice,
+  formatCharacterLabel,
 } = require("../../utils/raid/common/shared");
 const {
   createAutocompleteDispatcher,
@@ -16,7 +19,6 @@ const {
   getStatusRaidsForCharacter,
   summarizeAccountGold,
 } = require("../../utils/raid/common/character");
-const { getClassEmoji } = require("../../models/Class");
 
 /** Names beyond this are collapsed into a trailing `+N`. */
 const REMAINING_NAME_LIMIT = 8;
@@ -32,7 +34,6 @@ const REMAINING_NAME_LIMIT = 8;
 function createRemoveRosterCommand(deps) {
   const {
     EmbedBuilder,
-    UI,
     User,
     saveWithRetry,
     normalizeName,
@@ -40,17 +41,19 @@ function createRemoveRosterCommand(deps) {
     loadUserForAutocomplete,
   } = deps;
 
-  /**
-   * Render one character as `{class icon} **{name}**`, the shape every
-   * other card in the bot uses. Falls back to the bare bold name when the
-   * class has no registered emoji.
-   * @param {object} character - a character subdocument
-   * @returns {string} markdown for one character
-   */
+  // One character as notices show it: class icon, then the bold name.
   function withClassIcon(character) {
-    const name = getCharacterName(character);
-    const icon = getClassEmoji(character?.class || character?.className);
-    return icon ? `${icon} **${name}**` : `**${name}**`;
+    return formatCharacterLabel(getCharacterName(character), character?.class || character?.className);
+  }
+
+  // A notice whose copy lives at `raid-remove-roster.<stem>{Title,Description,Tip}`.
+  function removeNotice(kind, stem, lang, vars) {
+    return {
+      kind,
+      title: t(`raid-remove-roster.${stem}Title`, lang, vars),
+      description: t(`raid-remove-roster.${stem}Description`, lang, vars),
+      tip: t(`raid-remove-roster.${stem}Tip`, lang, vars),
+    };
   }
 
   async function autocompleteRemoveRosterRoster(interaction, focused) {
@@ -103,39 +106,18 @@ function createRemoveRosterCommand(deps) {
     await deferEphemeralReply(interaction);
     const lang = await getUserLanguage(discordId, { UserModel: User });
     if (action !== "remove_roster" && action !== "remove_char") {
-      await editEmbed(
-        interaction,
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
-          title: t("raid-remove-roster.invalid.actionTitle", lang),
-          description: t("raid-remove-roster.invalid.actionDescription", lang),
-        })
-      );
+      await editNotice(interaction, EmbedBuilder, removeNotice(NoticeKind.INPUT, "invalid.action", lang));
       return;
     }
     if (action === "remove_char" && !characterName) {
-      await editEmbed(
-        interaction,
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
-          title: t("raid-remove-roster.invalid.missingCharTitle", lang),
-          description: t("raid-remove-roster.invalid.missingCharDescription", lang),
-        })
-      );
+      await editNotice(interaction, EmbedBuilder, removeNotice(NoticeKind.INPUT, "invalid.missingChar", lang));
       return;
     }
-    let replyEmbed = null;
+    let replyNotice = null;
     await saveWithRetry(async () => {
       const userDoc = await User.findOne({ discordId });
       if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-        replyEmbed = new EmbedBuilder()
-          .setColor(UI.colors.muted)
-          .setTitle(
-            t("raid-remove-roster.notFound.noRosterTitle", lang, {
-              iconInfo: UI.icons.info,
-            })
-          )
-          .setDescription(t("raid-remove-roster.notFound.noRosterDescription", lang));
+        replyNotice = buildNoRosterNotice(lang);
         return;
       }
       const normalizedRoster = normalizeName(rosterName);
@@ -143,18 +125,7 @@ function createRemoveRosterCommand(deps) {
         (a) => normalizeName(a.accountName) === normalizedRoster
       );
       if (accountIndex === -1) {
-        replyEmbed = new EmbedBuilder()
-          .setColor(UI.colors.danger)
-          .setTitle(
-            t("raid-remove-roster.notFound.rosterNotFoundTitle", lang, {
-              iconWarn: UI.icons.warn,
-            })
-          )
-          .setDescription(
-            t("raid-remove-roster.notFound.rosterNotFoundDescription", lang, {
-              rosterName,
-            })
-          );
+        replyNotice = buildRosterNotFoundNotice(rosterName, lang);
         return;
       }
       const account = userDoc.accounts[accountIndex];
@@ -166,9 +137,8 @@ function createRemoveRosterCommand(deps) {
         const lostGold = summarizeAccountGold(account, getStatusRaidsForCharacter);
         userDoc.accounts.splice(accountIndex, 1);
         await userDoc.save();
-        // Description-driven layout: state the removal in one block and put
-        // the recovery command in the footer, where RaidManage keeps the
-        // next step. The `danger` color provides the destructive-action cue.
+        // The removal and its cost read in the description; the re-add
+        // command is the tip.
         const charPart =
           removedCount === 0
             ? t("raid-remove-roster.removedRoster.noChars", lang)
@@ -185,26 +155,20 @@ function createRemoveRosterCommand(deps) {
               gold: formatGold(lostGold.earned),
             })
           : "";
-        replyEmbed = new EmbedBuilder()
-          .setColor(UI.colors.danger)
-          .setTitle(
-            t("raid-remove-roster.removedRoster.title", lang, {
-              accountName: account.accountName,
-            })
-          )
-          .setDescription(
-            t("raid-remove-roster.removedRoster.description", lang, {
-              accountName: account.accountName,
-              charPart,
-              goldPart,
-            })
-          )
-          .setFooter({
-            text: t("raid-remove-roster.removedRoster.footerReadd", lang, {
-              accountName: account.accountName,
-            }),
-          })
-          .setTimestamp();
+        replyNotice = {
+          kind: NoticeKind.DONE,
+          title: t("raid-remove-roster.removedRoster.title", lang, {
+            accountName: account.accountName,
+          }),
+          description: t("raid-remove-roster.removedRoster.description", lang, {
+            accountName: account.accountName,
+            charPart,
+            goldPart,
+          }),
+          tip: t("raid-remove-roster.removedRoster.tip", lang, {
+            accountName: account.accountName,
+          }),
+        };
         return;
       }
       // action === "remove_char"
@@ -213,19 +177,11 @@ function createRemoveRosterCommand(deps) {
         (c) => normalizeName(getCharacterName(c)) === normalizedChar
       );
       if (charIndex === -1) {
-        replyEmbed = new EmbedBuilder()
-          .setColor(UI.colors.progress)
-          .setTitle(
-            t("raid-remove-roster.notFound.charNotFoundTitle", lang, {
-              iconWarn: UI.icons.warn,
-            })
-          )
-          .setDescription(
-            t("raid-remove-roster.notFound.charNotFoundDescription", lang, {
-              characterName,
-              accountName: account.accountName,
-            })
-          );
+        // The name was typed and matched nothing, so no class is known.
+        replyNotice = removeNotice(NoticeKind.EMPTY, "notFound.charNotFound", lang, {
+          characterLabel: formatCharacterLabel(characterName),
+          accountName: account.accountName,
+        });
         return;
       }
       const wasSeed = normalizeName(account.accountName) === normalizedChar;
@@ -273,33 +229,31 @@ function createRemoveRosterCommand(deps) {
             });
       const removedLabel = removedCharacter
         ? withClassIcon(removedCharacter)
-        : `**${characterName}**`;
-      const embed = new EmbedBuilder()
-        .setColor(UI.colors.muted)
-        .setTitle(
-          t("raid-remove-roster.removedChar.title", lang, {
-            characterName: getCharacterName(removedCharacter) || characterName,
-          })
-        )
-        .setDescription(
-          t("raid-remove-roster.removedChar.description", lang, {
-            characterName: removedLabel,
-            accountName: account.accountName,
-            remainingPart,
-          })
-        )
-        .setTimestamp();
-      if (reseededTo) {
-        embed.setFooter({
-          text: t("raid-remove-roster.removedChar.reseededFooter", lang, {
-            newSeed: reseededTo,
-          }),
-        });
+        : formatCharacterLabel(characterName);
+      // An empty roster points to removing or refilling it; a renamed one
+      // tells the user its new name. A rename needs a character left, so the
+      // two never meet.
+      let tip;
+      if (remaining === 0) {
+        tip = t("raid-remove-roster.removedChar.emptyTip", lang);
+      } else if (reseededTo) {
+        tip = t("raid-remove-roster.removedChar.reseededTip", lang, { newSeed: reseededTo });
       }
-      replyEmbed = embed;
+      replyNotice = {
+        kind: NoticeKind.DONE,
+        title: t("raid-remove-roster.removedChar.title", lang, {
+          characterName: getCharacterName(removedCharacter) || characterName,
+        }),
+        description: t("raid-remove-roster.removedChar.description", lang, {
+          characterLabel: removedLabel,
+          accountName: account.accountName,
+          remainingPart,
+        }),
+        tip,
+      };
     });
-    if (replyEmbed) {
-      await editEmbed(interaction, replyEmbed);
+    if (replyNotice) {
+      await editNotice(interaction, EmbedBuilder, replyNotice);
     }
   }
   return {
