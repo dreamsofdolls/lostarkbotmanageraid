@@ -4,9 +4,11 @@ const { t } = require("../../../../services/i18n");
 const UserBackground = require("../../../../models/userBackground");
 const { clearBackgroundCache } = require("../../../../services/raid-card/bg-loader");
 const {
+  NoticeKind,
+  buildNoticeEmbed,
   deferEphemeralReply,
   editEmbed,
-  UI,
+  editNotice,
 } = require("../../../../utils/raid/common/shared");
 const {
   RaidBgError,
@@ -16,9 +18,13 @@ const {
   RAID_BG_ASSIGNMENT_MODES,
   normalizeStoredImage,
   getStoredImages,
-  buildRaidBgEmbed,
   compactAssignmentsAfterRemove,
 } = require("../library");
+const {
+  buildNoLibraryNotice,
+  buildSaveFailedNotice,
+  buildUploadErrorNotice,
+} = require("../notices");
 const {
   RAID_BG_BROWSER_MS,
   buildSceneBrowserPayload,
@@ -32,11 +38,7 @@ async function resolveReplacement({ interaction, EmbedBuilder, replaceAttachment
     return await processBgAttachment(replaceAttachment);
   } catch (err) {
     if (!(err instanceof RaidBgError)) throw err;
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.set.rejectTitle", lang),
-      description: t(err.key, lang, err.params),
-      color: UI.colors.progress,
-    }));
+    await editNotice(interaction, EmbedBuilder, buildUploadErrorNotice(err, lang));
     return undefined;
   }
 }
@@ -71,8 +73,8 @@ function createEditBrowserRenderer({
 }
 
 function createFinalNotice({ EmbedBuilder }) {
-  return (component, opts) => component.update({
-    embeds: [buildRaidBgEmbed(EmbedBuilder, opts)],
+  return (component, notice) => component.update({
+    embeds: [buildNoticeEmbed(EmbedBuilder, notice)],
     files: [],
     attachments: [],
     components: [],
@@ -99,9 +101,10 @@ function createEditActionHandlers({
     clearBackgroundCache(interaction.user.id);
     collector.stop("done");
     await finalNotice(component, {
+      kind: NoticeKind.DONE,
       title: t("raidBg.edit.clearedTitle", lang),
       description: t("raidBg.edit.clearedDescription", lang),
-      color: UI.colors.muted,
+      tip: t("raidBg.edit.clearedTip", lang),
     });
   };
 
@@ -118,9 +121,10 @@ function createEditActionHandlers({
       await persist({ images: nextImages, assignments, mode });
       collector.stop("done");
       await finalNotice(component, {
+        kind: NoticeKind.DONE,
         title: t("raidBg.edit.replacedTitle", lang),
         description: t("raidBg.edit.replacedDescription", lang, { index: index + 1 }),
-        color: UI.colors.success,
+        tip: t("raidBg.edit.replacedTip", lang),
       });
     },
     "raidbg:deleteall": clearLibrary,
@@ -156,11 +160,7 @@ async function handleEdit({ interaction, deps, lang }) {
   const bg = await UserBackground.findOne({ discordId: interaction.user.id }).lean();
   const baseImages = getStoredImages(bg);
   if (baseImages.length === 0) {
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.edit.nothingTitle", lang),
-      description: t("raidBg.edit.nothingDescription", lang),
-      color: UI.colors.neutral,
-    }));
+    await editNotice(interaction, EmbedBuilder, buildNoLibraryNotice(lang));
     return;
   }
 
@@ -217,11 +217,7 @@ async function handleEdit({ interaction, deps, lang }) {
     } catch (err) {
       console.error("[raid-bg] edit action failed:", err?.message || err);
       try {
-        await finalNotice(component, {
-          title: t("raidBg.set.saveFailedTitle", lang),
-          description: t("raidBg.errors.storageFailed", lang, { message: err?.message || String(err) }),
-          color: UI.colors.danger,
-        });
+        await finalNotice(component, buildSaveFailedNotice(err, lang));
       } catch { /* ignore */ }
     }
   });

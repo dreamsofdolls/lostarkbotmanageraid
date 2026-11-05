@@ -3,9 +3,25 @@
 const {
   createRaidChannelEmbedBuilders,
 } = require("../../../services/raid/channel-monitor/channel-monitor-embeds");
+const {
+  NoticeKind,
+  buildNoRosterNotice,
+  buildRosterNotFoundNotice,
+  formatCharacterLabel,
+} = require("../../../utils/raid/common/shared");
 
 function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
   const { buildRaidChannelReceiptEmbed } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
+
+  // A notice whose copy lives at `raid-set.<stem>{Title,Description,Tip}`.
+  function setNotice(kind, stem, lang, vars) {
+    return {
+      kind,
+      title: t(`raid-set.${stem}Title`, lang),
+      description: t(`raid-set.${stem}Description`, lang, vars),
+      tip: t(`raid-set.${stem}Tip`, lang),
+    };
+  }
 
   async function replyRosterOwnerFailure({
     replySetNotice,
@@ -14,11 +30,7 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     rosterName,
   }) {
     if (!resolvedOwner) {
-      await replySetNotice({
-        type: "warn",
-        title: t("raid-set.roster.notFoundTitle", lang),
-        description: t("raid-set.roster.notFoundDescription", lang, { rosterName }),
-      });
+      await replySetNotice(buildRosterNotFoundNotice(rosterName, lang));
       return true;
     }
 
@@ -27,15 +39,11 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     const ownerNames = resolvedOwner.matches
       .map((entry) => entry.ownerLabel)
       .join(", ");
-    await replySetNotice({
-      type: "warn",
-      title: t("raid-set.roster.ambiguousTitle", lang),
-      description: t("raid-set.roster.ambiguousDescription", lang, {
-        count: resolvedOwner.matches.length,
-        rosterName,
-        ownerNames,
-      }),
-    });
+    await replySetNotice(setNotice(NoticeKind.INPUT, "roster.ambiguous", lang, {
+      count: resolvedOwner.matches.length,
+      rosterName,
+      ownerNames,
+    }));
     return true;
   }
 
@@ -45,16 +53,9 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     targetDiscordId,
     lang,
   }) {
-    const description = actingForOther
-      ? t("raid-set.roster.deletedForOtherDescription", lang, { target: targetDiscordId })
-      : t("raid-set.roster.noRosterDescription", lang);
-    await replySetNotice({
-      type: "info",
-      title: actingForOther
-        ? t("raid-set.roster.deletedForOtherTitle", lang)
-        : t("raid-set.roster.noRosterTitle", lang),
-      description,
-    });
+    await replySetNotice(actingForOther
+      ? setNotice(NoticeKind.EMPTY, "roster.deletedForOther", lang, { target: targetDiscordId })
+      : buildNoRosterNotice(lang));
   }
 
   async function replyAuthLost({
@@ -63,14 +64,10 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     rosterName,
     targetDiscordId,
   }) {
-    await replySetNotice({
-      type: "lock",
-      title: t("raid-set.roster.authLostTitle", lang),
-      description: t("raid-set.roster.authLostDescription", lang, {
-        rosterName,
-        target: targetDiscordId,
-      }),
-    }, {
+    await replySetNotice(setNotice(NoticeKind.GUARD, "roster.authLost", lang, {
+      rosterName,
+      target: targetDiscordId,
+    }), {
       allowedMentions: { parse: [] },
     });
   }
@@ -81,57 +78,38 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     characterName,
     rosterName,
   }) {
-    await replySetNotice({
-      type: "warn",
-      title: t("raid-set.character.notFoundTitle", lang),
-      description: t("raid-set.character.notFoundDescription", lang, {
-        characterName,
-        rosterName,
-      }),
-    });
+    await replySetNotice(setNotice(NoticeKind.EMPTY, "character.notFound", lang, {
+      characterName,
+      rosterName,
+    }));
   }
 
   async function replyAlready({
-    replySetEmbed,
+    replySetNotice,
     lang,
     type,
     localizedRaid,
     effectiveGate,
-    characterName,
+    characterLabel,
   }) {
     const scope = effectiveGate ? `${localizedRaid} \u00b7 ${effectiveGate}` : localizedRaid;
-    const color = type === "complete" ? UI.colors.progress : UI.colors.muted;
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setTitle(`${UI.icons.info} ${t(`raid-set.already.${type}Title`, lang)}`)
-      .setDescription(
-        t(`raid-set.already.${type}Description`, lang, {
-          characterName,
-          scope,
-        })
-      )
-      .setTimestamp();
-    await replySetEmbed(embed);
+    await replySetNotice(setNotice(NoticeKind.INPUT, `already.${type}`, lang, { characterLabel, scope }));
   }
 
   async function replyIneligible({
     replySetNotice,
     lang,
-    characterName,
+    characterLabel,
     result,
     raidMeta,
     localizedRaid,
   }) {
-    await replySetNotice({
-      type: "warn",
-      title: t("raid-set.character.notEligibleTitle", lang),
-      description: t("raid-set.character.notEligibleDescription", lang, {
-        characterName,
-        itemLevel: result.ineligibleItemLevel,
-        minItemLevel: raidMeta.minItemLevel,
-        raidLabel: localizedRaid,
-      }),
-    });
+    await replySetNotice(setNotice(NoticeKind.INPUT, "character.notEligible", lang, {
+      characterLabel,
+      itemLevel: result.ineligibleItemLevel,
+      minItemLevel: raidMeta.minItemLevel,
+      raidLabel: localizedRaid,
+    }));
   }
 
   /** The command in Discord's option order, echoed on the receipt's first line. */
@@ -226,25 +204,26 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
       await replyCharacterMissing({ replySetNotice, lang, characterName, rosterName });
       return;
     }
+    const characterLabel = formatCharacterLabel(result.displayName || characterName, result.displayClass);
     if (result.alreadyComplete) {
       await replyAlready({
-        replySetEmbed,
+        replySetNotice,
         lang,
         type: "complete",
         localizedRaid,
         effectiveGate,
-        characterName,
+        characterLabel,
       });
       return;
     }
     if (result.alreadyReset) {
       await replyAlready({
-        replySetEmbed,
+        replySetNotice,
         lang,
         type: "reset",
         localizedRaid,
         effectiveGate,
-        characterName,
+        characterLabel,
       });
       return;
     }
@@ -252,7 +231,7 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
       await replyIneligible({
         replySetNotice,
         lang,
-        characterName,
+        characterLabel,
         result,
         raidMeta,
         localizedRaid,

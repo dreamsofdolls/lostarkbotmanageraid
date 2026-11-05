@@ -47,6 +47,7 @@ function createRaidSetApplyService({
       modeResetCount: 0,
       selectedDifficulty: toModeLabel(raidMeta?.modeKey),
       displayName: "",
+      displayClass: "",
     };
   }
 
@@ -162,6 +163,7 @@ function createRaidSetApplyService({
     if (!character) return null;
     result.matched = true;
     result.displayName = getCharacterName(character);
+    result.displayClass = getCharacterClass(character);
     const itemLevel = Number(character.itemLevel) || 0;
     if (itemLevel >= raidMeta.minItemLevel) return character;
     result.ineligibleItemLevel = itemLevel;

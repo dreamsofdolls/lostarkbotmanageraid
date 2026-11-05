@@ -1,16 +1,13 @@
 "use strict";
 
-const { t } = require("../../../../services/i18n");
 const UserBackground = require("../../../../models/userBackground");
 const {
   deferEphemeralReply,
   editEmbed,
-  UI,
+  editNotice,
 } = require("../../../../utils/raid/common/shared");
-const {
-  getStoredImages,
-  buildRaidBgEmbed,
-} = require("../library");
+const { getStoredImages } = require("../library");
+const { buildNoLibraryNotice } = require("../notices");
 const {
   RAID_BG_BROWSER_MS,
   buildSceneBrowserPayload,
@@ -41,11 +38,7 @@ async function handleView({ interaction, deps, lang }) {
   const bg = await UserBackground.findOne({ discordId: interaction.user.id }).lean();
   const images = getStoredImages(bg);
   if (images.length === 0) {
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.view.noneTitle", lang),
-      description: t("raidBg.view.noneDescription", lang),
-      color: UI.colors.neutral,
-    }));
+    await editNotice(interaction, EmbedBuilder, buildNoLibraryNotice(lang));
     return;
   }
 

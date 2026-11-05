@@ -11,22 +11,25 @@
 const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
-// tPick, not t: some titles here are variant pools; non-pool keys pass through.
+// tPick, not t: some descriptions here are variant pools; non-pool keys pass through.
 const { tPick: t, getUserLanguage } = require("../../services/i18n");
 const {
+  NoticeKind,
+  buildManagerOnlyField,
   deferEphemeralReply,
   editEmbed,
-  replyEmbed,
+  editNotice,
+  replyNotice,
 } = require("../../utils/raid/common/shared");
 
-function buildAlertEmbed({ EmbedBuilder, UI, type = "info", title, description, footer }) {
-  const colorKey = type === "error" ? "danger" : type === "success" ? "success" : "neutral";
-  const embed = new EmbedBuilder()
-    .setColor(UI.colors[colorKey] || UI.colors.neutral)
-    .setTitle(title)
-    .setDescription(description);
-  if (footer) embed.setFooter({ text: footer });
-  return embed;
+// A notice whose copy lives at `share.<stem>{Title,Description,Tip}`.
+function shareNotice(kind, stem, lang, vars) {
+  return {
+    kind,
+    title: t(`share.${stem}Title`, lang),
+    description: t(`share.${stem}Description`, lang, vars),
+    tip: t(`share.${stem}Tip`, lang),
+  };
 }
 
 function ownerLabel(userDoc, fallbackId) {
@@ -56,9 +59,8 @@ function localizedAccessLevel(level, lang) {
  */
 function createRaidShareCommand(deps) {
   const { EmbedBuilder, UI } = deps;
-  const buildShareAlert = (options) => buildAlertEmbed({ EmbedBuilder, UI, ...options });
-  const replyShareAlert = (interaction, options) => replyEmbed(interaction, buildShareAlert(options));
-  const editShareAlert = (interaction, options) => editEmbed(interaction, buildShareAlert(options));
+  const replyShareNotice = (interaction, options) => replyNotice(interaction, EmbedBuilder, options);
+  const editShareNotice = (interaction, options) => editNotice(interaction, EmbedBuilder, options);
 
   // ── /raid-share grant target:@B [permission:view|edit] ──────────────
   // Manager-only (env RAID_MANAGER_ID). Upserts a RosterShare so a
@@ -69,19 +71,11 @@ function createRaidShareCommand(deps) {
     const permission = interaction.options.getString("permission") || "edit";
 
     if (target.bot) {
-      await replyShareAlert(interaction, {
-        type: "error",
-        title: t("share.grant.botTargetTitle", lang),
-        description: t("share.grant.botTargetDescription", lang),
-      });
+      await replyShareNotice(interaction, shareNotice(NoticeKind.INPUT, "grant.botTarget", lang));
       return;
     }
     if (target.id === interaction.user.id) {
-      await replyShareAlert(interaction, {
-        type: "error",
-        title: t("share.grant.selfTargetTitle", lang),
-        description: t("share.grant.selfTargetDescription", lang),
-      });
+      await replyShareNotice(interaction, shareNotice(NoticeKind.INPUT, "grant.selfTarget", lang));
       return;
     }
 
@@ -112,28 +106,24 @@ function createRaidShareCommand(deps) {
       { upsert: true },
     );
 
-    const isUpdate = !!previousLevel;
-    const title = isUpdate
-      ? t("share.grant.successTitleUpdate", lang)
-      : t("share.grant.successTitleNew", lang);
-    let desc;
-    if (isUpdate) {
-      desc = t("share.grant.descriptionUpdate", lang, {
+    const description = previousLevel
+      ? t("share.grant.descriptionUpdate", lang, {
         target: target.id,
         previous: localizedAccessLevel(previousLevel, lang),
         permission: localizedAccessLevel(permission, lang),
-      });
-    } else if (permission === "edit") {
-      desc = t("share.grant.descriptionNewEdit", lang, { target: target.id });
-    } else {
-      desc = t("share.grant.descriptionNewView", lang, { target: target.id });
-    }
+      })
+      : t("share.grant.descriptionNew", lang, { target: target.id });
 
-    await editShareAlert(interaction, {
-      type: "success",
-      title,
-      description: desc,
-      footer: t("share.grant.footer", lang),
+    await editShareNotice(interaction, {
+      kind: NoticeKind.DONE,
+      title: t(previousLevel ? "share.grant.successTitleUpdate" : "share.grant.successTitleNew", lang),
+      description,
+      fields: [{
+        name: t("share.grant.accessField", lang),
+        value: t(`share.grant.access.${permission}`, lang),
+        inline: false,
+      }],
+      tip: t("share.grant.revokeTip", lang),
     });
   }
 
@@ -149,19 +139,11 @@ function createRaidShareCommand(deps) {
     });
 
     if (result.deletedCount === 0) {
-      await editShareAlert(interaction, {
-        type: "info",
-        title: t("share.revoke.noShareTitle", lang),
-        description: t("share.revoke.noShareDescription", lang, { target: target.id }),
-      });
+      await editShareNotice(interaction, shareNotice(NoticeKind.INPUT, "revoke.noShare", lang, { target: target.id }));
       return;
     }
 
-    await editShareAlert(interaction, {
-      type: "success",
-      title: t("share.revoke.successTitle", lang),
-      description: t("share.revoke.successDescription", lang, { target: target.id }),
-    });
+    await editShareNotice(interaction, shareNotice(NoticeKind.DONE, "revoke.success", lang, { target: target.id }));
   }
 
   // ── /raid-share list [direction:in|out|both] ────────────────────────
@@ -259,10 +241,9 @@ function createRaidShareCommand(deps) {
     const sub = interaction.options.getSubcommand();
 
     if (managerOnlySubcommands.has(sub) && !isManagerId(interaction.user.id)) {
-      await replyShareAlert(interaction, {
-        type: "error",
-        title: t("share.auth.managerOnlyTitle", lang),
-        description: t("share.auth.managerOnlyDescription", lang),
+      await replyShareNotice(interaction, {
+        ...shareNotice(NoticeKind.GUARD, "auth.managerOnly", lang),
+        fields: [buildManagerOnlyField(lang)],
       });
       return;
     }
@@ -270,11 +251,9 @@ function createRaidShareCommand(deps) {
     const handler = subcommandHandlers.get(sub);
     if (handler) return handler(interaction, lang);
 
-    await replyShareAlert(interaction, {
-      type: "error",
-      title: "Unknown subcommand",
-      description: `Unknown subcommand: ${sub}`,
-    });
+    // Only a client still holding an older command definition can send a
+    // subcommand the bot no longer has.
+    await replyShareNotice(interaction, shareNotice(NoticeKind.EXPIRED, "unknownSubcommand", lang, { sub }));
   }
 
   return { handleRaidShareCommand };

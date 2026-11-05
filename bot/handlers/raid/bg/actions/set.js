@@ -4,20 +4,20 @@ const { t } = require("../../../../services/i18n");
 const UserBackground = require("../../../../models/userBackground");
 const { clearBackgroundCache } = require("../../../../services/raid-card/bg-loader");
 const {
+  NoticeKind,
+  buildNoRosterNotice,
   deferEphemeralReply,
   editEmbed,
+  editNotice,
   UI,
 } = require("../../../../utils/raid/common/shared");
 const {
   RaidBgError,
-  RAID_BG_UPLOAD_MAX_MB,
-  RAID_BG_MIN_WIDTH,
-  RAID_BG_MIN_HEIGHT,
-  RAID_BG_MAX_PIXELS,
   RAID_BG_OUTPUT_WIDTH,
   RAID_BG_OUTPUT_HEIGHT,
   processBgAttachment,
 } = require("../image-pipeline");
+const { buildSaveFailedNotice, buildUploadErrorNotice } = require("../notices");
 const {
   RAID_BG_MAX_IMAGES,
   RAID_BG_ASSIGNMENT_MODES,
@@ -44,18 +44,6 @@ function resolveSetMode({ modeOption, existing }) {
   return "even";
 }
 
-const VALIDATION_ERROR_KEYS = new Set([
-  "raidBg.errors.sizeTooBig",
-  "raidBg.errors.formatUnsupported",
-  "raidBg.errors.decodeFailed",
-  "raidBg.errors.tooSmall",
-  "raidBg.errors.tooLarge",
-]);
-
-function isValidationError(err) {
-  return VALIDATION_ERROR_KEYS.has(err.key);
-}
-
 async function processUploads(attachments) {
   const processed = [];
   for (const attachment of attachments) {
@@ -65,31 +53,6 @@ async function processUploads(attachments) {
     ));
   }
   return processed;
-}
-
-async function replyUploadError({ interaction, EmbedBuilder, err, lang }) {
-  const isValidation = isValidationError(err);
-  const title = isValidation
-    ? t("raidBg.set.rejectTitle", lang)
-    : t("raidBg.set.downloadFailedTitle", lang);
-  const color = isValidation ? UI.colors.progress : UI.colors.danger;
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(t(err.key, lang, err.params))
-    .setColor(color);
-  if (isValidation) {
-    embed.addFields({
-      name: t("raidBg.set.requirementsHeader", lang),
-      value: t("raidBg.set.requirementsLines", lang, {
-        minW: RAID_BG_MIN_WIDTH,
-        minH: RAID_BG_MIN_HEIGHT,
-        maxMp: RAID_BG_MAX_PIXELS / 1_000_000,
-        maxMb: RAID_BG_UPLOAD_MAX_MB.toFixed(0),
-      }),
-      inline: false,
-    });
-  }
-  await editEmbed(interaction, embed);
 }
 
 function buildSetSuccessFields({ images, assignments, mode, lang }) {
@@ -148,11 +111,7 @@ async function handleSet({ interaction, deps, lang }) {
     getAccessibleAccounts,
   });
   if (rosterNames.length === 0) {
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.set.noRosterTitle", lang),
-      description: t("raidBg.set.noRosterDescription", lang),
-      color: UI.colors.neutral,
-    }));
+    await editNotice(interaction, EmbedBuilder, buildNoRosterNotice(lang));
     return;
   }
 
@@ -163,15 +122,15 @@ async function handleSet({ interaction, deps, lang }) {
   const mode = resolveSetMode({ modeOption, existing });
 
   if (existingImages.length + attachments.length > RAID_BG_MAX_IMAGES) {
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
+    await editNotice(interaction, EmbedBuilder, {
+      kind: NoticeKind.INPUT,
       title: t("raidBg.set.tooManyImagesTitle", lang),
       description: t("raidBg.set.tooManyImagesDescription", lang, {
-        count: existingImages.length + attachments.length,
         max: RAID_BG_MAX_IMAGES,
         existing: existingImages.length,
       }),
-      color: UI.colors.progress,
-    }));
+      tip: t("raidBg.set.tooManyImagesTip", lang),
+    });
     return;
   }
 
@@ -180,7 +139,7 @@ async function handleSet({ interaction, deps, lang }) {
     newImages = await processUploads(attachments);
   } catch (err) {
     if (!(err instanceof RaidBgError)) throw err;
-    await replyUploadError({ interaction, EmbedBuilder, err, lang });
+    await editNotice(interaction, EmbedBuilder, buildUploadErrorNotice(err, lang));
     return;
   }
 
@@ -193,13 +152,7 @@ async function handleSet({ interaction, deps, lang }) {
     await upsertLibrary(interaction.user.id, images, assignments, mode);
   } catch (err) {
     console.error("[raid-bg] storage write failed:", err?.message || err);
-    await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.set.saveFailedTitle", lang),
-      description: t("raidBg.errors.storageFailed", lang, {
-        message: err?.message || String(err),
-      }),
-      color: UI.colors.danger,
-    }));
+    await editNotice(interaction, EmbedBuilder, buildSaveFailedNotice(err, lang));
     return;
   }
 

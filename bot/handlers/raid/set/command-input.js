@@ -1,5 +1,7 @@
 "use strict";
 
+const { NoticeKind } = require("../../../utils/raid/common/shared");
+
 const VALID_STATUS_TYPES = new Set(["complete", "reset", "process"]);
 
 function createRaidSetInputHelpers({
@@ -24,26 +26,28 @@ function createRaidSetInputHelpers({
     };
   }
 
-  function invalidNotice(type, title, description) {
-    return { valid: false, notice: { type, title, description } };
+  // Every refusal here is an option to fix, so they share the input kind
+  // and read their copy from `raid-set.invalid.<stem>{Title,Description,Tip}`.
+  function invalidNotice(stem, lang, vars) {
+    return {
+      valid: false,
+      notice: {
+        kind: NoticeKind.INPUT,
+        title: t(`raid-set.invalid.${stem}Title`, lang),
+        description: t(`raid-set.invalid.${stem}Description`, lang, vars),
+        tip: t(`raid-set.invalid.${stem}Tip`, lang),
+      },
+    };
   }
 
   function validateRaidSetInput(input, lang) {
     const raidMeta = RAID_REQUIREMENT_MAP[input.raidKey];
     if (!raidMeta) {
-      return invalidNotice(
-        "warn",
-        t("raid-set.invalid.raidTitle", lang),
-        t("raid-set.invalid.raidDescription", lang)
-      );
+      return invalidNotice("raid", lang);
     }
 
     if (!VALID_STATUS_TYPES.has(input.statusType)) {
-      return invalidNotice(
-        "warn",
-        t("raid-set.invalid.statusTitle", lang),
-        t("raid-set.invalid.statusDescription", lang)
-      );
+      return invalidNotice("status", lang);
     }
 
     const effectiveGate = input.statusType === "process" ? input.targetGate : "";
@@ -52,24 +56,16 @@ function createRaidSetInputHelpers({
     }
 
     if (!input.targetGate) {
-      return invalidNotice(
-        "warn",
-        t("raid-set.invalid.processNeedsGateTitle", lang),
-        t("raid-set.invalid.processNeedsGateDescription", lang)
-      );
+      return invalidNotice("processNeedsGate", lang);
     }
 
     const validGates = getGatesForRaid(raidMeta.raidKey);
     if (!validGates.includes(input.targetGate)) {
-      return invalidNotice(
-        "warn",
-        t("raid-set.invalid.gateTitle", lang),
-        t("raid-set.invalid.gateDescription", lang, {
-          gate: input.targetGate,
-          raidLabel: localizedRaidLabel(input.raidKey, lang),
-          validGates: validGates.map((gate) => `\`${gate}\``).join(", "),
-        })
-      );
+      return invalidNotice("gate", lang, {
+        gate: input.targetGate,
+        raidLabel: localizedRaidLabel(input.raidKey, lang),
+        validGates: validGates.map((gate) => `\`${gate}\``).join(", "),
+      });
     }
 
     return { valid: true, raidMeta, effectiveGate };

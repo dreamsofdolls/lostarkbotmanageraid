@@ -262,6 +262,11 @@ const FAILURE_NOTICE_STEMS = [
   "raid-announce.auth.serverOnly",
   "raid-announce.auth.manageGuild",
   "raid-announce.setChannel.missingPerms",
+  "raid-set.roster.authLost",
+  "share.auth.managerOnly",
+  "share.unknownSubcommand",
+  "raidBg.set.downloadFailed",
+  "raidBg.set.saveFailed",
 ];
 
 // /raid-log copy is `raid-log.notices.<code>.title|description|tip`.
