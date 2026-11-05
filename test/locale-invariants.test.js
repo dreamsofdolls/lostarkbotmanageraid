@@ -255,6 +255,13 @@ const FAILURE_NOTICE_STEMS = [
   "raid-auto-manage.enableSelf.localLocked",
 ];
 
+// /raid-log copy is `raid-log.notices.<code>.title|description|tip`.
+const RAID_LOG_FAILURE_CODES = [
+  "owner_only", "stale", "invalid_selection", "expired", "roster_changed", "logs_private",
+  "character_mismatch", "unavailable", "incomplete", "browser_crashed", "browser_unavailable",
+  "invalid_view", "failed", "revoked",
+];
+
 // Failure, guard and expired copy outside the <stem>Title shape: shared tips,
 // shared save-failure sentences, share refusals and the timeout titles.
 const FAILURE_NOTICE_KEYS = [
@@ -301,6 +308,8 @@ const WARMTH_GATED_KEYS = [...new Set([
   ...FAILURE_KEYS,
   ...FAILURE_NOTICE_KEYS.map(resolveKey),
   ...FAILURE_NOTICE_STEMS.flatMap(expandStem),
+  ...RAID_LOG_FAILURE_CODES.flatMap((code) =>
+    ["title", "description", "tip"].map((part) => `raid-log.notices.${code}.${part}`)),
 ])];
 
 test("failure copy carries no warmth marker", () => {
