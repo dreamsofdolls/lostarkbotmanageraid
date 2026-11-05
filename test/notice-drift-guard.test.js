@@ -77,6 +77,45 @@ test("hand-built embeds stay in the rich-card files", () => {
   assert.deepEqual(outside, []);
 });
 
+// The object literal around line `index`: from its unmatched `{` to the
+// matching `}`, as one string.
+function enclosingObject(lines, index) {
+  let depth = 0;
+  let start = index;
+  for (; start >= 0; start -= 1) {
+    const line = start === index ? "" : lines[start];
+    depth += (line.match(/}/g) || []).length - (line.match(/{/g) || []).length;
+    if (depth < 0) break;
+  }
+  depth = 0;
+  let end = start;
+  for (; end < lines.length; end += 1) {
+    depth += (lines[end].match(/{/g) || []).length - (lines[end].match(/}/g) || []).length;
+    if (depth <= 0 && end > start) break;
+  }
+  return lines.slice(Math.max(start, 0), end + 1).join("\n");
+}
+
+// Rich-card builders called from files that also send simple notices; their
+// options carry a colour and footer of their own instead of a kind.
+const RICH_CARD_BUILDERS = /\bbuildRaidBgEmbed\(/;
+
+test("every notice options object outside the rich cards names a kind", () => {
+  // A `title:` property is how a notice options object reads; without a
+  // kind (or a spread that brings one) the card ships grey with no icon.
+  const missing = SOURCES
+    .filter(({ file }) => !RICH_CARD_FILES.has(file))
+    .flatMap(({ file, lines }) => lines.flatMap((line, index) => {
+      // A bare key string (`title: "x.yTitle"`) is a key table; its kind is
+      // set where the table is read.
+      if (!/^\s*title:\s/.test(line) || /^\s*title:\s*["'][\w.-]+["'],?\s*$/.test(line)) return [];
+      const object = enclosingObject(lines, index);
+      if (RICH_CARD_BUILDERS.test(object.split("\n")[0])) return [];
+      return /\bkind\b|\.\.\./.test(object) ? [] : [`${file}:${index + 1}`];
+    }));
+  assert.deepEqual(missing, []);
+});
+
 test("every NoticeKind named in bot/ exists", () => {
   const unknown = SOURCES.flatMap(({ file, lines }) => lines.flatMap((line, index) =>
     [...line.matchAll(/\bNoticeKind\.([A-Za-z_]+)/g)]

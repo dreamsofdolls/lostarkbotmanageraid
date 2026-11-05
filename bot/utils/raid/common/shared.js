@@ -196,20 +196,24 @@ function splitEmbedFieldValue(value, limit = 1024) {
   return chunks.length > 0 ? chunks : ["_No details_"];
 }
 
-function addChunkedEmbedField(
-  embed,
-  name,
-  value,
-  { limit = 1024, inline = false } = {}
-) {
-  const chunks = splitEmbedFieldValue(value, limit);
-  chunks.forEach((chunk, index) => {
-    embed.addFields({
-      name: index === 0 ? name : `${name} (${index + 1})`,
-      value: chunk,
-      inline,
-    });
-  });
+/**
+ * Split a long field value into as many fields as it needs, at line breaks
+ * where possible; later fields repeat the name with a counter.
+ * @param {string} name - field name
+ * @param {string} value - field value, any length
+ * @param {{limit?: number, inline?: boolean}} [options]
+ * @returns {Array<{name: string, value: string, inline: boolean}>}
+ */
+function buildChunkedFields(name, value, { limit = 1024, inline = false } = {}) {
+  return splitEmbedFieldValue(value, limit).map((chunk, index) => ({
+    name: index === 0 ? name : `${name} (${index + 1})`,
+    value: chunk,
+    inline,
+  }));
+}
+
+function addChunkedEmbedField(embed, name, value, options) {
+  buildChunkedFields(name, value, options).forEach((field) => embed.addFields(field));
   return embed;
 }
 
@@ -270,7 +274,8 @@ function stripInlineMarkdown(value) {
  * so the same situation looks the same in every command. A missing or
  * unknown kind still sends the notice, in the neutral colour with no icon,
  * because the message matters more than its look; the notice drift guard
- * test keeps callers on a kind. Every text part is clamped to Discord's
+ * test flags an options object written in source without a kind, but not
+ * one assembled at runtime. Every text part is clamped to Discord's
  * limits, since titles and errors can carry user input and an over-long part
  * would make the builder throw.
  *
@@ -357,7 +362,9 @@ function buildRosterNotFoundNotice(rosterName, lang) {
  * @returns {{name: string, value: string, inline: boolean}|null}
  */
 function buildDetailField(detail, lang) {
-  const text = String(detail ?? "").trim();
+  // One inline code span: a backtick would close it early and a line break
+  // would split it, so both are flattened.
+  const text = String(detail ?? "").replace(/`/g, "'").replace(/\s+/g, " ").trim();
   if (!text) return null;
   return {
     name: t("common.fields.details", lang),
@@ -579,6 +586,7 @@ function pack2Columns(fields) {
 
 module.exports = {
   addChunkedEmbedField,
+  buildChunkedFields,
   buildNoticeEmbed,
   buildDetailField,
   buildManagerOnlyField,

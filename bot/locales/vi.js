@@ -518,6 +518,7 @@ module.exports = {
     fetch: {
       failedTitle: "Chưa lấy được roster · {rosterIcon} {rosterName}",
       failed: "Tớ hỏi lostark.bible mà chưa được: {error}.",
+      failedUnknown: "Tớ hỏi lostark.bible mà chưa được.",
       failedTip: "Thử lại sau ít phút nhé",
       emptyTitle: "Không thấy roster · {rosterIcon} {rosterName}",
       empty: "Tớ không tìm thấy roster nào từ tên **{rosterName}**.",

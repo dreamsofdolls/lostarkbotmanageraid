@@ -20,6 +20,7 @@ const {
 } = require("./add-common");
 const {
   NoticeKind,
+  buildChunkedFields,
   buildRosterNotFoundNotice,
   formatCharacterLabel,
   getCharacterClass,
@@ -107,21 +108,32 @@ function buildSkippedField(result, request, lang) {
     });
     lines.push(skippedLines(result.skippedCap, reasonCap, lang));
   }
-  if (lines.length === 0) return null;
-  return { name: t("raid-task.fields.skipped", lang), value: lines.join("\n"), inline: false };
+  if (lines.length === 0) return [];
+  return buildChunkedFields(t("raid-task.fields.skipped", lang), lines.join("\n"));
+}
+
+// Comma-separated names packed into lines that each fit one field, so a
+// split between fields never cuts a name from its class icon.
+function packNameLines(names, maxLength = 900) {
+  const lines = [];
+  for (const name of names) {
+    const last = lines.length - 1;
+    if (last >= 0 && lines[last].length + name.length + 2 <= maxLength) lines[last] += `, ${name}`;
+    else lines.push(name);
+  }
+  return lines.join(",\n");
 }
 
 function buildCycleField(request, lang) {
   return { name: t("raid-task.fields.cycle", lang), value: cycleLabelForReset(request.reset, lang), inline: true };
 }
 
-function buildAddedField(result, lang) {
+function buildAddedFields(result, lang) {
   const totalChars = result.added.length + result.skippedCap.length + result.skippedDup.length;
-  return {
-    name: t("raid-task.fields.added", lang),
-    value: `${result.added.length}/${totalChars}\n${result.added.join(", ")}`,
-    inline: false,
-  };
+  return buildChunkedFields(
+    t("raid-task.fields.added", lang),
+    `${result.added.length}/${totalChars}\n${packNameLines(result.added)}`,
+  );
 }
 
 function buildAddAllCompletedNotice(result, request, lang) {
@@ -134,8 +146,8 @@ function buildAddAllCompletedNotice(result, request, lang) {
     }),
     fields: [
       buildCycleField(request, lang),
-      buildAddedField(result, lang),
-      buildSkippedField(result, request, lang),
+      ...buildAddedFields(result, lang),
+      ...buildSkippedField(result, request, lang),
     ],
     tip: t("raid-task.addAll.successTip", lang),
   };
@@ -149,7 +161,7 @@ function buildAddAllNoMatchNotice(result, request, lang) {
       rosterName: result.resolvedRosterName,
       taskName: request.taskName,
     }),
-    fields: [buildCycleField(request, lang), buildSkippedField(result, request, lang)],
+    fields: [buildCycleField(request, lang), ...buildSkippedField(result, request, lang)],
     tip: t("raid-task.addAll.noMatchTip", lang),
   };
 }

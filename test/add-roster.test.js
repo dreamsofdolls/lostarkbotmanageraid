@@ -148,9 +148,10 @@ test("handleAddRosterCommand reuses the self lookup and defers before Bible fetc
   ]);
 });
 
-test("handleAddRosterCommand names a Bible rate limit and keeps an unknown error in a code span", async () => {
+test("handleAddRosterCommand names a Bible rate limit and moves an unknown error to the detail field", async () => {
   clearUserLanguageCache();
   const replies = [];
+  const details = [];
   for (const failure of [
     createBibleHttpError("LostArk Bible HTTP 429", { status: 429 }),
     new TypeError("fetch failed"),
@@ -169,14 +170,20 @@ test("handleAddRosterCommand names a Bible rate limit and keeps an unknown error
       async reply() {},
       async deferReply() {},
       async editReply(payload) {
-        replies.push(payload.embeds[0].toJSON().description);
+        const card = payload.embeds[0].toJSON();
+        replies.push(card.description);
+        details.push((card.fields || []).find((field) => field.name === t("common.fields.details", "vi"))?.value);
       },
     });
   }
 
+  // A known kind reads as the reason; an unknown error is technical detail
+  // (spec rule 7), and this card is public.
   assert.ok(replies[0].includes(t("common.bibleError.rateLimit", "vi")), replies[0]);
   assert.equal(replies[0].includes("HTTP 429"), false);
-  assert.ok(replies[1].includes("`fetch failed`"), replies[1]);
+  assert.equal(details[0], undefined);
+  assert.equal(replies[1], t("raid-add-roster.fetch.failedUnknown", "vi"));
+  assert.equal(details[1], "`fetch failed`");
 });
 
 test("add pre-fetch duplicate names the saved roster with its class icon", async (t) => {

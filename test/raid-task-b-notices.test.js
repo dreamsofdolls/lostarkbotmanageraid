@@ -121,3 +121,19 @@ test("no roster and roster not found use the shared empty copy", () => {
   assert.equal(noRoster.kind, NoticeKind.EMPTY);
   assert.equal(render(noRoster).title, "🔍  Cậu chưa có roster nào");
 });
+
+test("add-all lists every skipped and added character, however long the roster", () => {
+  const { buildAddAllNotice } = require("../bot/handlers/raid/task/add/add-all");
+  const label = (index) => `<:105_ab12cd34:1234567890123456789> **Character${index}**`;
+  const names = Array.from({ length: 24 }, (_, index) => label(index));
+  const request = { taskName: "Chaos", reset: "daily" };
+  const skipped = render(buildAddAllNotice(
+    { added: [], skippedDup: names, skippedCap: [], resolvedRosterName: "Vencone" }, request, "vi"));
+  const added = render(buildAddAllNotice(
+    { added: names, skippedDup: [], skippedCap: [], resolvedRosterName: "Vencone" }, request, "vi"));
+  for (const card of [skipped, added]) {
+    const text = card.fields.map((field) => field.value).join("\n");
+    assert.ok(card.fields.every((field) => field.value.length <= 1024));
+    names.forEach((name) => assert.ok(text.includes(name), `missing ${name}`));
+  }
+});

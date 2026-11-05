@@ -92,6 +92,11 @@ test("buildDetailField wraps the error in code font and skips empty", () => {
   assert.equal(buildDetailField("x".repeat(2000), "vi").value.length, 1024);
 });
 
+test("the detail field keeps an error with backticks or line breaks in one code span", () => {
+  const field = buildDetailField("User validation failed: Path `accountName` is required.\n  second line", "en");
+  assert.equal(field.value, "`User validation failed: Path 'accountName' is required. second line`");
+});
+
 test("a notice without a known kind still reaches the user, plain and neutral", () => {
   for (const options of [{ title: "T" }, { kind: "warn", title: "T" }, { type: "warn", title: "T" }]) {
     const embed = buildNoticeEmbed(EmbedBuilder, options).toJSON();

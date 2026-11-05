@@ -499,6 +499,7 @@ module.exports = {
     fetch: {
       failedTitle: "ロスターを取得できませんでした · {rosterIcon} {rosterName}",
       failed: "lostark.bible に聞いてみたけれど、だめでしたわ: {error}。",
+      failedUnknown: "lostark.bible に聞いてみたけれど、だめでしたわ。",
       failedTip: "数分後にもう一度試してくださいね",
       emptyTitle: "ロスターが見つかりません · {rosterIcon} {rosterName}",
       empty: "**{rosterName}** という名前からロスターが見つかりませんでしたわ。",

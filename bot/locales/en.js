@@ -498,6 +498,7 @@ module.exports = {
     fetch: {
       failedTitle: "Couldn't fetch the roster · {rosterIcon} {rosterName}",
       failed: "I couldn't get it from lostark.bible: {error}.",
+      failedUnknown: "I couldn't get it from lostark.bible.",
       failedTip: "Try again in a few minutes",
       emptyTitle: "Roster not found · {rosterIcon} {rosterName}",
       empty: "I couldn't find any roster from the name **{rosterName}**.",

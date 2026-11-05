@@ -12,7 +12,8 @@ const {
   resolveAdminMention,
 } = require("../../utils/raid/roster-picker");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { formatBibleError } = require("../../services/auto-manage/bible/error-text");
+const { describeBibleError } = require("../../services/auto-manage/bible/error-text");
+const { BIBLE_ERROR_KIND } = require("../../services/auto-manage/bible/error-kinds");
 const {
   guardPickerConfirm,
   handleRosterPickerNavigationAction,
@@ -196,12 +197,17 @@ function createAddRosterCommand({
     try {
       rosterCharacters = await fetchRosterCharacters(seedCharName);
     } catch (error) {
-      // A Bible label (or the raw message in a code span) stays in the
-      // sentence: it reads as the reason, not as a technical detail.
+      // A known Bible kind reads as the reason inside the sentence; an
+      // unknown error is technical detail and goes to the 🧾 field.
+      const { kind, text } = describeBibleError(error, lang);
+      const unknown = kind === BIBLE_ERROR_KIND.other;
       await editNotice(interaction, {
         kind: NoticeKind.BUSY,
         title: t("raid-add-roster.fetch.failedTitle", lang, seedVars),
-        description: t("raid-add-roster.fetch.failed", lang, { error: formatBibleError(error, lang) }),
+        description: unknown
+          ? t("raid-add-roster.fetch.failedUnknown", lang)
+          : t("raid-add-roster.fetch.failed", lang, { error: text }),
+        fields: unknown ? [buildDetailField(text, lang)] : [],
         tip: t("raid-add-roster.fetch.failedTip", lang),
       });
       return;
