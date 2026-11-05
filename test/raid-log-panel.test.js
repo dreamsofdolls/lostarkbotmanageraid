@@ -119,6 +119,15 @@ test("load-more and menu pagination preserve the displayed image without recaptu
   assert.ok(!control(f, "raid").options.some(x => x.value === "__more"));
 });
 
+test("the revoked panel names the character with the class icon from its Bible profile", async (t) => {
+  withClassIcons(t, { Bard: "<:bard:1>" });
+  const f = fixture({ profile: { name: "Qiylyn", className: "Bard" } });
+  await f.run();
+  f.verifyFailure = new RaidLogError("logs_private");
+  await f.click(f.owner("tab_next"));
+  assert.match(f.payload.embeds[0].toJSON().description, /<:bard:1> \*\*Qiylyn\*\*/);
+});
+
 test("private characters are blocked initially and changing to private revokes the existing panel before capture", async () => {
   const initial = fixture();
   initial.verifyFailure = new RaidLogError("logs_private");

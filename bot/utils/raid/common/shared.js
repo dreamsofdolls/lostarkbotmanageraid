@@ -316,10 +316,12 @@ function buildNoticeEmbed(EmbedBuilder, { kind, title, description, fields = [],
  * bare bold name, as `/raid-status` does.
  * @param {string} name
  * @param {string} [className]
+ * @param {(className: string) => string} [lookup] - icon lookup for callers
+ *   that inject one; defaults to the bootstrapped class emojis
  * @returns {string}
  */
-function formatCharacterLabel(name, className) {
-  const icon = className ? getClassEmoji(className) : "";
+function formatCharacterLabel(name, className, lookup = getClassEmoji) {
+  const icon = className ? lookup(className) : "";
   return icon ? `${icon} **${name}**` : `**${name}**`;
 }
 
@@ -542,19 +544,6 @@ function editEmbed(interaction, embedOrEmbeds, extras = {}) {
   });
 }
 
-/**
- * component.update with a notice embed - used by collector handlers
- * that swap a button-bearing message into a final state. Components
- * default to empty (= remove the buttons), pass `components` in
- * `extras` to keep them.
- */
-function updateNotice(component, EmbedBuilder, options, { components = [] } = {}) {
-  return component.update({
-    embeds: [buildNoticeEmbed(EmbedBuilder, options)],
-    components,
-  });
-}
-
 // Frozen zero-width-space inline field used as a 2-column layout spacer.
 // Discord auto-packs `inline: true` fields up to 3 per row; injecting one
 // of these between every char card forces exactly 2 cards per row instead.
@@ -627,5 +616,4 @@ module.exports = {
   followUpNotice,
   editNotice,
   editEmbed,
-  updateNotice,
 };

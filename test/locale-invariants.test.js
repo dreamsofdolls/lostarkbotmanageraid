@@ -207,9 +207,9 @@ const FAILURE_KEYS = [
   "raid-log.recent.timedOut",
 ];
 
-// The failure, guard and expired notices of the notice redesign. Each stem
-// expands to its Title, Description and Tip where they exist; a stem without
-// a Title stays in the list so the gate reports it missing.
+// Failure, guard and expired notices in the Title/Description/Tip shape.
+// Each stem expands to its Title, Description and Tip where they exist; a
+// stem without a Title stays in the list so the gate reports it missing.
 const FAILURE_NOTICE_STEMS = [
   "raid-task.clear.confirmFailedCharacter",
   "raid-task.remove.noTask",

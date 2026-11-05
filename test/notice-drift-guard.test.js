@@ -37,9 +37,9 @@ function findLines(pattern) {
     lines.flatMap((line, index) => (pattern.test(line) ? [`${file}:${index + 1}`] : [])));
 }
 
-// The rich cards of the inventory (section 5a), the closed roster-picker card
-// and the notice helper itself. A simple notice anywhere else goes through
-// buildNoticeEmbed.
+// Files that build rich cards (status views, pickers, reports, help and the
+// closed roster-picker card) with their own layout, and the notice helper
+// itself. A simple notice anywhere else goes through buildNoticeEmbed.
 const RICH_CARD_FILES = new Set([
   "bot/handlers/local-sync/discord-console-ui.js",
   "bot/handlers/meta/help.js",

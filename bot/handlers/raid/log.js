@@ -316,7 +316,9 @@ function createRaidLogCommand({
       if (state.stage === "log" && REVOKING_CODES.has(code)) {
         sessions.delete(id);
         await interaction.editReply({
-          content: null, embeds: [buildRevokedNotice(code, { EmbedBuilder, lang: state.lang, character: state.catalog.profile.name })],
+          content: null, embeds: [buildRevokedNotice(code, {
+            EmbedBuilder, lang: state.lang, character: state.catalog.profile.name, className: state.catalog.profile.className,
+          })],
           attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] },
         });
       } else {

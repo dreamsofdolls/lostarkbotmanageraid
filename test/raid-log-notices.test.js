@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const { EmbedBuilder } = require("discord.js");
 const { buildRaidLogNotice, buildRevokedNotice } = require("../bot/handlers/raid/log-notices");
 const { buildNoticeEmbed } = require("../bot/utils/raid/common/shared");
+const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 
 const URL = "https://lostark.bible/logs/zEn59i4";
 const CODES = ["owner_only", "panel_busy", "stale", "invalid_selection", "expired", "busy", "invalid_source",
@@ -16,7 +17,7 @@ const kindStyle = kind => {
   return { color: embed.color, prefix: embed.title.slice(0, -1) };
 };
 
-// One kind per code, by the spec's kind table: a refusal by owner or privacy
+// One kind per code: a refusal by owner or privacy
 // is guard, an old panel or choice is expired, Bible or capture limits are
 // busy, and a capture that broke is failure.
 const EXPECTED_KINDS = {
@@ -81,6 +82,21 @@ test("a panel whose character went private is a guard with that name; other revo
   const mismatch = buildRevokedNotice("character_mismatch", { EmbedBuilder, lang: "vi", character: "Qiylyn" }).toJSON();
   assert.match(mismatch.title, /Dữ liệu Bible không khớp/);
   assert.ok(mismatch.title.startsWith(kindStyle("failure").prefix));
+});
+
+test("the private-log card shows the character with its class icon in the sentence", () => {
+  // Class icons are application emojis filled in at boot; the test sets one.
+  const saved = CLASS_EMOJI_MAP.Berserker;
+  CLASS_EMOJI_MAP.Berserker = "<:berserker:1>";
+  try {
+    for (const lang of ["vi", "en", "jp"]) {
+      const embed = buildRevokedNotice("logs_private", { EmbedBuilder, lang, character: "Qiylyn", className: "Berserker" }).toJSON();
+      assert.ok(embed.description.includes("<:berserker:1> **Qiylyn**"), `${lang}: ${embed.description}`);
+      assert.ok(!embed.title.includes("<:berserker:1>") && !embed.title.includes("**"), `${lang}: ${embed.title}`);
+    }
+  } finally {
+    CLASS_EMOJI_MAP.Berserker = saved;
+  }
 });
 
 test("oversized notice descriptions are clamped to the embed limit instead of throwing", () => {

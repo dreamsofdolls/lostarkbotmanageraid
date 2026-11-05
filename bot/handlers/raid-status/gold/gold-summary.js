@@ -8,7 +8,7 @@ const {
   getRaidLabel,
   getRaidSpecificModeLabel,
 } = require("../../../utils/raid/common/labels");
-const { NoticeKind, truncateText } = require("../../../utils/raid/common/shared");
+const { NoticeKind, formatCharacterLabel, truncateText } = require("../../../utils/raid/common/shared");
 const { t } = require("../../../services/i18n");
 const { GOLD_RECEIVE_AUTO } = require("./gold-actions");
 
@@ -42,8 +42,7 @@ function byRaidOrder(a, b) {
 }
 
 function characterPrefix(entry, getClassEmoji) {
-  const icon = entry.className ? getClassEmoji(entry.className) : "";
-  return `${icon ? `${icon} ` : ""}**${entry.name}**`;
+  return formatCharacterLabel(entry.name, entry.className, getClassEmoji);
 }
 
 function clampDescription(lines) {

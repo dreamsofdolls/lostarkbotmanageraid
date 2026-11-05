@@ -16,7 +16,8 @@ const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 const { t } = require("../bot/services/i18n");
 const { TRANSLATIONS } = require("../bot/locales");
 
-// One icon and one colour per kind; the spec's kind table, verbatim.
+// One icon and one colour per kind, written out here so a change to the
+// helper's style table shows up as a failing test.
 const KIND_LOOK = {
   guard: ["🔒", UI.colors.progress],
   expired: ["⌛", UI.colors.muted],
@@ -84,6 +85,11 @@ test("formatCharacterLabel shows the class icon when known", () => {
   }
   assert.equal(formatCharacterLabel("Name", "NoSuchClass"), "**Name**");
   assert.equal(formatCharacterLabel("Name", undefined), "**Name**");
+});
+
+test("formatCharacterLabel uses an injected icon lookup when given one", () => {
+  assert.equal(formatCharacterLabel("Name", "Bard", (className) => `<:${className}:1>`), "<:Bard:1> **Name**");
+  assert.equal(formatCharacterLabel("Name", "Bard", () => ""), "**Name**");
 });
 
 test("buildDetailField wraps the error in code font and skips empty", () => {

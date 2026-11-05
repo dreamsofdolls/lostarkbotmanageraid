@@ -535,30 +535,6 @@ test("followUpNotice wraps interaction.followUp with the same notice payload sha
   assert.equal(calls[0].embeds.length, 1);
 });
 
-test("updateNotice clears components by default and accepts override via extras", async () => {
-  const { updateNotice } = require("../bot/utils/raid/common/shared");
-  const calls = [];
-  const component = { update: async (payload) => calls.push(payload) };
-  class StubEmbed {
-    setColor() { return this; }
-    setTimestamp() { return this; }
-    setFooter() { return this; }
-    addFields() { return this; }
-    setTitle() { return this; }
-    setDescription() { return this; }
-  }
-  await updateNotice(component, StubEmbed, { kind: "expired", title: "X" });
-  assert.deepEqual(calls[0].components, []);
-
-  await updateNotice(
-    component,
-    StubEmbed,
-    { kind: "empty", title: "Y" },
-    { components: [{ keep: "row" }] }
-  );
-  assert.deepEqual(calls[1].components, [{ keep: "row" }]);
-});
-
 test("editEmbed wraps an existing embed for deferred replies", async () => {
   const { editEmbed } = require("../bot/utils/raid/common/shared");
   const calls = [];

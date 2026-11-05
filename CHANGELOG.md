@@ -11,11 +11,13 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - One situation reads the same in every command: "no roster yet" and "roster not found" share one copy, a technical error moves out of the sentence into a 🧾 Details field, and character names carry their class icon. The narrator is "tớ" in Vietnamese, "I" in English and "わたくし" in Japanese; titles that used to rotate stay fixed and the variety moves to the sentence.
 - `/raid-share`, `/raid-bg`, the roster commands, the Local Sync owner check and the reply to an unexpected error now answer with these cards instead of plain text or one-off embeds; the unexpected-error card does not show the error itself.
 - `/raid-task add` for every character lists each added and skipped character over as many fields as it needs instead of cutting the list at one field; when `/raid-add-roster` cannot read lostark.bible for an unknown reason, the sentence stays plain and the error goes to the 🧾 Details field, kept on one line.
+- The `/raid-log` card left on a panel whose character turned off Public Log shows the character with its class icon, like the other notices.
 - `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
 - The retired nudge's **Switch to Local Sync** button handler, its route and its strings are removed; nothing has posted that button since the nudge stopped. `/raid-auto-manage action:local-on` and the `/raid-status` Local Sync view still switch a roster to Local Sync.
 
 ### Changed (internal)
 - Notices whose copy sits at `<key>Title`, `<key>Description` and `<key>Tip` are built by one `buildKeyedNotice` in `shared.js` instead of a near-identical builder per command (share, roster edit/remove, gold earner, auto-manage, the shared no-roster and roster-not-found notices). No behavior change.
+- `formatCharacterLabel` takes an optional icon lookup, so the gold-view summary uses it instead of its own copy; the unused `updateNotice` helper is removed. No behavior change.
 
 ## 2026-11-04
 

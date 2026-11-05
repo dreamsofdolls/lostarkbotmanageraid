@@ -7,7 +7,7 @@
  */
 
 const { t } = require("../../services/i18n");
-const { NoticeKind, buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { NoticeKind, buildNoticeEmbed, formatCharacterLabel } = require("../../utils/raid/common/shared");
 
 // The kind of each code; its copy is `raid-log.notices.<code>.title|description|tip`.
 // Unknown errors already arrive as `failed` (services/raid-log/errors.js).
@@ -43,17 +43,20 @@ function buildRaidLogNotice(code, { EmbedBuilder, lang, logUrl, owner }) {
 
 /**
  * The card left on a panel whose log access ended mid-session: the code's
- * own notice, or for a character that went private a guard naming it.
+ * own notice, or for a character that went private a guard naming it. The
+ * title keeps the plain name; the sentence shows it with its class icon.
  * @param {string} code logs_private, no_logs or character_mismatch
- * @param {{ EmbedBuilder: Function, lang: string, character: string }} context
+ * @param {{ EmbedBuilder: Function, lang: string, character: string, className?: string }} context
  * @returns {import("discord.js").EmbedBuilder}
  */
-function buildRevokedNotice(code, { EmbedBuilder, lang, character }) {
+function buildRevokedNotice(code, { EmbedBuilder, lang, character, className }) {
   if (code !== "logs_private") return buildRaidLogNotice(code, { EmbedBuilder, lang });
   return buildNoticeEmbed(EmbedBuilder, {
     kind: NoticeKind.GUARD,
     title: t("raid-log.notices.revoked.title", lang, { character }),
-    description: t("raid-log.notices.revoked.description", lang, { character }),
+    description: t("raid-log.notices.revoked.description", lang, {
+      character: formatCharacterLabel(character, className),
+    }),
     tip: t("raid-log.notices.revoked.tip", lang),
   });
 }
