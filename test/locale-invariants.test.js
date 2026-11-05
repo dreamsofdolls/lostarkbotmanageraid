@@ -207,13 +207,109 @@ const FAILURE_KEYS = [
   "raid-log.recent.timedOut",
 ];
 
+// The failure, guard and expired notices of the notice redesign. Each stem
+// expands to its Title, Description and Tip where they exist; a stem without
+// a Title stays in the list so the gate reports it missing.
+const FAILURE_NOTICE_STEMS = [
+  "raid-task.clear.confirmFailedCharacter",
+  "raid-task.remove.noTask",
+  "raid-task.sharedRemove.noTask",
+  "raid-status.notice.staleCard",
+  "raid-status.notice.shareLookupFailed",
+  "raid-status.sync.noControl",
+  "raid-status.sync.buttonFailed",
+  "raid-status.sync.localReaderUnavailable",
+  "raid-status.sync.localNewLinkFailed",
+  "raid-status.sync.soloCompanionFailed",
+  "raid-status.sync.localRefreshFailed",
+  "raid-status.sync.rosterRefreshFailed",
+  "raid-status.goldView.saveFailed",
+  "raid-status.taskView.toggleFailed",
+  "raid-auto-manage.mutex.bibleBlockedByLocal",
+  "raid-auto-manage.mutex.localBlockedByBible",
+  "raid-auto-manage.sync.localLocked",
+  "raid-auto-manage.enable.probeFail",
+  "raid-auto-manage.reset.fail",
+  "raid-auto-manage.sync.fail",
+  "raid-check.auth.managerOnly",
+  "raid-check.auth.buttonManagerOnly",
+  "raid-check.staleButton.unsupportedAction",
+  "raid-check.notice.sessionLock",
+  "raid-check.refreshFlow.missing",
+  "raid-check.refreshFlow.failed",
+  "raid-auto-manage.enableButton.expired",
+  "raid-auto-manage.enableButton.flipFail",
+  "raid-auto-manage.enableButton.userMissing",
+  "raid-auto-manage.enableButton.localLocked",
+  "raid-auto-manage.disableButton.expired",
+  "raid-auto-manage.disableButton.flipFail",
+  "raid-auto-manage.disableButton.userMissing",
+  "raid-auto-manage.disableSelf.expired",
+  "raid-auto-manage.disableSelf.notOwner",
+  "raid-auto-manage.disableSelf.fail",
+  "raid-auto-manage.disableSelf.accountMissing",
+  "raid-auto-manage.enableSelf.expired",
+  "raid-auto-manage.enableSelf.notOwner",
+  "raid-auto-manage.enableSelf.fail",
+  "raid-auto-manage.enableSelf.accountMissing",
+  "raid-auto-manage.enableSelf.localLocked",
+];
+
+// Failure, guard and expired copy outside the <stem>Title shape: shared tips,
+// shared save-failure sentences, share refusals and the timeout titles.
+const FAILURE_NOTICE_KEYS = [
+  "raid-task.save.addFailedTitle",
+  "raid-task.save.failedTip",
+  "raid-task.save.addFailedDescription",
+  "raid-task.save.addAllFailedDescription",
+  "raid-task.save.removeFailedDescription",
+  "raid-task.save.sharedRemoveFailedDescription",
+  "raid-task.save.sharedAddFailedDescription",
+  "raid-task.save.clearFailedDescription",
+  "raid-task.shareViewOnly.title",
+  "raid-task.shareViewOnly.description",
+  "raid-task.shareViewOnly.tip",
+  "raid-task.shareRevoked.tip",
+  "raid-status.goldView.shareViewOnlyDescription",
+  "raid-status.sync.linkFailedTip",
+  "raid-status.sync.rosterRefreshRetryTip",
+  "local-sync-discord.notOwner",
+  "local-sync-discord.notOwnerTitle",
+  "local-sync-discord.notOwnerTip",
+  "raid-auto-manage.enable.cancelTimeoutTitle",
+  "raid-auto-manage.reset.cancelTimeoutTitle",
+  "raid-check.auth.managerOnlyTip",
+  "raid-check.staleButton.reopenTip",
+  "raid-check.refreshFlow.retryTip",
+  "raid-check.syncFlow.reportTitleFailed",
+  "raid-check.syncFlow.reportHintAllFailed",
+];
+
+// A variant pool flattens to `<key>.variants`.
+const resolveKey = (key) =>
+  MAPS.vi.has(key) || !MAPS.vi.has(`${key}.variants`) ? key : `${key}.variants`;
+
+const expandStem = (stem) => {
+  const title = resolveKey(`${stem}Title`);
+  if (!MAPS.vi.has(title)) return [title];
+  return ["Title", "Description", "Tip"]
+    .map((part) => resolveKey(`${stem}${part}`))
+    .filter((key) => MAPS.vi.has(key));
+};
+
+const WARMTH_GATED_KEYS = [...new Set([
+  ...FAILURE_KEYS,
+  ...FAILURE_NOTICE_KEYS.map(resolveKey),
+  ...FAILURE_NOTICE_STEMS.flatMap(expandStem),
+])];
+
 test("failure copy carries no warmth marker", () => {
   // vi/en use "~"; jp uses "♪". The jp "～" is left alone on purpose - there it
   // is part of the ojou-sama register, not a cheerfulness signal.
   const MARKERS = { vi: /~/, en: /~/, jp: /♪/ };
   const offenders = [];
   for (const lang of LANGS) {
-    for (const key of FAILURE_KEYS) {
+    for (const key of WARMTH_GATED_KEYS) {
       const value = MAPS[lang].get(key);
       if (!value) {
         offenders.push(`${lang}:${key} is missing`);
