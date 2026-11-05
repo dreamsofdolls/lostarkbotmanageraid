@@ -323,6 +323,21 @@ function createStatusComponentRouteHandlers(ctx) {
     return redraw();
   }
 
+  // One gold-set write for the selected characters, shared by the gold
+  // dropdown and the reset button.
+  function writeGoldReceive(component, { logLabel, selection, receive, ignoredTicks }) {
+    return runGoldBulkWrite(component, {
+      logLabel,
+      selection,
+      write: (target) => saveBulkGoldReceive({ ...target, receive }),
+      onSaveError: goldSaveFailedNotice(),
+      summarize: (result) => ({
+        isMissing: (entry) => entry.status === "missing",
+        notice: buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks, lang, getClassEmoji }),
+      }),
+    });
+  }
+
   return {
     [STATUS_COMPONENT_ACTION.prev]: async () => {
       session.movePage(-1);
@@ -749,25 +764,27 @@ function createStatusComponentRouteHandlers(ctx) {
         return redraw();
       }
 
-      return runGoldBulkWrite(component, {
+      return writeGoldReceive(component, {
         logLabel: "raid-status gold receive",
         selection,
-        write: (target) => saveBulkGoldReceive({ ...target, receive }),
-        onSaveError: goldSaveFailedNotice(),
-        summarize: (result) => ({
-          isMissing: (entry) => entry.status === "missing",
-          notice: buildGoldReceiveSummaryNotice({
-            result,
-            receive,
-            // Raids left ticked from the pre-ticked set are the card's own
-            // state; only a raid the user added on top of it was ignored.
-            ignoredTicks: receive.kind === GOLD_RECEIVE_AUTO && values.some((value) => (
-              value !== GOLD_RECEIVE_AUTO && !preTicked.includes(value)
-            )),
-            lang,
-            getClassEmoji,
-          }),
-        }),
+        receive,
+        // Raids left ticked from the pre-ticked set are the card's own
+        // state; only a raid the user added on top of it was ignored.
+        ignoredTicks: receive.kind === GOLD_RECEIVE_AUTO && values.some((value) => (
+          value !== GOLD_RECEIVE_AUTO && !preTicked.includes(value)
+        )),
+      });
+    },
+
+    // The reset button does what the dropdown's auto option does, in one click.
+    [STATUS_COMPONENT_ACTION.goldReset]: async (component) => {
+      const selection = getGoldSelection();
+      if (selection.length === 0) return noRedraw();
+      return writeGoldReceive(component, {
+        logLabel: "raid-status gold reset",
+        selection,
+        receive: { kind: GOLD_RECEIVE_AUTO },
+        ignoredTicks: false,
       });
     },
 

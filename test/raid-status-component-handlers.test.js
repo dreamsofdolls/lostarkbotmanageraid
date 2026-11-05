@@ -528,7 +528,8 @@ test("goldReceive applies the ticked set to every selected character and posts o
   for (const character of doc.accounts[0].characters) {
     assert.equal(character.assignedRaids.armoche.goldOverride, "include", character.name);
     assert.equal(character.assignedRaids.kazeros.goldOverride, "include", character.name);
-    assert.equal(character.assignedRaids.serca.goldOverride, "exclude", character.name);
+    // Two ticks leave the third gold slot automatic.
+    assert.equal(character.assignedRaids.serca?.goldOverride, undefined, character.name);
   }
   assert.equal(doc.markedPath, "accounts");
   assert.equal(doc.saves, 1);
@@ -583,6 +584,38 @@ test("goldReceive auto resets the selected characters", async () => {
   assert.match(followUps[0].embeds[0].title, /Tớ tự chọn gold lại cho 1 con/);
   // A raid ticked on top of the pre-ticked set, together with auto, is named as ignored.
   assert.match(followUps[0].embeds[0].description, /bỏ qua/);
+});
+
+test("goldReset returns every selected character to automatic gold and posts one summary", async () => {
+  const doc = goldRosterDoc([
+    {
+      name: "Goldie",
+      itemLevel: 1720,
+      assignedRaids: {
+        armoche: { modeKey: "hard", goldOverride: "exclude" },
+        kazeros: { modeKey: "normal", goldOverride: "include" },
+      },
+    },
+    { name: "Silver", itemLevel: 1720, assignedRaids: { serca: { modeKey: "normal", goldOverride: "exclude" } } },
+  ]);
+  const harness = createHandlerHarness({
+    User: ownerUserModel(doc),
+    getGoldSelection: () => [goldSelectionEntry("Goldie"), goldSelectionEntry("Silver")],
+  });
+  const { followUps, component } = collectFollowUps(undefined);
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldReset](component);
+
+  assert.deepEqual(result, { redraw: true });
+  for (const character of doc.accounts[0].characters) {
+    for (const [raidKey, raid] of Object.entries(character.assignedRaids)) {
+      assert.ok(!raid.goldOverride, `${character.name} ${raidKey}`);
+    }
+  }
+  assert.equal(doc.saves, 1);
+  assert.equal(followUps.length, 1);
+  assert.match(followUps[0].embeds[0].title, /Tớ tự chọn gold lại cho 2 con/);
+  assert.doesNotMatch(followUps[0].embeds[0].description, /bỏ qua/);
 });
 
 test("goldReceive auto reached by unticking one pre-ticked raid names no ignored tick", async () => {

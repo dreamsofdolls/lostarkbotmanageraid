@@ -16,6 +16,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   goldChars: "goldChars",
   goldReceive: "goldReceive",
   goldMode: "goldMode",
+  goldReset: "goldReset",
   localSyncAction: "localSyncAction",
 });
 
@@ -120,6 +121,12 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status-gold:mode",
     action: STATUS_COMPONENT_ACTION.goldMode,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-gold:reset",
+    action: STATUS_COMPONENT_ACTION.goldReset,
     editDriven: true,
     redraw: true,
   },

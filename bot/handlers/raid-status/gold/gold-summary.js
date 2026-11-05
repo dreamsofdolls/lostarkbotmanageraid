@@ -4,6 +4,7 @@
 // which picks were skipped and why. Reads only the bulk writers' results.
 
 const { RAID_ORDER } = require("../../../domain/raid-catalog");
+const { GOLD_RAID_CAP_PER_CHARACTER } = require("../../../utils/raid/common/character");
 const {
   getRaidLabel,
   getRaidSpecificModeLabel,
@@ -201,11 +202,13 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
   }
 
   const ticked = [...(receive?.raidKeys || [])].sort(byRaidOrder);
+  // Fewer ticks than gold slots pin those raids and leave the rest to Artist.
+  const headlineKey = ticked.length >= GOLD_RAID_CAP_PER_CHARACTER ? "goldSetLine" : "goldPinnedLine";
   return {
     kind: NoticeKind.DONE,
     title: goldViewText("goldSummaryTitle", lang, { n: touched.length }),
     description: clampDescription([
-      goldViewText("goldSetLine", lang, { raids: raidList(ticked, lang) }),
+      goldViewText(headlineKey, lang, { raids: raidList(ticked, lang) }),
       ...touched.map((entry) => (
         `${characterPrefix(entry, getClassEmoji)}: ${goldChangeText(entry, lang)}${goldSkippedTail(entry, lang)}`
       )),

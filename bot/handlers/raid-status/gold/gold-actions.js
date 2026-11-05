@@ -151,11 +151,13 @@ function receivingRaidKeys(character) {
 }
 
 /**
- * Apply a gold set to a character. A set includes the ticked raids and
- * excludes every other raid the character's card shows; a set that names none
- * of those raids leaves the character as it is, since it would otherwise
- * receive no gold at all. Auto removes every override. Raids are written only
- * when their override actually changes.
+ * Apply a gold set to a character. A set includes the ticked raids the
+ * character has. When they fill every gold slot, every other raid its card
+ * shows is excluded; when slots are left, the other raids return to
+ * automatic so Artist fills them, instead of the character losing that gold.
+ * A set that names none of its raids leaves the character as it is. Auto
+ * removes every override. Raids are written only when their override
+ * actually changes.
  * @param {object} character - character document or plain object
  * @param {{kind: "auto"}|{kind: "set", raidKeys: string[]}} receive - from parseGoldReceiveValues
  * @returns {{changed: boolean, before: string[], after: string[], skipped: string[]}}
@@ -173,9 +175,12 @@ function applyGoldReceive(character, receive) {
   const autoTargets = () => [...VALID_RAID_KEYS]
     .filter((raidKey) => character.assignedRaids[raidKey])
     .map((raidKey) => [raidKey, null]);
-  const setTargets = () => (statusRaids.some((raid) => ticked.has(raid.raidKey))
-    ? statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : "exclude"])
-    : []);
+  const setTargets = () => {
+    const pinned = statusRaids.filter((raid) => ticked.has(raid.raidKey)).length;
+    if (pinned === 0) return [];
+    const unticked = pinned >= GOLD_RAID_CAP_PER_CHARACTER ? "exclude" : null;
+    return statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : unticked]);
+  };
   const targets = isAuto ? autoTargets() : setTargets();
 
   let changed = false;

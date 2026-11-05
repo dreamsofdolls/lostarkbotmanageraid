@@ -252,14 +252,17 @@ function toOptionEmoji(icon) {
 }
 
 /**
- * Builders for the gold view's three selects: characters, gold set and
- * difficulty. All three read the selection from filterState at build time.
+ * Builders for the gold view's three selects (characters, gold set and
+ * difficulty) and its reset button. All read the selection from filterState
+ * at build time.
  * @param {object} deps - discord.js builders, UI, label/format helpers, lang,
  *   t, getRaidsFor, getCharacterName and filterState (createGoldFilterState)
- * @returns {{buildGoldCharsRow: (disabled: boolean) => object|null, buildGoldReceiveRow: (disabled: boolean) => object, buildGoldModeRow: (disabled: boolean) => object|null, selectedEntries: () => Array<{name: string, itemLevel: number, raids: object[]}>}}
+ * @returns {{buildGoldCharsRow: (disabled: boolean) => object|null, buildGoldReceiveRow: (disabled: boolean) => object, buildGoldModeRow: (disabled: boolean) => object|null, buildGoldResetButton: (disabled: boolean) => object|null, selectedEntries: () => Array<{name: string, itemLevel: number, raids: object[]}>}}
  */
 function createGoldToggleRows({
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   UI,
   getClassEmoji,
@@ -320,11 +323,15 @@ function createGoldToggleRows({
     const options = candidates.map((character) => {
       const name = getCharacterName(character);
       const totals = summarizeCharacterGold(getRaidsFor(character));
-      // A closed multi-select lists each picked label on its own line, so the
-      // label stays short; the gold shows in the description once it opens.
+      // A closed multi-select shows every picked label, so the label is the
+      // name alone and the picks sit side by side; item level and gold show
+      // in the description once it opens.
       const option = {
-        label: truncateText(`${name} · ${Number(character.itemLevel) || 0}`, 100),
-        description: truncateText(`${formatGold(totals.earned)}/${formatGold(totals.total)}`, 100),
+        label: truncateText(name, 100),
+        description: truncateText(
+          `${Number(character.itemLevel) || 0} · ${formatGold(totals.earned)}/${formatGold(totals.total)}`,
+          100
+        ),
         value: name.slice(0, 100),
         default: selected.some((selectedName) => sameCharacterName(selectedName, name)),
       };
@@ -492,10 +499,23 @@ function createGoldToggleRows({
     });
   }
 
+  // Returns the selected characters to Artist's automatic gold, like the
+  // dropdown's auto option; none is built while nothing is selected.
+  function buildGoldResetButton(disabled) {
+    if (selectedEntries().length === 0) return null;
+    return new ButtonBuilder()
+      .setCustomId("status-gold:reset")
+      .setLabel(t("raid-status.goldView.resetButton", lang))
+      .setEmoji(GOLD_AUTO_EMOJI)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+  }
+
   return {
     buildGoldCharsRow,
     buildGoldModeRow,
     buildGoldReceiveRow,
+    buildGoldResetButton,
     selectedEntries,
   };
 }

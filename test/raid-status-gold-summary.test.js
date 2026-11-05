@@ -146,6 +146,17 @@ test("gold summary lists the ticked set and each character's raids in and out", 
   ]);
 });
 
+test("gold summary for fewer than three ticks names the pinned raids and the slots Artist fills", () => {
+  const notice = goldNotice([
+    goldEntry("Qiylyn", "Bard", "changed", {
+      added: ["horizon"], removed: ["kazeros"], kept: ["serca", "horizon", "belgardin"],
+    }),
+  ], { kind: "set", raidKeys: ["horizon"] });
+  const [headline, line] = notice.description.split("\n");
+  assert.equal(headline, "Ghim gold: **Horizon**, ô còn trống Artist tự chọn");
+  assert.equal(line, "[Bard] **Qiylyn**: Horizon vào, Kazeros ra");
+});
+
 test("gold summary marks pinned characters and skipped raids", () => {
   const notice = goldNotice([
     goldEntry("Soulrano", "Destroyer", "pinned", { kept: ["armoche", "kazeros", "belgardin"] }),

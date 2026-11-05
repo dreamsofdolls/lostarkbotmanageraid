@@ -12,7 +12,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-share`, `/raid-bg`, the roster commands, the Local Sync owner check and the reply to an unexpected error now answer with these cards instead of plain text or one-off embeds; the unexpected-error card does not show the error itself.
 - `/raid-task add` for every character lists each added and skipped character over as many fields as it needs instead of cutting the list at one field; when `/raid-add-roster` cannot read lostark.bible for an unknown reason, the sentence stays plain and the error goes to the 🧾 Details field, kept on one line.
 - The `/raid-log` card left on a panel whose character turned off Public Log shows the character with its class icon, like the other notices.
-- `/raid-status` Gold view: the character dropdown labels read `name · item level` and the gold moves to each option's second line, so several picked characters fit on a phone without the gold being cut off.
+- `/raid-status` Gold view: the character dropdown labels show only the class icon and name, with item level and gold on each option's second line, so the picked characters sit side by side on a phone.
+- Gold view gold dropdown: ticking fewer than 3 raids keeps the ticked ones and lets Artist fill the free slots, instead of dropping the character's other gold raids (ticking only Horizon used to leave 50,000G of 164,000G). Ticking 3 still sets exactly those.
+- Gold view gains a **🔄 Reset gold** button beside the page buttons (on its own row with one roster) that returns the selected characters to Artist's automatic gold, like the dropdown's auto option.
 - `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
 - The retired nudge's **Switch to Local Sync** button handler, its route and its strings are removed; nothing has posted that button since the nudge stopped. `/raid-auto-manage action:local-on` and the `/raid-status` Local Sync view still switch a roster to Local Sync.
 

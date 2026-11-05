@@ -13,6 +13,7 @@ function createRaidStatusComponentLayout({
   buildGoldCharsRow,
   buildGoldModeRow,
   buildGoldReceiveRow,
+  buildGoldResetButton = () => null,
   buildSyncButton,
   buildSyncRow,
   buildLocalSyncNewButton,
@@ -89,12 +90,21 @@ function createRaidStatusComponentLayout({
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
     addPaginatedViewHeader(rows, disabled);
-    const charsRow = buildGoldCharsRow(disabled);
-    if (charsRow) rows.push(charsRow);
-
     const currentAccount = accounts[currentPage];
     const sharedFrom = currentAccount?._sharedFrom;
     const goldWriteDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+
+    // Four selects leave one row: the reset button joins the page buttons,
+    // or takes a row of its own on top when a single roster has none.
+    const resetButton = buildGoldResetButton(goldWriteDisabled);
+    if (resetButton) {
+      const pageRow = rows.find(isButtonRow);
+      if (pageRow && getRowComponentCount(pageRow) < 5) pageRow.addComponents(resetButton);
+      else rows.unshift(new ActionRowBuilder().addComponents(resetButton));
+    }
+
+    const charsRow = buildGoldCharsRow(disabled);
+    if (charsRow) rows.push(charsRow);
     rows.push(buildGoldReceiveRow(goldWriteDisabled));
     const modeRow = buildGoldModeRow(goldWriteDisabled);
     if (modeRow && rows.length < 5) rows.push(modeRow);

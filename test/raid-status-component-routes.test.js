@@ -91,6 +91,10 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
       redraw: true,
     },
   );
+  assert.equal(
+    getStatusComponentRoute("status-gold:reset").action,
+    STATUS_COMPONENT_ACTION.goldReset,
+  );
 });
 
 test("raid-status no longer routes the retired gold toggle and replace selects", () => {

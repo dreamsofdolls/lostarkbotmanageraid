@@ -2,7 +2,13 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+} = require("discord.js");
 
 const {
   computeBulkGoldModeOptions,
@@ -11,6 +17,7 @@ const {
 } = require("../bot/handlers/raid-status/gold/gold-ui/toggle-rows");
 const { createGoldFilterState } = require("../bot/handlers/raid-status/gold/gold-ui/filters");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
+const { createRaidStatusComponentLayout } = require("../bot/handlers/raid-status/components/component-layout");
 const { getStatusRaidsForCharacter, summarizeCharacterGold } = require("../bot/utils/raid/common/character");
 const { UI, formatGold, truncateText } = require("../bot/utils/raid/common/shared");
 
@@ -144,6 +151,8 @@ function goldUiFor(selected) {
   return createRaidStatusGoldUi({
     EmbedBuilder,
     ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     StringSelectMenuBuilder,
     UI,
     getCharacterName: (character) => character.name,
@@ -183,12 +192,66 @@ test("the gold set row allows at most three raids", () => {
   assert.equal(select.max_values, 3);
 });
 
-test("character options keep the name and item level in the label and the gold in the description", () => {
+test("character options keep only the name in the label; item level and gold sit in the description", () => {
   const select = goldUiFor(["Soulrano"]).buildGoldCharsRow(false).toJSON().components[0];
   const soulrano = select.options.find((option) => option.value === "Soulrano");
   const totals = summarizeCharacterGold(getStatusRaidsForCharacter(exampleCharacters()[0]));
-  assert.equal(soulrano.label, "Soulrano · 1771");
-  assert.equal(soulrano.description, `${formatGold(totals.earned)}/${formatGold(totals.total)}`);
+  assert.equal(soulrano.label, "Soulrano");
+  assert.equal(soulrano.description, `1771 · ${formatGold(totals.earned)}/${formatGold(totals.total)}`);
+});
+
+function goldLayoutRows({ rosterCount, sharedFrom = null }) {
+  const ui = goldUiFor(["Soulrano"]);
+  const accounts = Array.from({ length: rosterCount }, (_, index) => ({
+    accountName: `Roster${index}`,
+    characters: exampleCharacters(),
+    ...(sharedFrom && index === 0 ? { _sharedFrom: sharedFrom } : {}),
+  }));
+  const pageButton = (customId) => new ButtonBuilder().setCustomId(customId).setLabel(customId).setStyle(ButtonStyle.Secondary);
+  const { buildComponents } = createRaidStatusComponentLayout({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText,
+    lang: "vi",
+    buildPaginationRow: () => new ActionRowBuilder().addComponents(pageButton("status:prev"), pageButton("status:next")),
+    buildViewToggleRow: () => new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId("status-view:toggle").setPlaceholder("view")
+        .addOptions([{ label: "gold", value: "gold" }])
+    ),
+    buildGoldCharsRow: ui.buildGoldCharsRow,
+    buildGoldReceiveRow: ui.buildGoldReceiveRow,
+    buildGoldModeRow: ui.buildGoldModeRow,
+    buildGoldResetButton: ui.buildGoldResetButton,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getVisibleRosterCount: () => rosterCount,
+    getCurrentView: () => "gold",
+  });
+  return buildComponents(false).map((row) => row.toJSON().components);
+}
+
+const idsOf = (components) => components.map((component) => component.custom_id);
+
+test("with several rosters the gold reset button sits beside the page buttons", () => {
+  const rows = goldLayoutRows({ rosterCount: 2 });
+  assert.ok(rows.length <= 5);
+  assert.deepEqual(idsOf(rows[0]), ["status:prev", "status:next", "status-gold:reset"]);
+  assert.deepEqual(rows.slice(1).map((row) => idsOf(row)[0]), [
+    "status-view:toggle", "status-gold:chars", "status-gold:receive", "status-gold:mode",
+  ]);
+});
+
+test("with one roster the gold reset button gets a row of its own on top", () => {
+  const rows = goldLayoutRows({ rosterCount: 1 });
+  assert.ok(rows.length <= 5);
+  assert.deepEqual(idsOf(rows[0]), ["status-gold:reset"]);
+  assert.ok(idsOf(rows.flat()).includes("status-gold:mode"));
+});
+
+test("a view-only share gets the gold reset button disabled", () => {
+  const rows = goldLayoutRows({ rosterCount: 2, sharedFrom: { accessLevel: "view" } });
+  const reset = rows[0].find((component) => component.custom_id === "status-gold:reset");
+  assert.equal(reset.disabled, true);
 });
 
 test("selected characters carry the ✏️ marker in the gold embed", () => {
