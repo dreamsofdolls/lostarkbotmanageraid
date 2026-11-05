@@ -2,6 +2,12 @@
 
 const { t, getUserLanguage } = require("../../../../services/i18n");
 const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("../write-access");
+const { buildSaveFailedNotice } = require("../write-handler");
+const {
+  NoticeKind,
+  formatCharacterLabel,
+  getCharacterClass,
+} = require("../../../../utils/raid/common/shared");
 const {
   getCharacterDisplayName,
   findCharacterInUser,
@@ -13,6 +19,7 @@ function createClearResult(characterName) {
   return {
     outcome: "cleared",
     resolvedCharName: characterName,
+    resolvedCharClass: "",
     removedCount: 0,
     removedDailyCount: 0,
     removedWeeklyCount: 0,
@@ -36,6 +43,7 @@ function applyClearConfirmed(userDoc, route, result) {
   }
 
   result.resolvedCharName = getCharacterDisplayName(found.character);
+  result.resolvedCharClass = getCharacterClass(found.character);
   const sideTasks = ensureSideTasks(found.character);
   result.removedCount = sideTasks.length;
   result.removedDailyCount = countByReset(sideTasks, "daily");
@@ -45,32 +53,32 @@ function applyClearConfirmed(userDoc, route, result) {
 }
 
 function buildClearConfirmNotice(result, lang) {
+  // The character was there when the prompt was built, so a miss now means
+  // the prompt went stale.
   if (result.outcome === "no-roster" || result.outcome === "no-character") {
     return {
-      type: "warn",
+      kind: NoticeKind.EXPIRED,
       title: t("raid-task.clear.confirmFailedCharacterTitle", lang),
       description: t("raid-task.clear.confirmFailedCharacterDescription", lang),
+      tip: t("raid-task.clear.confirmFailedCharacterTip", lang),
     };
   }
 
   return {
-    type: "success",
+    kind: NoticeKind.DONE,
     title: t("raid-task.clear.successTitle", lang),
     description: t("raid-task.clear.successDescription", lang, {
       taskCount: result.removedCount,
-      characterName: result.resolvedCharName,
+      characterName: formatCharacterLabel(result.resolvedCharName, result.resolvedCharClass),
       dailyCount: result.removedDailyCount,
       weeklyCount: result.removedWeeklyCount,
     }),
+    tip: t("raid-task.clear.successTip", lang),
   };
 }
 
 function buildClearSaveFailedNotice(lang) {
-  return {
-    type: "error",
-    title: t("raid-task.save.addFailedTitle", lang),
-    description: t("raid-task.save.clearFailedDescription", lang),
-  };
+  return buildSaveFailedNotice("raid-task.save.clearFailedDescription", lang);
 }
 
 async function resolveClearConfirmAccess({
@@ -148,7 +156,7 @@ function createClearCancelHandler({
     await interaction.deferUpdate();
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await editTaskNotice(interaction, {
-      type: "muted",
+      kind: NoticeKind.DONE,
       title: t("raid-task.clear.cancelledTitle", lang),
       description: t("raid-task.clear.cancelledDescription", lang),
     }).catch(() => {});

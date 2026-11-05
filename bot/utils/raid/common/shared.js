@@ -328,6 +328,37 @@ function formatCharacterLabel(name, className) {
 }
 
 /**
+ * The shared "no roster yet" notice, one copy for every command.
+ * @param {string} [lang]
+ * @returns {{kind: string, title: string, description: string, tip: string}}
+ */
+function buildNoRosterNotice(lang) {
+  return {
+    kind: NoticeKind.EMPTY,
+    title: t("common.notice.noRosterTitle", lang),
+    description: t("common.notice.noRosterDescription", lang),
+    tip: t("common.notice.noRosterTip", lang),
+  };
+}
+
+/**
+ * The shared notice for a roster named in a command that the user does not
+ * have. A button on an older card whose roster is gone uses its own expired
+ * copy instead.
+ * @param {string} rosterName - the name as typed
+ * @param {string} [lang]
+ * @returns {{kind: string, title: string, description: string, tip: string}}
+ */
+function buildRosterNotFoundNotice(rosterName, lang) {
+  return {
+    kind: NoticeKind.EMPTY,
+    title: t("common.notice.rosterNotFoundTitle", lang),
+    description: t("common.notice.rosterNotFoundDescription", lang, { rosterName }),
+    tip: t("common.notice.rosterNotFoundTip", lang),
+  };
+}
+
+/**
  * The "🧾 Chi tiết" field a failure card uses for the technical error,
  * in code font and clamped to the field limit (the two backticks included).
  * @param {string} [detail] - the error text; empty gives no field
@@ -545,6 +576,8 @@ module.exports = {
   addChunkedEmbedField,
   buildNoticeEmbed,
   buildDetailField,
+  buildNoRosterNotice,
+  buildRosterNotFoundNotice,
   formatCharacterLabel,
   NoticeKind,
   ConcurrencyLimiter,

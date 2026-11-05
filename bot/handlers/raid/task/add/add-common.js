@@ -8,6 +8,7 @@ const {
   countByReset,
 } = require("../../../../utils/raid/tasks/side-tasks");
 const { capForReset } = require("./reset-policy");
+const { NoticeKind, buildNoRosterNotice } = require("../../../../utils/raid/common/shared");
 
 /**
  * Add a side task to one character, unless its reset bucket is already full
@@ -43,18 +44,15 @@ function cycleLabelForReset(reset, lang) {
 
 function invalidTaskNameNotice(lang) {
   return {
-    type: "warn",
+    kind: NoticeKind.INPUT,
     title: t("raid-task.common.invalidTaskNameTitle", lang),
     description: t("raid-task.common.invalidTaskNameDescription", lang),
+    tip: t("raid-task.common.invalidTaskNameTip", lang),
   };
 }
 
 function noRosterNotice(lang) {
-  return {
-    type: "warn",
-    title: t("raid-task.common.noRosterTitle", lang),
-    description: t("raid-task.common.noRosterDescription", lang),
-  };
+  return buildNoRosterNotice(lang);
 }
 
 module.exports = {

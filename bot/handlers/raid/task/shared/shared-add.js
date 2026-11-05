@@ -19,6 +19,7 @@ const {
   findAccountInUser,
   formatSharedResetDetail,
 } = require("../../../../utils/raid/tasks/side-tasks");
+const { NoticeKind, buildRosterNotFoundNotice } = require("../../../../utils/raid/common/shared");
 
 function resolveSharedTaskReset(preset, requestedReset) {
   if (preset.kind === "scheduled") return SCHEDULED_RESET;
@@ -53,33 +54,18 @@ function readSharedAddRequest(interaction, lang) {
 
 function buildValidationNotice(request, lang) {
   const checks = [
-    {
-      failed: !SHARED_TASK_PRESETS[request.presetKey],
-      titleKey: "raid-task.sharedAdd.invalidPresetTitle",
-      descriptionKey: "raid-task.sharedAdd.invalidPresetDescription",
-    },
-    {
-      failed: !request.taskName,
-      titleKey: "raid-task.sharedAdd.customNeedsNameTitle",
-      descriptionKey: "raid-task.sharedAdd.customNeedsNameDescription",
-    },
-    {
-      failed: Number.isNaN(request.expiresAt),
-      titleKey: "raid-task.sharedAdd.invalidExpiryTitle",
-      descriptionKey: "raid-task.sharedAdd.invalidExpiryDescription",
-    },
-    {
-      failed: request.expiresAt && request.expiresAt < Date.now(),
-      titleKey: "raid-task.sharedAdd.pastExpiryTitle",
-      descriptionKey: "raid-task.sharedAdd.pastExpiryDescription",
-    },
+    { failed: !SHARED_TASK_PRESETS[request.presetKey], stem: "invalidPreset" },
+    { failed: !request.taskName, stem: "customNeedsName" },
+    { failed: Number.isNaN(request.expiresAt), stem: "invalidExpiry" },
+    { failed: request.expiresAt && request.expiresAt < Date.now(), stem: "pastExpiry" },
   ];
   const match = checks.find((check) => check.failed);
   if (!match) return null;
   return {
-    type: "warn",
-    title: t(match.titleKey, lang),
-    description: t(match.descriptionKey, lang),
+    kind: NoticeKind.INPUT,
+    title: t(`raid-task.sharedAdd.${match.stem}Title`, lang),
+    description: t(`raid-task.sharedAdd.${match.stem}Description`, lang),
+    tip: t(`raid-task.sharedAdd.${match.stem}Tip`, lang),
   };
 }
 
@@ -193,67 +179,66 @@ function buildSkippedSummary(result, lang) {
   return summaryParts.join("\n");
 }
 
-function buildSkippedSection(result, lang) {
-  const skippedSectionParts = [];
-  if (result.skippedDup.length > 0) {
-    skippedSectionParts.push(
-      t("raid-task.sharedAdd.skippedSectionDup", lang, {
-        names: result.skippedDup.join(", "),
-      }),
-    );
-  }
-  if (result.skippedCap.length > 0) {
-    skippedSectionParts.push(
-      t("raid-task.sharedAdd.skippedSectionCap", lang, {
-        names: result.skippedCap.join(", "),
-      }),
-    );
-  }
-  return skippedSectionParts.join("");
-}
-
-function buildSharedAddSuccessDescription(result, request, lang) {
+function buildTypeField(request, lang) {
   const expirySuffix = request.expiresAt
     ? t("raid-task.sharedAdd.expirySuffix", lang, {
         date: formatDiscordTimestamp(request.expiresAt, "D"),
       })
     : "";
-  const presetLabel = `${request.preset.emoji} ${request.preset.label}`;
-  if (request.applyAllRosters) {
-    return t("raid-task.sharedAdd.successDescriptionMulti", lang, {
-      presetLabel,
-      expirySuffix,
-      addedCount: result.addedRosters.length,
-      addedNames: result.addedRosters.join(", "),
-      skippedSection: buildSkippedSection(result, lang),
-    });
+  return {
+    name: t("raid-task.fields.type", lang),
+    value: `${request.preset.emoji} ${request.preset.label}${expirySuffix}`,
+    inline: true,
+  };
+}
+
+function buildSkippedField(result, lang) {
+  const summary = buildSkippedSummary(result, lang);
+  if (!summary) return null;
+  return { name: t("raid-task.fields.skipped", lang), value: summary, inline: false };
+}
+
+function buildSharedAddSuccessNotice(result, request, lang) {
+  const taskName = `${request.preset.emoji} ${request.taskName}`;
+  const notice = {
+    kind: NoticeKind.DONE,
+    title: t("raid-task.sharedAdd.successTitle", lang),
+    tip: t("raid-task.sharedAdd.successTip", lang),
+  };
+  if (!request.applyAllRosters) {
+    return {
+      ...notice,
+      description: t("raid-task.sharedAdd.successDescriptionSingle", lang, {
+        rosterName: result.resolvedRosterName,
+        taskName,
+      }),
+      fields: [buildTypeField(request, lang)],
+    };
   }
-  return t("raid-task.sharedAdd.successDescriptionSingle", lang, {
-    rosterName: result.resolvedRosterName,
-    taskName: `${request.preset.emoji} ${request.taskName}`,
-    presetLabel,
-    expirySuffix,
-  });
+  return {
+    ...notice,
+    description: t("raid-task.sharedAdd.successDescriptionMulti", lang, {
+      taskName,
+      addedCount: result.addedRosters.length,
+    }),
+    fields: [
+      buildTypeField(request, lang),
+      { name: t("raid-task.fields.added", lang), value: result.addedRosters.join(", "), inline: false },
+      buildSkippedField(result, lang),
+    ],
+  };
 }
 
 function buildNoNewRosterNotice(result, request, lang) {
-  const skippedSummary = buildSkippedSummary(result, lang);
-  const lines = [
-    t("raid-task.sharedAdd.noNewRosterTaskLine", lang, {
+  return {
+    kind: NoticeKind.INPUT,
+    title: t("raid-task.sharedAdd.noNewRosterTitle", lang),
+    description: t("raid-task.sharedAdd.noNewRosterDescription", lang, {
+      count: result.targetRosterCount,
       taskName: `${request.preset.emoji} ${request.taskName}`,
     }),
-    t("raid-task.sharedAdd.noNewRosterTypeLine", lang, {
-      presetLabel: request.preset.label,
-    }),
-    t("raid-task.sharedAdd.noNewRosterRostersChecked", lang, {
-      count: result.targetRosterCount,
-    }),
-  ];
-  if (skippedSummary) lines.push(skippedSummary);
-  return {
-    type: "info",
-    title: t("raid-task.sharedAdd.noNewRosterTitle", lang),
-    description: lines.join("\n"),
+    fields: [buildTypeField(request, lang), buildSkippedField(result, lang)],
+    tip: t("raid-task.sharedAdd.noNewRosterTip", lang),
   };
 }
 
@@ -270,30 +255,19 @@ function buildDuplicateNotice(result, request, lang) {
       });
 
   return {
-    type: "info",
+    kind: NoticeKind.INPUT,
     title: t("raid-task.sharedAdd.duplicateTitle", lang),
     description,
+    tip: t("raid-task.sharedAdd.duplicateTip", lang),
   };
 }
 
 const SHARED_ADD_NOTICE_BUILDERS = {
-  "no-roster": ({ request, lang }) => ({
-    type: "warn",
-    title: t("raid-task.common.rosterNotFoundTitle", lang),
-    description: t("raid-task.common.rosterNotFoundDescription", lang, {
-      rosterName: request.rosterName,
-    }),
-  }),
-  "no-roster-match": ({ request, lang }) => ({
-    type: "warn",
-    title: t("raid-task.common.rosterNotFoundTitle", lang),
-    description: t("raid-task.common.rosterNotFoundDescription", lang, {
-      rosterName: request.rosterName,
-    }),
-  }),
+  "no-roster": ({ request, lang }) => buildRosterNotFoundNotice(request.rosterName, lang),
+  "no-roster-match": ({ request, lang }) => buildRosterNotFoundNotice(request.rosterName, lang),
   "none-added": ({ result, request, lang }) => buildNoNewRosterNotice(result, request, lang),
   "cap-reached": ({ result, request, lang }) => ({
-    type: "warn",
+    kind: NoticeKind.INPUT,
     title: t("raid-task.sharedAdd.capReachedTitle", lang),
     description: t("raid-task.sharedAdd.capReachedDescriptionSingle", lang, {
       rosterName: result.resolvedRosterName,
@@ -301,15 +275,19 @@ const SHARED_ADD_NOTICE_BUILDERS = {
       cap: sharedTaskCapForReset(request.reset),
       resetLabel: formatSharedResetDetail(request.reset, { t, lang }),
     }),
+    tip: t("raid-task.sharedAdd.capReachedTip", lang),
   }),
   duplicate: ({ result, request, lang }) => buildDuplicateNotice(result, request, lang),
-  added: ({ result, request, lang }) => ({
-    type: "success",
-    title: t("raid-task.sharedAdd.successTitle", lang),
-    description: buildSharedAddSuccessDescription(result, request, lang),
-  }),
+  added: ({ result, request, lang }) => buildSharedAddSuccessNotice(result, request, lang),
 };
 
+/**
+ * Notice for one /raid-task shared-add outcome.
+ * @param {{outcome: string, resolvedRosterName: string, countForReset: number, targetRosterCount: number, addedRosters: string[], skippedDup: string[], skippedCap: string[]}} result
+ * @param {{applyAllRosters: boolean, expiresAt: number|null, preset: object, reset: string, rosterName: string, taskName: string}} request
+ * @param {string} lang
+ * @returns {object} notice options for buildNoticeEmbed
+ */
 function buildSharedAddNotice(result, request, lang) {
   const builder = SHARED_ADD_NOTICE_BUILDERS[result.outcome] || SHARED_ADD_NOTICE_BUILDERS.added;
   return builder({ result, request, lang });
@@ -327,4 +305,4 @@ function createSharedAddHandler(deps) {
   });
 }
 
-module.exports = { createSharedAddHandler };
+module.exports = { buildSharedAddNotice, createSharedAddHandler };

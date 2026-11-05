@@ -56,7 +56,14 @@ for (const kind of ["single", "shared"]) {
       const removed = scenario === "success" || scenario === "save retry";
       assert.equal(saves, scenario === "save retry" ? 2 : removed || scenario === "removed during retry" ? 1 : 0);
       assert.equal(notices.length, 1);
-      assert.equal(notices[0].type, removed ? "success" : "warn");
+      const expectedKind = {
+        success: "done",
+        "save retry": "done",
+        "missing target": "empty",
+        "missing task": "expired",
+        "removed during retry": "expired",
+      }[scenario];
+      assert.equal(notices[0].kind, expectedKind);
       if (removed) assert.match(notices[0].description, /Daily/);
       const account = documents.at(-1).accounts[0];
       if (account) {
@@ -111,13 +118,16 @@ for (const kind of ["single", "shared", "clear"]) {
     }
     assert.equal(saves, 1);
     assert.equal(denied, 1);
-    assert.ok(notices.every(notice => notice.type !== "success"));
+    assert.ok(notices.every(notice => notice.kind !== "done"));
     clearUserLanguageCache();
   });
 }
 
 class NoticeEmbed {
   setColor() { return this; }
+  setTimestamp() { return this; }
+  setFooter() { return this; }
+  addFields() { return this; }
   setTitle(title) { this.title = title; return this; }
   setDescription(description) { this.description = description; return this; }
 }

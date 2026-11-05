@@ -18,6 +18,12 @@ const {
   invalidTaskNameNotice,
   noRosterNotice,
 } = require("./add-common");
+const {
+  NoticeKind,
+  buildRosterNotFoundNotice,
+  formatCharacterLabel,
+  getCharacterClass,
+} = require("../../../../utils/raid/common/shared");
 
 function readAddAllRequest(interaction) {
   return {
@@ -49,7 +55,9 @@ const RESULT_LIST_BY_OUTCOME = Object.freeze({
 
 function applyAddAllToCharacter(character, request, result, cycleStart) {
   const outcome = tryAddSideTask(ensureSideTasks(character), request, cycleStart);
-  result[RESULT_LIST_BY_OUTCOME[outcome]].push(getCharacterDisplayName(character));
+  result[RESULT_LIST_BY_OUTCOME[outcome]].push(
+    formatCharacterLabel(getCharacterDisplayName(character), getCharacterClass(character)),
+  );
 }
 
 function applyAddAllToUserDoc(userDoc, request, result, deps) {
@@ -87,93 +95,90 @@ function skippedLines(names, reason, lang) {
     .join("\n");
 }
 
-function buildSkippedSection(result, request, lang) {
-  const sections = [];
+function buildSkippedField(result, request, lang) {
+  const lines = [];
   if (result.skippedDup.length > 0) {
-    const reasonDup = t("raid-task.addAll.skippedReasonDup", lang);
-    sections.push(
-      "\n\n" +
-        t("raid-task.addAll.skippedHeader", lang, { count: result.skippedDup.length }) +
-        "\n" +
-        skippedLines(result.skippedDup, reasonDup, lang),
-    );
+    lines.push(skippedLines(result.skippedDup, t("raid-task.addAll.skippedReasonDup", lang), lang));
   }
-
   if (result.skippedCap.length > 0) {
     const reasonCap = t("raid-task.addAll.skippedReasonCap", lang, {
       cap: capForReset(request.reset),
       reset: request.reset,
     });
-    sections.push(
-      "\n\n" +
-        t("raid-task.addAll.skippedHeader", lang, { count: result.skippedCap.length }) +
-        "\n" +
-        skippedLines(result.skippedCap, reasonCap, lang),
-    );
+    lines.push(skippedLines(result.skippedCap, reasonCap, lang));
   }
-
-  return sections.join("");
+  if (lines.length === 0) return null;
+  return { name: t("raid-task.fields.skipped", lang), value: lines.join("\n"), inline: false };
 }
 
-function buildAddedNames(result) {
+function buildCycleField(request, lang) {
+  return { name: t("raid-task.fields.cycle", lang), value: cycleLabelForReset(request.reset, lang), inline: true };
+}
+
+function buildAddedField(result, lang) {
   const totalChars = result.added.length + result.skippedCap.length + result.skippedDup.length;
-  return `${result.added.length}/${totalChars}` +
-    (result.added.length > 0 ? `\n> ${result.added.join(", ")}` : "");
+  return {
+    name: t("raid-task.fields.added", lang),
+    value: `${result.added.length}/${totalChars}\n${result.added.join(", ")}`,
+    inline: false,
+  };
 }
 
 function buildAddAllCompletedNotice(result, request, lang) {
-  const hasAdded = result.added.length > 0;
   return {
-    type: hasAdded ? "success" : "info",
-    title: hasAdded
-      ? t("raid-task.addAll.successTitle", lang)
-      : t("raid-task.addAll.noMatchTitle", lang),
+    kind: NoticeKind.DONE,
+    title: t("raid-task.addAll.successTitle", lang),
     description: t("raid-task.addAll.successDescription", lang, {
       rosterName: result.resolvedRosterName,
       taskName: request.taskName,
-      cycleLabel: cycleLabelForReset(request.reset, lang),
-      addedNames: buildAddedNames(result),
-      skippedSection: buildSkippedSection(result, request, lang),
     }),
+    fields: [
+      buildCycleField(request, lang),
+      buildAddedField(result, lang),
+      buildSkippedField(result, request, lang),
+    ],
+    tip: t("raid-task.addAll.successTip", lang),
+  };
+}
+
+function buildAddAllNoMatchNotice(result, request, lang) {
+  return {
+    kind: NoticeKind.INPUT,
+    title: t("raid-task.addAll.noMatchTitle", lang),
+    description: t("raid-task.addAll.noMatchDescription", lang, {
+      rosterName: result.resolvedRosterName,
+      taskName: request.taskName,
+    }),
+    fields: [buildCycleField(request, lang), buildSkippedField(result, request, lang)],
+    tip: t("raid-task.addAll.noMatchTip", lang),
   };
 }
 
 const ADD_ALL_NOTICE_BUILDERS = {
   "no-roster": ({ lang }) => noRosterNotice(lang),
-  "no-roster-match": ({ request, lang }) => ({
-    type: "warn",
-    title: t("raid-task.common.rosterNotFoundTitle", lang),
-    description: t("raid-task.common.rosterNotFoundDescription", lang, {
-      rosterName: request.rosterName,
-    }),
-  }),
+  "no-roster-match": ({ request, lang }) => buildRosterNotFoundNotice(request.rosterName, lang),
   "empty-roster": ({ result, lang }) => ({
-    type: "info",
+    kind: NoticeKind.EMPTY,
     title: t("raid-task.addAll.emptyRosterTitle", lang),
     description: t("raid-task.addAll.emptyRosterDescription", lang, {
       rosterName: result.resolvedRosterName,
     }),
+    tip: t("raid-task.addAll.emptyRosterTip", lang),
   }),
 };
 
+/**
+ * Notice for one /raid-task add (whole roster) outcome.
+ * @param {{outcome: string, resolvedRosterName: string, added: string[], skippedCap: string[], skippedDup: string[]}} result
+ *   added and skipped lists hold character labels from formatCharacterLabel
+ * @param {{rosterName: string, taskName: string, reset: string}} request
+ * @param {string} lang
+ * @returns {object} notice options for buildNoticeEmbed
+ */
 function buildAddAllNotice(result, request, lang) {
-  const hasNoTouchedChars =
-    result.outcome === "ok" &&
-    result.added.length === 0 &&
-    result.skippedCap.length === 0 &&
-    result.skippedDup.length === 0;
-  if (hasNoTouchedChars) {
-    return {
-      type: "info",
-      title: t("raid-task.addAll.noMatchTitle", lang),
-      description: t("raid-task.addAll.noMatchDescription", lang, {
-        rosterName: result.resolvedRosterName,
-      }),
-    };
-  }
-
   const builder = ADD_ALL_NOTICE_BUILDERS[result.outcome];
   if (builder) return builder({ result, request, lang });
+  if (result.added.length === 0) return buildAddAllNoMatchNotice(result, request, lang);
   return buildAddAllCompletedNotice(result, request, lang);
 }
 
@@ -189,4 +194,4 @@ function createAddAllHandler(deps) {
   });
 }
 
-module.exports = { createAddAllHandler };
+module.exports = { buildAddAllNotice, createAddAllHandler };

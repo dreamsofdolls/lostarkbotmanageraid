@@ -434,6 +434,9 @@ test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag
   };
   class StubEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle() { return this; }
     setDescription() { return this; }
   }
@@ -453,6 +456,9 @@ test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices"
   const interaction = { reply: async (payload) => calls.push(payload) };
   class StubEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle() { return this; }
     setDescription() { return this; }
   }
@@ -466,6 +472,9 @@ test("replyNotice passes through extra reply payload fields", async () => {
   const interaction = { reply: async (payload) => calls.push(payload) };
   class StubEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle() { return this; }
     setDescription() { return this; }
   }
@@ -514,6 +523,9 @@ test("followUpNotice wraps interaction.followUp with the same notice payload sha
   const interaction = { followUp: async (payload) => calls.push(payload) };
   class StubEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle() { return this; }
     setDescription() { return this; }
   }
@@ -529,6 +541,9 @@ test("updateNotice clears components by default and accepts override via extras"
   const component = { update: async (payload) => calls.push(payload) };
   class StubEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle() { return this; }
     setDescription() { return this; }
   }
@@ -1076,6 +1091,7 @@ test("newly-added task seeds lastResetAt to current cycle start (regression)", a
         this._json = { fields: [] };
       }
       setColor() { return this; }
+      setTimestamp() { return this; }
       setTitle() { return this; }
       setDescription() { return this; }
       addFields() { return this; }
@@ -1146,6 +1162,7 @@ test("weekly task seeds lastResetAt to weekResetStartMs (regression)", async () 
   const handlers = createRaidTaskCommand({
     EmbedBuilder: class {
       setColor() { return this; }
+      setTimestamp() { return this; }
       setTitle() { return this; }
       setDescription() { return this; }
       addFields() { return this; }
@@ -1304,7 +1321,7 @@ test("add-all: adds task to every char that fits, skips chars at cap + duplicate
 
   const replyCalls = [];
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1382,7 +1399,7 @@ test("add-all: skips save() entirely when no char fits (every char dup or cap)",
     save: async () => { throw new Error("save() should not be called"); },
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1435,7 +1452,7 @@ test("shared-add: adds Chaos Gate as scheduled roster task", async () => {
     },
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1490,7 +1507,7 @@ test("shared-add autocomplete: preset labels show already-added state", async ()
     ],
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1547,7 +1564,7 @@ test("shared-add: all_rosters adds missing rosters and skips duplicates", async 
     },
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1605,7 +1622,7 @@ test("shared-remove: deletes one roster shared task by id", async () => {
     },
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1664,7 +1681,8 @@ test("clear preview defers ephemerally before language and roster access", async
     ],
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
@@ -1738,7 +1756,7 @@ test("clear-confirm button clears roster-scoped side tasks", async () => {
     },
   };
   const stubEmbed = {
-    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    setColor() { return this; }, setTimestamp() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
   const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
@@ -1847,6 +1865,9 @@ test("raid-task remove through createRaidTaskCommand answers a share revoked dur
   };
   class NoticeEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle(title) { this.title = title; return this; }
     setDescription(description) { this.description = description; return this; }
   }
@@ -1912,6 +1933,9 @@ test("raid-task clear confirm through createRaidTaskCommand answers a share revo
   };
   class NoticeEmbed {
     setColor() { return this; }
+    setTimestamp() { return this; }
+    setFooter() { return this; }
+    addFields() { return this; }
     setTitle(title) { this.title = title; return this; }
     setDescription(description) { this.description = description; return this; }
   }

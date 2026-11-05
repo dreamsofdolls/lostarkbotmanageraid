@@ -1,7 +1,12 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../../../services/i18n");
-const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  deferEphemeralReply,
+  formatCharacterLabel,
+  getCharacterClass,
+} = require("../../../../utils/raid/common/shared");
 const { resolveEditableTaskWriteAccess } = require("../write-access");
 const {
   getCharacterDisplayName,
@@ -10,40 +15,54 @@ const {
 } = require("../../../../utils/raid/tasks/side-tasks");
 const { buildClearConfirmRow } = require("./components");
 
+/**
+ * Notice for /raid-task clear before the confirm click: the character is
+ * missing, has nothing to clear, or gets the confirm prompt.
+ * @param {{character: object}|null} found - the character lookup
+ * @param {string} characterName - the name as typed
+ * @param {string} lang
+ * @returns {object} notice options for buildNoticeEmbed
+ */
 function buildClearPreviewNotice(found, characterName, lang) {
   if (!found) {
     return {
-      type: "warn",
+      kind: NoticeKind.EMPTY,
       title: t("raid-task.common.noCharacterTitle", lang),
       description: t("raid-task.common.noCharacterDescription", lang, {
         characterName,
       }),
+      tip: t("raid-task.common.noCharacterTip", lang),
     };
   }
 
-  const resolvedCharName = getCharacterDisplayName(found.character);
+  const characterLabel = formatCharacterLabel(
+    getCharacterDisplayName(found.character),
+    getCharacterClass(found.character),
+  );
   const sideTasks = Array.isArray(found.character.sideTasks)
     ? found.character.sideTasks
     : [];
   if (sideTasks.length === 0) {
     return {
-      type: "info",
+      kind: NoticeKind.EMPTY,
       title: t("raid-task.clear.nothingTitle", lang),
       description: t("raid-task.clear.nothingDescription", lang, {
-        characterName: resolvedCharName,
+        characterName: characterLabel,
       }),
+      tip: t("raid-task.clear.nothingTip", lang),
     };
   }
 
   return {
-    type: "warn",
+    kind: NoticeKind.CONFIRM,
     title: t("raid-task.clear.confirmTitle", lang),
     description: t("raid-task.clear.confirmDescription", lang, {
       taskCount: sideTasks.length,
-      characterName: resolvedCharName,
+      characterName: characterLabel,
       dailyCount: countByReset(sideTasks, "daily"),
       weeklyCount: countByReset(sideTasks, "weekly"),
     }),
+    tip: t("raid-task.clear.confirmTip", lang),
   };
 }
 
@@ -99,5 +118,6 @@ function createClearPreviewHandler({
 }
 
 module.exports = {
+  buildClearPreviewNotice,
   createClearPreviewHandler,
 };

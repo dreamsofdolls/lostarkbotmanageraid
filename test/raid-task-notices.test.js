@@ -44,15 +44,16 @@ class FakeEmbedBuilder {
   }
 }
 
-// Embed titles start with the notice icon.
-const withoutIcon = (title) => title.slice(title.indexOf(" ") + 1);
+// Embed titles start with the notice icon and its spacing.
+const withoutIcon = (title) => title.replace(/^\S+\s+/, "");
 
 test("raid-task view-only share notice includes owner label", () => {
   const notice = buildShareRefusalNotice("viewOnly", { ownerLabel: "Owner One" }, "en");
 
-  assert.equal(notice.type, "error");
-  assert.equal(notice.title, "Share is view-only");
+  assert.equal(notice.kind, "guard");
+  assert.equal(notice.title, "This share is view-only");
   assert.match(notice.description, /Owner One/);
+  assert.match(notice.tip, /permission:edit/);
 });
 
 test("raid-task view-only share notice falls back when owner label is missing", () => {
@@ -64,9 +65,10 @@ test("raid-task view-only share notice falls back when owner label is missing", 
 test("raid-task revoked share notice includes owner label", () => {
   const notice = buildShareRefusalNotice("revoked", { ownerLabel: "Owner One" }, "en");
 
-  assert.equal(notice.type, "error");
+  assert.equal(notice.kind, "guard");
   assert.equal(notice.title, "Share removed");
   assert.match(notice.description, /Owner One/);
+  assert.match(notice.tip, /\/raid-status/);
 });
 
 test("raid-task view-only notice helpers answer without running the share lookup", async () => {
@@ -89,7 +91,7 @@ test("raid-task view-only notice helpers answer without running the share lookup
   await helpers.replyViewOnlyShareNotice(interaction, target, "en");
   await helpers.editViewOnlyShareNotice(interaction, target, "en");
 
-  assert.deepEqual(titles.map(withoutIcon), ["Share is view-only", "Share is view-only"]);
+  assert.deepEqual(titles.map(withoutIcon), ["This share is view-only", "This share is view-only"]);
   assert.deepEqual(lookups, []);
 });
 
@@ -111,7 +113,7 @@ test("raid-task share refusal says view-only while the owner still shares and re
     );
   }
 
-  assert.deepEqual(refusals.map(withoutIcon), ["Share is view-only", "Share removed", "Share removed"]);
+  assert.deepEqual(refusals.map(withoutIcon), ["This share is view-only", "Share removed", "Share removed"]);
   assert.deepEqual(lookups, Array(3).fill(["viewer", { includeOwn: false }]));
 });
 
@@ -130,26 +132,21 @@ test("raid-task share refusal says view-only and warns once when the share looku
   );
 
   assert.equal(edits.length, 1);
-  assert.equal(withoutIcon(edits[0].embeds[0].data.title), "Share is view-only");
+  assert.equal(withoutIcon(edits[0].embeds[0].data.title), "This share is view-only");
   assert.deepEqual(edits[0].components, []);
   assert.equal(warn.mock.callCount(), 1);
   assert.match(warn.mock.calls[0].arguments.join(" "), /share lookup failed.*share lookup down/);
 });
 
-test("raid-task notice helpers wrap reply and update payloads", async () => {
+test("raid-task notice helpers wrap reply and edit payloads", async () => {
   const helpers = createRaidTaskNoticeHelpers({
     EmbedBuilder: FakeEmbedBuilder,
   });
   const replies = [];
-  const updates = [];
   const edits = [];
   const interaction = {
     reply: async (payload) => {
       replies.push(payload);
-      return payload;
-    },
-    update: async (payload) => {
-      updates.push(payload);
       return payload;
     },
     editReply: async (payload) => {
@@ -159,17 +156,12 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
   };
 
   await helpers.replyTaskNotice(interaction, {
-    type: "success",
+    kind: "done",
     title: "Saved",
     description: "Task registered",
   });
-  await helpers.updateTaskNotice(interaction, {
-    type: "warn",
-    title: "Check",
-    description: "Task needs attention",
-  });
   await helpers.editTaskNotice(interaction, {
-    type: "success",
+    kind: "done",
     title: "Finished",
     description: "Deferred task action completed",
   });
@@ -179,12 +171,6 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
   assert.equal(replies[0].embeds.length, 1);
   assert.match(replies[0].embeds[0].data.title, /Saved/);
   assert.equal(replies[0].embeds[0].data.description, "Task registered");
-
-  assert.equal(updates.length, 1);
-  assert.deepEqual(updates[0].components, []);
-  assert.equal(updates[0].embeds.length, 1);
-  assert.match(updates[0].embeds[0].data.title, /Check/);
-  assert.equal(updates[0].embeds[0].data.description, "Task needs attention");
 
   assert.equal(edits.length, 1);
   assert.deepEqual(edits[0].components, []);

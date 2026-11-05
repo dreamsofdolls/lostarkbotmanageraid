@@ -3,39 +3,34 @@
 const { t } = require("../../../services/i18n");
 const { isShareStillListed } = require("../../../services/access/access-control");
 const {
+  NoticeKind,
   editNotice,
   replyNotice,
-  updateNotice,
 } = require("../../../utils/raid/common/shared");
 
 // The view-only pair shows while the owner still shares a roster with the
 // viewer; the revoked pair once nothing is shared.
 const SHARE_REFUSAL_NOTICES = Object.freeze({
-  viewOnly: {
-    title: "raid-task.shareViewOnly.title",
-    description: "raid-task.shareViewOnly.description",
-  },
-  revoked: {
-    title: "raid-task.shareRevoked.title",
-    description: "raid-task.shareRevoked.description",
-  },
+  viewOnly: "raid-task.shareViewOnly",
+  revoked: "raid-task.shareRevoked",
 });
 
 /**
  * Build the notice for a refused shared-roster write.
- * @param {"viewOnly"|"revoked"} kind - downgraded share or revoked share
+ * @param {"viewOnly"|"revoked"} refusal - downgraded share or revoked share
  * @param {{ownerLabel?: string}} target - write target of the refused share
  * @param {string} lang - language code
- * @returns {{type: string, title: string, description: string}} notice options
+ * @returns {{kind: string, title: string, description: string, tip: string}} notice options
  */
-function buildShareRefusalNotice(kind, target, lang) {
-  const keys = SHARE_REFUSAL_NOTICES[kind];
+function buildShareRefusalNotice(refusal, target, lang) {
+  const stem = SHARE_REFUSAL_NOTICES[refusal];
   return {
-    type: "error",
-    title: t(keys.title, lang),
-    description: t(keys.description, lang, {
+    kind: NoticeKind.GUARD,
+    title: t(`${stem}.title`, lang),
+    description: t(`${stem}.description`, lang, {
       owner: target.ownerLabel || "(unknown)",
     }),
+    tip: t(`${stem}.tip`, lang),
   };
 }
 
@@ -50,10 +45,6 @@ function buildShareRefusalNotice(kind, target, lang) {
 function createRaidTaskNoticeHelpers({ EmbedBuilder, getAccessibleAccounts }) {
   function replyTaskNotice(interaction, options, extras = null) {
     return replyNotice(interaction, EmbedBuilder, options, extras || undefined);
-  }
-
-  function updateTaskNotice(interaction, options, extras) {
-    return updateNotice(interaction, EmbedBuilder, options, extras);
   }
 
   function editTaskNotice(interaction, options, extras = null) {
@@ -97,7 +88,6 @@ function createRaidTaskNoticeHelpers({ EmbedBuilder, getAccessibleAccounts }) {
     editViewOnlyShareNotice,
     replyShareRefusalNotice,
     replyTaskNotice,
-    updateTaskNotice,
     replyViewOnlyShareNotice,
   };
 }

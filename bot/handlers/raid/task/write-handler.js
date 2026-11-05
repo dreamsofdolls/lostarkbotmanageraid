@@ -2,6 +2,23 @@
 
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("./write-access");
+const { NoticeKind } = require("../../../utils/raid/common/shared");
+
+/**
+ * Notice for a /raid-task write whose save failed. The card names the action
+ * in plain words; the error itself goes only to the log.
+ * @param {string} descriptionKey - the action's failure sentence
+ * @param {string} lang
+ * @returns {{kind: string, title: string, description: string, tip: string}}
+ */
+function buildSaveFailedNotice(descriptionKey, lang) {
+  return {
+    kind: NoticeKind.FAILURE,
+    title: t("raid-task.save.addFailedTitle", lang),
+    description: t(descriptionKey, lang),
+    tip: t("raid-task.save.failedTip", lang),
+  };
+}
 
 /**
  * Shared access, retry and reply lifecycle for task additions and removals.
@@ -80,15 +97,11 @@ function createTaskMutationHandler({
     } catch (error) {
       const logLabel = commandName === "add-single" ? "add" : commandName;
       console.error(`[raid-task ${logLabel}] save failed:`, error?.message || error);
-      await replyTaskNotice(interaction, {
-        type: "error",
-        title: t("raid-task.save.addFailedTitle", lang),
-        description: t(saveFailedDescriptionKey, lang),
-      });
+      await replyTaskNotice(interaction, buildSaveFailedNotice(saveFailedDescriptionKey, lang));
       return;
     }
     if (result) await replyTaskNotice(interaction, buildNotice(result, request, lang));
   };
 }
 
-module.exports = { createTaskMutationHandler };
+module.exports = { buildSaveFailedNotice, createTaskMutationHandler };

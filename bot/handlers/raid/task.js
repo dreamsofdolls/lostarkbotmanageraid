@@ -11,6 +11,7 @@
 
 const { getAccessibleAccounts } = require("../../services/access/access-control");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { NoticeKind } = require("../../utils/raid/common/shared");
 const { createRaidTaskAddActionHandlers } = require("./task/add-actions");
 const { createRaidTaskAutocompleteHandlers } = require("./task/autocomplete");
 const { createRaidTaskClearActionHandlers } = require("./task/clear-actions");
@@ -169,9 +170,10 @@ function createRaidTaskCommand(deps) {
     // normal dispatch does not reach this branch.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await replyTaskNotice(interaction, {
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: t("raid-task.invalidSubcommandTitle", lang),
       description: t("raid-task.invalidSubcommandDescription", lang, { sub }),
+      tip: t("raid-task.invalidSubcommandTip", lang),
     });
   }
 

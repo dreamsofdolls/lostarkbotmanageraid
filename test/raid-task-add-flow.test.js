@@ -79,7 +79,7 @@ for (const kind of Object.keys(factories)) {
     const state = harness(kind, { saveError: Object.assign(new Error("conflict"), { name: "VersionError" }) });
     await state.run();
     assert.deepEqual(state.events, ["access", "read:owner", "access", "save", "read:owner", "access", "save", "reply"]);
-    assert.equal(state.notices[0].type, "success");
+    assert.equal(state.notices[0].kind, "done");
     const account = state.docs[1].accounts[0];
     const tasks = kind === "shared" ? account.sharedTasks : account.characters[0].sideTasks;
     assert.equal(tasks.length, 1);
@@ -91,7 +91,7 @@ for (const kind of Object.keys(factories)) {
     await state.run();
     assert.deepEqual(state.events, ["access", "read:owner", "access", "save", "reply"]);
     assert.equal(state.notices.length, 1);
-    assert.equal(state.notices[0].type, "error");
+    assert.equal(state.notices[0].kind, "failure");
   });
 }
 
@@ -99,8 +99,10 @@ test("shared all-rosters retry reports only committed rosters and never expands 
   const state = harness("shared", { allRosters: true, saveError: Object.assign(new Error("conflict"), { name: "VersionError" }) });
   await state.run();
   assert.deepEqual(state.events, ["read:executor", "save", "read:executor", "save", "reply"]);
-  assert.equal(state.notices[0].type, "success");
-  assert.ok(!state.notices[0].description.includes("main, main"), "a failed attempt must not contribute roster names");
+  assert.equal(state.notices[0].kind, "done");
+  const addedField = state.notices[0].fields.find((field) => field?.name === "✅ Added");
+  assert.ok(addedField, "the all-rosters card lists the rosters it added to");
+  assert.ok(!addedField.value.includes("main, main"), "a failed attempt must not contribute roster names");
 });
 
 test("shared retry skips a task added concurrently without saving or retaining failed additions", async () => {
@@ -110,7 +112,7 @@ test("shared retry skips a task added concurrently without saving or retaining f
   });
   await state.run();
   assert.deepEqual(state.events, ["read:executor", "save", "read:executor", "reply"]);
-  assert.equal(state.notices[0].type, "info");
+  assert.equal(state.notices[0].kind, "input");
   assert.equal(state.docs[1].accounts[0].sharedTasks.length, 1);
 });
 
@@ -120,6 +122,7 @@ for (const preset of ["constructor", "toString", "__proto__"]) {
     await state.run();
     assert.equal(state.saves, 0);
     assert.equal(state.notices.length, 1);
-    assert.match(state.notices[0].title, /Preset invalid/);
+    assert.equal(state.notices[0].kind, "input");
+    assert.match(state.notices[0].title, /Unknown preset/);
   });
 }

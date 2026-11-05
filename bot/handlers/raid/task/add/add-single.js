@@ -21,6 +21,11 @@ const {
   invalidTaskNameNotice,
   noRosterNotice,
 } = require("./add-common");
+const {
+  NoticeKind,
+  formatCharacterLabel,
+  getCharacterClass,
+} = require("../../../../utils/raid/common/shared");
 
 function readAddSingleRequest(interaction) {
   return {
@@ -34,9 +39,10 @@ function readAddSingleRequest(interaction) {
 function buildAddSingleValidationNotice(request, lang) {
   if (!request.characterName) {
     return {
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: t("raid-task.common.missingCharacterTitle", lang),
       description: t("raid-task.common.missingCharacterDescription", lang),
+      tip: t("raid-task.common.missingCharacterTip", lang),
     };
   }
 
@@ -49,6 +55,7 @@ function createAddSingleResult() {
   return {
     outcome: "added",
     resolvedCharName: "",
+    resolvedCharClass: "",
     dailyCount: 0,
     weeklyCount: 0,
   };
@@ -69,6 +76,7 @@ function applyAddSingleToUserDoc(userDoc, request, result, deps) {
   const character = found.character;
   const sideTasks = ensureSideTasks(character);
   result.resolvedCharName = getCharacterDisplayName(character);
+  result.resolvedCharClass = getCharacterClass(character);
 
   const outcome = tryAddSideTask(sideTasks, request, cycleStartForReset(request.reset, deps));
   if (outcome === "duplicate") {
@@ -87,47 +95,72 @@ function applyAddSingleToUserDoc(userDoc, request, result, deps) {
 const ADD_SINGLE_NOTICE_BUILDERS = {
   "no-roster": ({ lang }) => noRosterNotice(lang),
   "no-character": ({ request, lang }) => ({
-    type: "warn",
+    kind: NoticeKind.EMPTY,
     title: t("raid-task.common.noCharacterTitle", lang),
     description: t("raid-task.common.noCharacterDescription", lang, {
       characterName: request.characterName,
     }),
+    tip: t("raid-task.common.noCharacterTip", lang),
   }),
   "cap-reached": ({ result, request, lang }) => ({
-    type: "warn",
+    kind: NoticeKind.INPUT,
     title: t("raid-task.add.capReachedTitle", lang),
     description: t("raid-task.add.capReachedDescription", lang, {
-      characterName: result.resolvedCharName,
+      characterName: formatCharacterLabel(result.resolvedCharName, result.resolvedCharClass),
       cap: capForReset(request.reset),
       reset: request.reset,
-      dailyCount: result.dailyCount,
-      weeklyCount: result.weeklyCount,
-      capDaily: TASK_CAP_DAILY,
-      capWeekly: TASK_CAP_WEEKLY,
     }),
+    fields: [{
+      name: t("raid-task.fields.slotsUsed", lang),
+      value: t("raid-task.fields.slotsUsedValue", lang, {
+        dailyCount: result.dailyCount,
+        weeklyCount: result.weeklyCount,
+        capDaily: TASK_CAP_DAILY,
+        capWeekly: TASK_CAP_WEEKLY,
+      }),
+      inline: true,
+    }],
+    tip: t("raid-task.add.capReachedTip", lang),
   }),
   duplicate: ({ result, request, lang }) => ({
-    type: "info",
+    kind: NoticeKind.INPUT,
     title: t("raid-task.add.duplicateTitle", lang),
     description: t("raid-task.add.duplicateDescription", lang, {
-      characterName: result.resolvedCharName,
+      characterName: formatCharacterLabel(result.resolvedCharName, result.resolvedCharClass),
       taskName: request.taskName,
       reset: request.reset,
     }),
+    tip: t("raid-task.add.duplicateTip", lang),
   }),
   added: ({ result, request, lang }) => ({
-    type: "success",
+    kind: NoticeKind.DONE,
     title: t("raid-task.add.successTitle", lang),
     description: t("raid-task.add.successDescription", lang, {
-      characterName: result.resolvedCharName,
+      characterName: formatCharacterLabel(result.resolvedCharName, result.resolvedCharClass),
       taskName: request.taskName,
-      cycleLabel: cycleLabelForReset(request.reset, lang),
-      remainDaily: TASK_CAP_DAILY - result.dailyCount,
-      remainWeekly: TASK_CAP_WEEKLY - result.weeklyCount,
     }),
+    fields: [
+      { name: t("raid-task.fields.cycle", lang), value: cycleLabelForReset(request.reset, lang), inline: true },
+      {
+        name: t("raid-task.fields.slotsLeft", lang),
+        value: t("raid-task.fields.slotsLeftValue", lang, {
+          daily: TASK_CAP_DAILY - result.dailyCount,
+          weekly: TASK_CAP_WEEKLY - result.weeklyCount,
+        }),
+        inline: true,
+      },
+    ],
+    tip: t("raid-task.add.successTip", lang),
   }),
 };
 
+/**
+ * Notice for one /raid-task add (single character) outcome.
+ * @param {{outcome: string, resolvedCharName?: string, resolvedCharClass?: string, dailyCount?: number, weeklyCount?: number}} result
+ * @param {{characterName?: string, taskName?: string, reset?: string}} request
+ * @param {string} lang
+ * @returns {object} notice options for buildNoticeEmbed
+ */
 function buildAddSingleNotice(result, request, lang) {
   const builder = ADD_SINGLE_NOTICE_BUILDERS[result.outcome] || ADD_SINGLE_NOTICE_BUILDERS.added;
   return builder({ result, request, lang });
@@ -145,4 +178,4 @@ function createAddSingleHandler(deps) {
   });
 }
 
-module.exports = { createAddSingleHandler };
+module.exports = { buildAddSingleNotice, createAddSingleHandler };
