@@ -7,6 +7,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-11-05
 
 ### Changed
+- Every simple notice (a refusal, an empty result, a wait, a failure, a result or a confirmation) has one shape: an icon and colour per situation (🔒 blocked, ⌛ expired, ✏️ something to fix, 🔍 nothing found, 🚦 busy, ❌ failed, ⏳ working, ✅ done, ⚠️ done in part, ❔ asks to confirm), a short fixed title, one sentence, the next step as a 💡 footer and a timestamp. Red is kept for real failures.
+- One situation reads the same in every command: "no roster yet" and "roster not found" share one copy, a technical error moves out of the sentence into a 🧾 Details field, and character names carry their class icon. The narrator is "tớ" in Vietnamese, "I" in English and "わたくし" in Japanese; titles that used to rotate stay fixed and the variety moves to the sentence.
+- `/raid-share`, `/raid-bg`, the roster commands, the Local Sync owner check and the reply to an unexpected error now answer with these cards instead of plain text or one-off embeds; the unexpected-error card does not show the error itself.
 - `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
 - The retired nudge's **Switch to Local Sync** button handler, its route and its strings are removed; nothing has posted that button since the nudge stopped. `/raid-auto-manage action:local-on` and the `/raid-status` Local Sync view still switch a roster to Local Sync.
 
