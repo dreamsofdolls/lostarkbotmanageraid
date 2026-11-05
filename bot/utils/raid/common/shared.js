@@ -376,6 +376,20 @@ function buildDetailField(detail, lang) {
 }
 
 /**
+ * The "👥 Ai dùng được: Raid Manager" field a guard card shows when only a
+ * Raid Manager may run the command or press the button.
+ * @param {string} [lang]
+ * @returns {{name: string, value: string, inline: boolean}}
+ */
+function buildManagerOnlyField(lang) {
+  return {
+    name: t("common.fields.whoCanUse", lang),
+    value: t("common.fields.raidManagerOnly", lang),
+    inline: true,
+  };
+}
+
+/**
  * Render the shared `🟢 N done · 🟡 N partial · ⚪ N pending [· 🔒 N not eligible]`
  * footer line used by `/raid-status` (caller's own roster rollup) and
  * `/raid-check` (subject-scoped or filtered roster rollup). Caller owns
@@ -576,6 +590,7 @@ module.exports = {
   addChunkedEmbedField,
   buildNoticeEmbed,
   buildDetailField,
+  buildManagerOnlyField,
   buildNoRosterNotice,
   buildRosterNotFoundNotice,
   formatCharacterLabel,

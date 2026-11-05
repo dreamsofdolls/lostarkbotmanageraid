@@ -12,16 +12,43 @@
  */
 
 const {
+  NoticeKind,
   buildNoticeEmbed,
   getCharacterName,
   INLINE_SPACER,
 } = require("../../../utils/raid/common/shared");
-// tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
+// tPick, not t: the sync report titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const {
   getAppliedAutoManageEntries,
   getAutoManageEntries,
 } = require("../../../services/auto-manage/reports/utils");
+
+// The sync report's kind, title and next step by how the run went: nobody
+// synced and someone failed is a failure, any failure or skip is partial.
+const SYNC_REPORT_OUTCOMES = Object.freeze({
+  done: {
+    kind: NoticeKind.DONE,
+    titleKey: "raid-check.syncFlow.reportTitle",
+    tipKey: "raid-check.syncFlow.reportLineAllHint",
+  },
+  partial: {
+    kind: NoticeKind.PARTIAL,
+    titleKey: "raid-check.syncFlow.reportTitlePartial",
+    tipKey: "raid-check.syncFlow.reportLineAllHint",
+  },
+  failure: {
+    kind: NoticeKind.FAILURE,
+    titleKey: "raid-check.syncFlow.reportTitleFailed",
+    tipKey: "raid-check.syncFlow.reportHintAllFailed",
+  },
+});
+
+function syncReportOutcome({ syncedCount, failedCount, skippedCount }) {
+  if (failedCount > 0 && syncedCount === 0) return SYNC_REPORT_OUTCOMES.failure;
+  if (failedCount > 0 || skippedCount > 0) return SYNC_REPORT_OUTCOMES.partial;
+  return SYNC_REPORT_OUTCOMES.done;
+}
 
 /**
  * Build the /raid-check Sync UI service: the DM embed builder and the Sync
@@ -155,9 +182,10 @@ function createSyncUi({
         content: null,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
+            kind: NoticeKind.EMPTY,
             title: t("raid-check.syncFlow.noOptedInTitle", managerLang),
             description: t("raid-check.syncFlow.noOptedInAllDescription", managerLang),
+            tip: t("raid-check.syncFlow.noOptedInTip", managerLang),
           }),
         ],
       });
@@ -317,17 +345,7 @@ function createSyncUi({
       while (counterFields.length % 3 !== 0) counterFields.push(INLINE_SPACER);
     }
 
-    const allFailed = failedCount > 0 && syncedCount === 0;
-    let noticeType = "success";
-    let titleKey = "raid-check.syncFlow.reportTitle";
-    if (allFailed) {
-      noticeType = "error";
-      titleKey = "raid-check.syncFlow.reportTitleFailed";
-    } else if (failedCount > 0 || skippedCount > 0) {
-      noticeType = "warn";
-      titleKey = "raid-check.syncFlow.reportTitlePartial";
-    }
-
+    const outcome = syncReportOutcome({ syncedCount, failedCount, skippedCount });
     const lines = [
       t("raid-check.syncFlow.reportLineAllIntro", managerLang, {
         users: optedInDiscordIds.length,
@@ -340,17 +358,16 @@ function createSyncUi({
     if (skippedCount > 0) {
       lines.push(t("raid-check.syncFlow.reportTailSkipped", managerLang, { n: skippedCount }));
     }
-    const hintKey = allFailed
-      ? "raid-check.syncFlow.reportHintAllFailed"
-      : "raid-check.syncFlow.reportLineAllHint";
-    lines.push("", t(hintKey, managerLang));
 
+    // The one rich card on the notice builder: its counters are exempt from
+    // the three-field rule.
     const embed = buildNoticeEmbed(EmbedBuilder, {
-      type: noticeType,
-      title: t(titleKey, managerLang),
+      kind: outcome.kind,
+      title: t(outcome.titleKey, managerLang),
       description: lines.join("\n"),
+      fields: counterFields,
+      tip: t(outcome.tipKey, managerLang),
     });
-    embed.addFields(counterFields);
     await interaction.editReply({ content: null, embeds: [embed] });
   }
 

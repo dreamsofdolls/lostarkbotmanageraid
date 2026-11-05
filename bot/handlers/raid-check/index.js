@@ -15,6 +15,8 @@ const {
   buildDisableAutoDmEmbed,
 } = require("./auto-manage/auto-manage");
 const {
+  NoticeKind,
+  buildManagerOnlyField,
   deferEphemeralReply,
   editNotice,
 } = require("../../utils/raid/common/shared");
@@ -88,9 +90,11 @@ function createRaidCheckCommand(deps) {
       await deferEphemeralReply(interaction);
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await editNotice(interaction, EmbedBuilder, {
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-check.auth.buttonManagerOnlyTitle", clickerLang),
         description: t("raid-check.auth.buttonManagerOnlyDescription", clickerLang),
+        fields: [buildManagerOnlyField(clickerLang)],
+        tip: t("raid-check.auth.managerOnlyTip", clickerLang),
       });
       return;
     }
@@ -104,11 +108,12 @@ function createRaidCheckCommand(deps) {
     await deferEphemeralReply(interaction);
     const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await editNotice(interaction, EmbedBuilder, {
-      type: "warn",
+      kind: NoticeKind.EXPIRED,
       title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
       description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, {
         action: route.action,
       }),
+      tip: t("raid-check.staleButton.reopenTip", clickerLang),
     });
   }
 

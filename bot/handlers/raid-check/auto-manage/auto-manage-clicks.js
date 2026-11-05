@@ -1,9 +1,11 @@
 "use strict";
 
-// tPick, not t: the enable/disable titles resolved through these key tables are
-// variant pools. Non-pool keys pass through to t() unchanged.
+// tPick, not t: the self enable/disable hero sentences resolved through these
+// key tables are variant pools. Non-pool keys pass through to t() unchanged.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const {
+  NoticeKind,
+  buildDetailField,
   deferEphemeralReply,
   editNotice,
   followUpNotice,
@@ -26,25 +28,26 @@ function createRaidCheckAutoManageUi(deps) {
     User,
   } = deps;
 
-  const localizeNotice = ({ type, titleKey, descriptionKey, lang, vars }) => ({
-    type,
-    title: t(titleKey, lang),
-    description: t(descriptionKey, lang, vars),
+  // Every notice here reads `${keyPrefix}.${stem}Title|Description|Tip`; a
+  // failure also carries the raw error in the detail field.
+  const keyedNotice = ({ kind, keyPrefix, stem, lang, vars, detail }) => ({
+    kind,
+    title: t(`${keyPrefix}.${stem}Title`, lang),
+    description: t(`${keyPrefix}.${stem}Description`, lang, vars),
+    tip: t(`${keyPrefix}.${stem}Tip`, lang),
+    fields: detail ? [buildDetailField(detail, lang)] : [],
   });
 
-  const editNoticeByKey = (interaction, options) =>
-    editNotice(interaction, EmbedBuilder, localizeNotice(options));
+  const editKeyedNotice = (interaction, options) =>
+    editNotice(interaction, EmbedBuilder, keyedNotice(options));
 
-  const followUpNoticeByKey = (interaction, options) =>
-    followUpNotice(interaction, EmbedBuilder, localizeNotice(options));
+  const followUpKeyedNotice = (interaction, options) =>
+    followUpNotice(interaction, EmbedBuilder, keyedNotice(options));
 
-  const editNoticeByText = (interaction, { type, title, description }) =>
-    editNotice(
-      interaction,
-      EmbedBuilder,
-      { type, title, description },
-      { components: [] }
-    ).catch(() => {});
+  // The self buttons sit on a DM; the result replaces that DM and its button.
+  const replaceWithKeyedNotice = (interaction, options) =>
+    editNotice(interaction, EmbedBuilder, keyedNotice(options), { components: [] })
+      .catch(() => {});
 
   async function sendTargetDm({ interaction, targetDiscordId, buildEmbed, buildRow }) {
     try {
@@ -70,55 +73,43 @@ function createRaidCheckAutoManageUi(deps) {
 
   async function replyAtomicOutcome(
     interaction,
-    outcomeConfig,
+    { keyPrefix, outcomes },
     { lang, targetDiscordId, result },
-    sendNoticeByKey = editNoticeByKey
+    sendKeyedNotice = editKeyedNotice
   ) {
-    const config = outcomeConfig[result.outcome];
-    if (!config) return false;
-    if (config.logError) {
-      console.error(config.logError(targetDiscordId), result.error?.message || result.error);
+    const outcome = outcomes[result.outcome];
+    if (!outcome) return false;
+    const errorText = result.error?.message || result.error;
+    if (outcome.logError) {
+      console.error(outcome.logError(targetDiscordId), errorText);
     }
-    await sendNoticeByKey(interaction, {
-      type: config.type,
-      titleKey: config.titleKey,
-      descriptionKey: config.descriptionKey,
+    await sendKeyedNotice(interaction, {
+      kind: outcome.kind,
+      keyPrefix,
+      stem: outcome.stem,
       lang,
-      vars: {
-        error: result.error?.message || result.error,
-        target: targetDiscordId,
-      },
+      vars: { target: targetDiscordId },
+      detail: outcome.kind === NoticeKind.FAILURE && errorText ? String(errorText) : null,
     });
     return true;
   }
 
+  // A refusal from the stored state is input when nothing would change and
+  // guard when the other sync mode blocks it; a user gone since the card
+  // rendered makes the button expired.
   const MANAGER_AUTO_ACTIONS = Object.freeze({
     enable: {
       transition: tryEnableAutoManage,
       keyPrefix: "raid-auto-manage.enableButton",
-      successType: "success",
       outcomes: {
         error: {
-          type: "error",
-          titleKey: "raid-auto-manage.enableButton.flipFailTitle",
-          descriptionKey: "raid-auto-manage.enableButton.flipFailDescription",
+          kind: NoticeKind.FAILURE,
+          stem: "flipFail",
           logError: (target) => `[raid-check enable-auto] flip failed user=${target}:`,
         },
-        missing: {
-          type: "warn",
-          titleKey: "raid-auto-manage.enableButton.userMissingTitle",
-          descriptionKey: "raid-auto-manage.enableButton.userMissingDescription",
-        },
-        "already-on": {
-          type: "info",
-          titleKey: "raid-auto-manage.enableButton.alreadyOnTitle",
-          descriptionKey: "raid-auto-manage.enableButton.alreadyOnDescription",
-        },
-        "local-locked": {
-          type: "info",
-          titleKey: "raid-auto-manage.enableButton.localLockedTitle",
-          descriptionKey: "raid-auto-manage.enableButton.localLockedDescription",
-        },
+        missing: { kind: NoticeKind.EXPIRED, stem: "userMissing" },
+        "already-on": { kind: NoticeKind.INPUT, stem: "alreadyOn" },
+        "local-locked": { kind: NoticeKind.GUARD, stem: "localLocked" },
       },
       buildDmEmbed: ({ managerId, result, targetLang }) =>
         buildEnableAutoDmEmbed(
@@ -138,24 +129,14 @@ function createRaidCheckAutoManageUi(deps) {
     disable: {
       transition: tryDisableAutoManage,
       keyPrefix: "raid-auto-manage.disableButton",
-      successType: "muted",
       outcomes: {
         error: {
-          type: "error",
-          titleKey: "raid-auto-manage.disableButton.flipFailTitle",
-          descriptionKey: "raid-auto-manage.disableButton.flipFailDescription",
+          kind: NoticeKind.FAILURE,
+          stem: "flipFail",
           logError: (target) => `[raid-check disable-auto-one] flip failed user=${target}:`,
         },
-        missing: {
-          type: "warn",
-          titleKey: "raid-auto-manage.disableButton.userMissingTitle",
-          descriptionKey: "raid-auto-manage.disableButton.userMissingDescription",
-        },
-        "already-off": {
-          type: "info",
-          titleKey: "raid-auto-manage.disableButton.alreadyOffTitle",
-          descriptionKey: "raid-auto-manage.disableButton.alreadyOffDescription",
-        },
+        missing: { kind: NoticeKind.EXPIRED, stem: "userMissing" },
+        "already-off": { kind: NoticeKind.INPUT, stem: "alreadyOff" },
       },
       buildDmEmbed: ({ managerId, targetLang }) =>
         buildDisableAutoDmEmbed(EmbedBuilder, { managerId }, targetLang),
@@ -170,68 +151,43 @@ function createRaidCheckAutoManageUi(deps) {
     },
   });
 
+  // `outcomes` arrive as a follow-up and leave the DM as it is; a
+  // `resultNotices` entry replaces the DM and its button.
   const SELF_AUTO_ACTIONS = Object.freeze({
     disable: {
       transition: tryDisableAutoManage,
       keyPrefix: "raid-auto-manage.disableSelf",
-      resultType: "muted",
       logTag: "raid-check disable-auto-self",
       outcomes: {
         error: {
-          type: "error",
-          titleKey: "raid-auto-manage.disableSelf.failTitle",
-          descriptionKey: "raid-auto-manage.disableSelf.failDescription",
+          kind: NoticeKind.FAILURE,
+          stem: "fail",
           logError: (target) => `[raid-check disable-auto-self] flip failed user=${target}:`,
         },
-        missing: {
-          type: "warn",
-          titleKey: "raid-auto-manage.disableSelf.accountMissingTitle",
-          descriptionKey: "raid-auto-manage.disableSelf.accountMissingDescription",
-        },
+        missing: { kind: NoticeKind.EXPIRED, stem: "accountMissing" },
       },
-      resultText: {
-        disabled: {
-          titleKey: "raid-auto-manage.disableSelf.disabledTitle",
-          descriptionKey: "raid-auto-manage.disableSelf.disabledDescription",
-        },
-        "already-off": {
-          titleKey: "raid-auto-manage.disableSelf.alreadyOffTitle",
-          descriptionKey: "raid-auto-manage.disableSelf.alreadyOffDescription",
-        },
+      resultNotices: {
+        disabled: { kind: NoticeKind.DONE, stem: "disabled" },
+        "already-off": { kind: NoticeKind.INPUT, stem: "alreadyOff" },
       },
       defaultOutcome: "already-off",
     },
     enable: {
       transition: tryEnableAutoManage,
       keyPrefix: "raid-auto-manage.enableSelf",
-      resultType: "success",
       logTag: "raid-check enable-auto-self",
       outcomes: {
         error: {
-          type: "error",
-          titleKey: "raid-auto-manage.enableSelf.failTitle",
-          descriptionKey: "raid-auto-manage.enableSelf.failDescription",
+          kind: NoticeKind.FAILURE,
+          stem: "fail",
           logError: (target) => `[raid-check enable-auto-self] flip failed user=${target}:`,
         },
-        missing: {
-          type: "warn",
-          titleKey: "raid-auto-manage.enableSelf.accountMissingTitle",
-          descriptionKey: "raid-auto-manage.enableSelf.accountMissingDescription",
-        },
+        missing: { kind: NoticeKind.EXPIRED, stem: "accountMissing" },
       },
-      resultText: {
-        flipped: {
-          titleKey: "raid-auto-manage.enableSelf.flippedTitle",
-          descriptionKey: "raid-auto-manage.enableSelf.flippedDescription",
-        },
-        "local-locked": {
-          titleKey: "raid-auto-manage.enableSelf.localLockedTitle",
-          descriptionKey: "raid-auto-manage.enableSelf.localLockedDescription",
-        },
-        "already-on": {
-          titleKey: "raid-auto-manage.enableSelf.alreadyOnTitle",
-          descriptionKey: "raid-auto-manage.enableSelf.alreadyOnDescription",
-        },
+      resultNotices: {
+        flipped: { kind: NoticeKind.DONE, stem: "flipped" },
+        "local-locked": { kind: NoticeKind.GUARD, stem: "localLocked" },
+        "already-on": { kind: NoticeKind.INPUT, stem: "alreadyOn" },
       },
       defaultOutcome: "already-on",
     },
@@ -242,10 +198,10 @@ function createRaidCheckAutoManageUi(deps) {
     const managerLangPromise = getUserLanguage(interaction.user.id, { UserModel: User });
     if (!targetDiscordId) {
       const managerLang = await managerLangPromise;
-      await editNoticeByKey(interaction, {
-        type: "warn",
-        titleKey: `${config.keyPrefix}.expiredTitle`,
-        descriptionKey: `${config.keyPrefix}.expiredDescription`,
+      await editKeyedNotice(interaction, {
+        kind: NoticeKind.EXPIRED,
+        keyPrefix: config.keyPrefix,
+        stem: "expired",
         lang: managerLang,
       });
       return;
@@ -257,7 +213,7 @@ function createRaidCheckAutoManageUi(deps) {
     ]);
     const handled = await replyAtomicOutcome(
       interaction,
-      config.outcomes,
+      config,
       { lang: managerLang, targetDiscordId, result }
     );
     if (handled) return;
@@ -286,21 +242,18 @@ function createRaidCheckAutoManageUi(deps) {
       dmSent,
     }));
     await editNotice(interaction, EmbedBuilder, {
-      type: config.successType,
-      title: t(`${config.keyPrefix}.successTitle`, managerLang),
-      description: [
-        t(`${config.keyPrefix}.successLineIntro`, managerLang),
-        "",
-        t(`${config.keyPrefix}.successLineTarget`, managerLang, {
-          target: targetDiscordId,
-        }),
-        t(`${config.keyPrefix}.successLineState`, managerLang),
-        dmSent
-          ? t(`${config.keyPrefix}.successLineDmSent`, managerLang)
-          : t(`${config.keyPrefix}.successLineDmFailed`, managerLang),
-        "",
-        t(`${config.keyPrefix}.successLineOutro`, managerLang),
-      ].join("\n"),
+      ...keyedNotice({
+        kind: NoticeKind.DONE,
+        keyPrefix: config.keyPrefix,
+        stem: "success",
+        lang: managerLang,
+        vars: { target: targetDiscordId },
+      }),
+      fields: [{
+        name: t(`${config.keyPrefix}.successDmLabel`, managerLang),
+        value: t(`${config.keyPrefix}.${dmSent ? "successDmSent" : "successDmFailed"}`, managerLang),
+        inline: true,
+      }],
     });
   }
 
@@ -314,10 +267,10 @@ function createRaidCheckAutoManageUi(deps) {
 
     await deferEphemeralReply(interaction);
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await editNoticeByKey(interaction, {
-      type: reason === "expired" ? "warn" : "lock",
-      titleKey: `${config.keyPrefix}.${reason}Title`,
-      descriptionKey: `${config.keyPrefix}.${reason}Description`,
+    await editKeyedNotice(interaction, {
+      kind: reason === "expired" ? NoticeKind.EXPIRED : NoticeKind.GUARD,
+      keyPrefix: config.keyPrefix,
+      stem: reason,
       lang,
     });
     return true;
@@ -333,19 +286,20 @@ function createRaidCheckAutoManageUi(deps) {
     ]);
     const handled = await replyAtomicOutcome(
       interaction,
-      config.outcomes,
+      config,
       { lang, targetDiscordId, result },
-      followUpNoticeByKey
+      followUpKeyedNotice
     );
     if (handled) return;
 
-    const textKeys = config.resultText[result.outcome]
-      || config.resultText[config.defaultOutcome];
+    const notice = config.resultNotices[result.outcome]
+      || config.resultNotices[config.defaultOutcome];
     console.log(`[${config.logTag}] user=${targetDiscordId} outcome=${result.outcome}`);
-    await editNoticeByText(interaction, {
-      type: config.resultType,
-      title: t(textKeys.titleKey, lang),
-      description: t(textKeys.descriptionKey, lang),
+    await replaceWithKeyedNotice(interaction, {
+      kind: notice.kind,
+      keyPrefix: config.keyPrefix,
+      stem: notice.stem,
+      lang,
     });
   }
 

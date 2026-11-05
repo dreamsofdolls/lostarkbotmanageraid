@@ -229,7 +229,7 @@ test("manager Sync-check all dispatches without requiring per-raid metadata", as
     deferReply: async () => {}, editReply: async payload => { report = payload; },
   });
   assert.equal(queries, 1);
-  assert.match(report.embeds[0].toJSON().description, /No rosters have Auto-sync enabled/);
+  assert.match(report.embeds[0].toJSON().description, /No roster has Auto-sync on/);
 });
 
 async function openAllModeSession({

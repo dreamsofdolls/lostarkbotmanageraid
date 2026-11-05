@@ -7,11 +7,13 @@
  */
 
 const {
+  NoticeKind,
+  buildDetailField,
   followUpNotice,
   replyNotice,
 } = require("../../../utils/raid/common/shared");
 const { firstSelectValue } = require("../../../utils/discord/component-values");
-// tPick, not t: the refresh titles are variant pools; other keys pass through.
+// tPick, not t: the refresh hero sentences are variant pools; other keys pass through.
 const { tPick: t } = require("../../../services/i18n");
 const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
 const {
@@ -28,22 +30,33 @@ const {
 
 const ROSTER_REFRESH_NOTICES = Object.freeze({
   updated: {
-    type: "success",
+    kind: NoticeKind.DONE,
     title: "raid-check.refreshFlow.successTitle",
     description: "raid-check.refreshFlow.successDescription",
   },
   noUpdate: {
-    type: "warn",
+    kind: NoticeKind.BUSY,
     title: "raid-check.refreshFlow.noUpdateTitle",
     description: "raid-check.refreshFlow.noUpdateDescription",
+    tip: "raid-check.refreshFlow.retryTip",
   },
+  // The user or roster is gone since the page rendered: the page is older
+  // than the data.
   missing: {
-    type: "warn",
+    kind: NoticeKind.EXPIRED,
     title: "raid-check.refreshFlow.missingTitle",
     description: "raid-check.refreshFlow.missingDescription",
+    tip: "raid-check.refreshFlow.missingTip",
   },
 });
 
+/**
+ * The notice for a manual roster refresh pressed on a /raid-check page. A
+ * result without a status (the page had no roster to refresh) reads as missing.
+ * @param {{status?: string, accountName?: string, discordId?: string}} result
+ * @param {string} lang
+ * @returns {{kind: string, title: string, description: string, tip?: string}}
+ */
 function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
   return buildRosterRefreshNotice(result, lang, ROSTER_REFRESH_NOTICES, {
     accountName: result?.accountName || "?",
@@ -146,14 +159,14 @@ function createAllModeComponentHandlers({
       const targetDiscordId = page?.userDoc?.discordId || "";
       const targetAccountName = page?.account?.accountName || "";
       if (!targetDiscordId || !targetAccountName) {
-        await replyNotice(component, EmbedBuilder, {
-          type: "warn",
-          title: t("raid-check.refreshFlow.missingTitle", lang),
-          description: t("raid-check.refreshFlow.missingDescription", lang, {
-            accountName: targetAccountName || "?",
-            target: targetDiscordId ? `<@${targetDiscordId}>` : "?",
-          }),
-        }).catch(() => {});
+        await replyNotice(
+          component,
+          EmbedBuilder,
+          buildRaidCheckRosterRefreshNoticePayload(
+            { accountName: targetAccountName, discordId: targetDiscordId },
+            lang
+          )
+        ).catch(() => {});
         return;
       }
 
@@ -184,11 +197,13 @@ function createAllModeComponentHandlers({
       } catch (err) {
         console.error("[raid-check all] roster-refresh failed:", err?.message || err);
         await followUpNotice(component, EmbedBuilder, {
-          type: "error",
+          kind: NoticeKind.FAILURE,
           title: t("raid-check.refreshFlow.failedTitle", lang),
           description: t("raid-check.refreshFlow.failedDescription", lang, {
-            error: err?.message || String(err),
+            accountName: targetAccountName,
           }),
+          fields: [buildDetailField(err?.message || String(err), lang)],
+          tip: t("raid-check.refreshFlow.retryTip", lang),
         }).catch(() => {});
       }
     },

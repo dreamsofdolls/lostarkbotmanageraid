@@ -204,7 +204,8 @@ test("raid-check auto-manage manager disable sends the matching self-enable acti
   assert.equal(targetSends[0].components[0].components[0].data.customId, "raid-check:enable-auto-self:user-1");
   assert.equal(targetSends[0].components[0].components[0].data.style, "primary");
   assert.equal(interaction.edits.length, 1);
-  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.muted);
+  // Turning auto-sync off on request is done, like turning it on.
+  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.success);
 });
 
 test("raid-check auto-manage self disable rejects clicks from a different user", async () => {
@@ -221,7 +222,8 @@ test("raid-check auto-manage self disable rejects clicks from a different user",
   assert.equal(User.calls.findOneAndUpdate.length, 0);
   assert.equal(interaction.deferredReplies.length, 1);
   assert.equal(interaction.edits.length, 1);
-  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.danger);
+  // A wrong-user refusal is a guard (yellow); red is kept for real failures.
+  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.progress);
 });
 
 test("raid-check auto-manage manager action acknowledges before DB work", async () => {

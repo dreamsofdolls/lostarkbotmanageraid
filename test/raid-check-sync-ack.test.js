@@ -19,7 +19,8 @@ class FakeEmbedBuilder {
   setColor(value) { this.color = value; return this; }
   setTitle(value) { this.title = value; return this; }
   setDescription(value) { this.description = value; return this; }
-  addFields(fields) { this.fields.push(...fields); return this; }
+  addFields(...fields) { this.fields.push(...fields.flat()); return this; }
+  setFooter(value) { this.footer = value; return this; }
   setTimestamp() { return this; }
 }
 

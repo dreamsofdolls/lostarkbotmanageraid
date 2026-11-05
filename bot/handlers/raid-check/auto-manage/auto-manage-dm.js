@@ -1,7 +1,11 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
-const { INLINE_SPACER } = require("../../../utils/raid/common/shared");
+const {
+  INLINE_SPACER,
+  NoticeKind,
+  buildNoticeEmbed,
+} = require("../../../utils/raid/common/shared");
 
 // Discord's caps on one embed: 25 fields and 6000 characters in all.
 const EMBED_MAX_FIELDS = 25;
@@ -100,19 +104,21 @@ function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }, lang = "vi
   return embed;
 }
 
+/**
+ * The DM a member gets when a Raid Manager turned their Bible auto-sync off;
+ * it is sent with a button to turn it back on.
+ * @param {Function} EmbedBuilder
+ * @param {{managerId: string}} options
+ * @param {string} [lang="vi"] - the member's language
+ * @returns {EmbedBuilder}
+ */
 function buildDisableAutoDmEmbed(EmbedBuilder, { managerId }, lang = "vi") {
-  const description = [
-    t("raid-auto-manage.dm.disable.description", lang, { managerId }),
-    "",
-    t("raid-auto-manage.dm.disable.statusLine", lang),
-    t("raid-auto-manage.dm.disable.manualSyncLine", lang),
-    t("raid-auto-manage.dm.disable.quickOnLine", lang),
-  ].join("\n");
-
-  return new EmbedBuilder()
-    .setColor(0x99aab5)
-    .setTitle(`\u26aa ${t("raid-auto-manage.dm.disable.title", lang)}`)
-    .setDescription(description);
+  return buildNoticeEmbed(EmbedBuilder, {
+    kind: NoticeKind.DONE,
+    title: t("raid-auto-manage.dm.disable.title", lang),
+    description: t("raid-auto-manage.dm.disable.description", lang, { managerId }),
+    tip: t("raid-auto-manage.dm.disable.tip", lang),
+  });
 }
 
 module.exports = {

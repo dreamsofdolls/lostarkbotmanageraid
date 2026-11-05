@@ -390,10 +390,14 @@ test("buildDisableAutoDmEmbed: includes manager mention in description", () => {
 test("buildDisableAutoDmEmbed: states ON→OFF transition + opt-back-in path explicitly", () => {
   const embed = buildDisableAutoDmEmbed(EmbedBuilder, { managerId: "manager-1" });
   const json = embed.toJSON();
-  assert.match(json.description, /Trạng thái mới.*OFF/);
+  // The switch to OFF is the done card's title; the manual path stays in the sentence.
+  assert.ok(json.title.startsWith("✅  "), json.title);
+  assert.match(json.title, /tắt auto-sync/);
+  assert.match(json.description, /\/raid-set/);
+  assert.ok(json.timestamp);
   // Re-enable path must be advertised so the user has agency to revert
   // without having to figure out the slash command from scratch.
-  assert.match(json.description, /Bật lại nhanh|action:on/);
+  assert.match(json.footer.text, /action:on/);
 });
 
 test("buildDisableAutoDmEmbed: emits no roster fields (disable case skips status section by design)", () => {

@@ -1,6 +1,8 @@
 "use strict";
 
 const {
+  NoticeKind,
+  buildManagerOnlyField,
   buildNoticeEmbed,
   deferEphemeralReply,
   editNotice,
@@ -75,9 +77,11 @@ function createAllModeHandler({
         content: null,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
+            kind: NoticeKind.GUARD,
             title: t("raid-check.auth.managerOnlyTitle", lang),
             description: t("raid-check.auth.managerOnlyDescription", lang),
+            fields: [buildManagerOnlyField(lang)],
+            tip: t("raid-check.auth.managerOnlyTip", lang),
           }),
         ],
       });
@@ -117,9 +121,10 @@ function createAllModeHandler({
         content: null,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
+            kind: NoticeKind.EMPTY,
             title: t("raid-check.notice.noRosterTitle", lang),
             description: t("raid-check.notice.noRosterDescription", lang),
+            tip: t("raid-check.notice.noRosterTip", lang),
           }),
         ],
       });
@@ -219,9 +224,10 @@ function createAllModeHandler({
     const renderEmbed = (pageIndex) => {
       if (!Number.isInteger(pageIndex)) {
         return buildNoticeEmbed(EmbedBuilder, {
-          type: "info",
+          kind: NoticeKind.EMPTY,
           title: t("raid-check.notice.noFilterMatchesTitle", lang),
           description: t("raid-check.notice.noFilterMatchesDescription", lang),
+          tip: t("raid-check.notice.noFilterMatchesTip", lang),
         });
       }
       return buildRaidPage(pageIndex);
@@ -334,9 +340,10 @@ function createAllModeHandler({
           if (!deferred) return;
           const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
           await editNotice(component, EmbedBuilder, {
-            type: "lock",
+            kind: NoticeKind.GUARD,
             title: t("raid-check.notice.sessionLockTitle", clickerLang),
             description: t("raid-check.notice.sessionLockDescription", clickerLang),
+            tip: t("raid-check.notice.sessionLockTip", clickerLang),
           }).catch(() => {});
         }
         return;
