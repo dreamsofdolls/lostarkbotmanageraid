@@ -115,6 +115,6 @@ test("world-event reminder toggle writes the exact nested enabled field", async 
       options: { upsert: true, setDefaultsOnInsert: true },
     }]);
     assert.equal(replies.length, 1);
-    assert.equal(replies[0].type, "success");
+    assert.equal(replies[0].kind, "done");
   }
 });

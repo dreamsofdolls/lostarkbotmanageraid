@@ -253,6 +253,15 @@ const FAILURE_NOTICE_STEMS = [
   "raid-auto-manage.enableSelf.fail",
   "raid-auto-manage.enableSelf.accountMissing",
   "raid-auto-manage.enableSelf.localLocked",
+  "raid-channel.auth.serverOnly",
+  "raid-channel.auth.manageGuild",
+  "raid-channel.set.monitorDisabled",
+  "raid-channel.set.missingPerms",
+  "raid-channel.cleanup.channelGone",
+  "raid-channel.cleanup.fail",
+  "raid-announce.auth.serverOnly",
+  "raid-announce.auth.manageGuild",
+  "raid-announce.setChannel.missingPerms",
 ];
 
 // /raid-log copy is `raid-log.notices.<code>.title|description|tip`.

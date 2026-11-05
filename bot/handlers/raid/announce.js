@@ -6,7 +6,7 @@
 
 "use strict";
 
-const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
+const { NoticeKind, replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   getRaidAnnounceActionHandler,
@@ -62,17 +62,19 @@ function createRaidAnnounceCommand(deps) {
 
     if (!guildId) {
       await replyAnnounceNotice({
-        type: "warn",
+        kind: NoticeKind.GUARD,
         title: t("raid-announce.auth.serverOnlyTitle", lang),
         description: t("raid-announce.auth.serverOnlyDescription", lang),
+        tip: t("raid-announce.auth.serverOnlyTip", lang),
       });
       return;
     }
     if (!hasManageGuild(interaction, PermissionFlagsBits)) {
       await replyAnnounceNotice({
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-announce.auth.manageGuildTitle", lang),
         description: t("raid-announce.auth.manageGuildDescription", lang),
+        tip: t("raid-announce.auth.manageGuildTip", lang),
       });
       return;
     }
@@ -81,9 +83,10 @@ function createRaidAnnounceCommand(deps) {
     const action = interaction.options.getString("action", true);
     if (!isValidRaidAnnounceAction(action)) {
       await replyAnnounceNotice({
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-announce.invalid.actionTitle", lang),
         description: t("raid-announce.invalid.actionDescription", lang, { action }),
+        tip: t("raid-announce.invalid.actionTip", lang),
       });
       return;
     }
@@ -91,9 +94,10 @@ function createRaidAnnounceCommand(deps) {
     const entry = announcementTypeEntry(type);
     if (!entry) {
       await replyAnnounceNotice({
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-announce.invalid.typeTitle", lang),
         description: t("raid-announce.invalid.typeDescription", lang, { type }),
+        tip: t("raid-announce.invalid.typeTip", lang),
       });
       return;
     }

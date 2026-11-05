@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const { NoticeKind } = require("../../../utils/raid/common/shared");
 
 function buildOverridableTypeList(announcementOverridableTypeKeys) {
   return announcementOverridableTypeKeys()
@@ -29,22 +30,24 @@ async function handleSetAnnouncementChannel(ctx) {
 
   if (!overridable) {
     await replyAnnounceNotice({
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: t("raid-announce.setChannel.notOverridableTitle", lang),
       description: t("raid-announce.setChannel.notOverridableDescription", lang, {
         type,
         typeLabel,
         overridableList: buildOverridableTypeList(announcementOverridableTypeKeys),
       }),
+      tip: t("raid-announce.setChannel.notOverridableTip", lang),
     });
     return;
   }
 
   if (!channel) {
     await replyAnnounceNotice({
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: t("raid-announce.setChannel.missingChannelTitle", lang),
       description: t("raid-announce.setChannel.missingChannelDescription", lang),
+      tip: t("raid-announce.setChannel.missingChannelTip", lang),
     });
     return;
   }
@@ -53,12 +56,13 @@ async function handleSetAnnouncementChannel(ctx) {
   const missing = getMissingAnnouncementChannelPermissions(channel, botMember);
   if (missing.length > 0) {
     await replyAnnounceNotice({
-      type: "lock",
+      kind: NoticeKind.GUARD,
       title: t("raid-announce.setChannel.missingPermsTitle", lang),
       description: t("raid-announce.setChannel.missingPermsDescription", lang, {
         channelId: channel.id,
         missing: missing.join(", "),
       }),
+      tip: t("raid-announce.setChannel.missingPermsTip", lang),
     });
     return;
   }
@@ -69,17 +73,14 @@ async function handleSetAnnouncementChannel(ctx) {
     { upsert: true, setDefaultsOnInsert: true }
   );
   await replyAnnounceNotice({
-    type: "success",
+    kind: NoticeKind.DONE,
     title: t("raid-announce.setChannel.successTitle", lang),
-    description: [
-      t("raid-announce.setChannel.successLineIntro", lang),
-      "",
-      t("raid-announce.setChannel.successLineType", lang, { type, typeLabel }),
-      t("raid-announce.setChannel.successLineChannel", lang, { channelId: channel.id }),
-      t("raid-announce.setChannel.successLineImpact", lang),
-      "",
-      t("raid-announce.setChannel.successLineRevert", lang, { type }),
-    ].join("\n"),
+    description: t("raid-announce.setChannel.successDescription", lang, {
+      type,
+      typeLabel,
+      channelId: channel.id,
+    }),
+    tip: t("raid-announce.setChannel.successTip", lang, { type }),
   });
 }
 
@@ -101,18 +102,20 @@ async function handleClearAnnouncementChannel(ctx) {
 
   if (!overridable) {
     await replyAnnounceNotice({
-      type: "warn",
+      kind: NoticeKind.INPUT,
       title: t("raid-announce.clearChannel.notOverridableTitle", lang),
       description: t("raid-announce.clearChannel.notOverridableDescription", lang, { type }),
+      tip: t("raid-announce.clearChannel.notOverridableTip", lang),
     });
     return;
   }
 
   if (!current.channelId) {
     await replyAnnounceNotice({
-      type: "info",
+      kind: NoticeKind.INPUT,
       title: t("raid-announce.clearChannel.noOverrideTitle", lang),
       description: t("raid-announce.clearChannel.noOverrideDescription", lang, { type }),
+      tip: t("raid-announce.clearChannel.noOverrideTip", lang),
     });
     return;
   }
@@ -122,17 +125,10 @@ async function handleClearAnnouncementChannel(ctx) {
     { $set: { [`announcements.${subdocKey}.channelId`]: null } }
   );
   await replyAnnounceNotice({
-    type: "success",
+    kind: NoticeKind.DONE,
     title: t("raid-announce.clearChannel.successTitle", lang),
-    description: [
-      t("raid-announce.clearChannel.successLineIntro", lang),
-      "",
-      t("raid-announce.clearChannel.successLineType", lang, { type, typeLabel }),
-      t("raid-announce.clearChannel.successLineChannel", lang),
-      t("raid-announce.clearChannel.successLineImpact", lang),
-      "",
-      t("raid-announce.clearChannel.successLineRevert", lang),
-    ].join("\n"),
+    description: t("raid-announce.clearChannel.successDescription", lang, { type, typeLabel }),
+    tip: t("raid-announce.clearChannel.successTip", lang),
   });
 }
 

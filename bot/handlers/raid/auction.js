@@ -14,6 +14,7 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../services/i18n");
+const { NoticeKind, buildNoticeEmbed } = require("../../utils/raid/common/shared");
 
 // Auction bid formula ported verbatim from la-utils.vercel.app
 // (bundle chunk 86dcebd97a96c81b.js):
@@ -70,10 +71,12 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
     if (!Number.isInteger(marketValue) || marketValue <= 0) {
       await interaction.reply({
         embeds: [
-          new EmbedBuilder()
-            .setColor(UI.colors.danger)
-            .setTitle(t("raid-auction.notice.invalidValueTitle", lang, { iconWarn: UI.icons.warn }))
-            .setDescription(t("raid-auction.notice.invalidValueDescription", lang)),
+          buildNoticeEmbed(EmbedBuilder, {
+            kind: NoticeKind.INPUT,
+            title: t("raid-auction.notice.invalidValueTitle", lang),
+            description: t("raid-auction.notice.invalidValueDescription", lang),
+            tip: t("raid-auction.notice.invalidValueTip", lang),
+          }),
         ],
         flags: MessageFlags.Ephemeral,
       });

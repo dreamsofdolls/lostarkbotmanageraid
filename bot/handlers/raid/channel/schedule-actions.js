@@ -1,8 +1,25 @@
 "use strict";
 
+const { NoticeKind, buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+
+// The result card per requested state.
+const SCHEDULE_RESULTS = Object.freeze({
+  on: {
+    title: "raid-channel.schedule.enabledTitle",
+    description: "raid-channel.schedule.enabledDescription",
+    tip: "raid-channel.schedule.enabledTip",
+    noop: "raid-channel.schedule.noopDescriptionOn",
+  },
+  off: {
+    title: "raid-channel.schedule.disabledTitle",
+    description: "raid-channel.schedule.disabledDescription",
+    tip: "raid-channel.schedule.disabledTip",
+    noop: "raid-channel.schedule.noopDescriptionOff",
+  },
+});
+
 function createRaidChannelScheduleActions({
   EmbedBuilder,
-  UI,
   GuildConfig,
   getCachedMonitorChannelId,
   getTargetCleanupSlotKey,
@@ -20,25 +37,23 @@ function createRaidChannelScheduleActions({
 
   async function handleScheduleToggle({ action, guildId, lang, replyChannelEmbed, replyChannelNotice }) {
     const enabled = action === "schedule-on";
+    const result = SCHEDULE_RESULTS[enabled ? "on" : "off"];
     if (await isAlreadyInRequestedState(guildId, enabled)) {
       await replyChannelNotice({
-        type: "info",
+        kind: NoticeKind.INPUT,
         title: t("raid-channel.schedule.noopTitle", lang),
-        description: t(
-          enabled
-            ? "raid-channel.schedule.noopDescriptionOn"
-            : "raid-channel.schedule.noopDescriptionOff",
-          lang
-        ),
+        description: t(result.noop, lang),
+        tip: t("raid-channel.schedule.noopTip", lang),
       });
       return;
     }
 
     if (enabled && !getCachedMonitorChannelId(guildId)) {
       await replyChannelNotice({
-        type: "warn",
-        title: t("raid-channel.schedule.noChannelTitle", lang),
-        description: t("raid-channel.schedule.noChannelDescription", lang),
+        kind: NoticeKind.EMPTY,
+        title: t("raid-channel.noChannelTitle", lang),
+        description: t("raid-channel.noChannelDescription", lang),
+        tip: t("raid-channel.noChannelTip", lang),
       });
       return;
     }
@@ -52,26 +67,12 @@ function createRaidChannelScheduleActions({
       { upsert: true, setDefaultsOnInsert: true }
     );
 
-    const embed = new EmbedBuilder()
-      .setColor(enabled ? UI.colors.success : UI.colors.muted)
-      .setTitle(
-        `${enabled ? UI.icons.done : UI.icons.reset} ${t(
-          enabled
-            ? "raid-channel.schedule.enabledTitle"
-            : "raid-channel.schedule.disabledTitle",
-          lang
-        )}`
-      )
-      .setDescription(
-        t(
-          enabled
-            ? "raid-channel.schedule.enabledDescription"
-            : "raid-channel.schedule.disabledDescription",
-          lang
-        )
-      )
-      .setTimestamp();
-    await replyChannelEmbed(embed);
+    await replyChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: NoticeKind.DONE,
+      title: t(result.title, lang),
+      description: t(result.description, lang),
+      tip: t(result.tip, lang),
+    }));
   }
 
   return {

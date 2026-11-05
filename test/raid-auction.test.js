@@ -129,7 +129,7 @@ test("handler embeds the market value + mode in the description", async () => {
   assert.match(embed.description, /293,000/);
 });
 
-test("handler rejects a non-positive market value with a danger embed", async () => {
+test("handler rejects a non-positive market value with an input notice", async () => {
   const factory = makeFactory();
   const interaction = makeInteraction({ marketValue: 0 });
   await factory.handleRaidAuctionCommand(interaction);
@@ -137,5 +137,8 @@ test("handler rejects a non-positive market value with a danger embed", async ()
   const reply = interaction._calls[0];
   // Invalid-input notices remain ephemeral and are not posted publicly.
   assert.equal(reply.flags, MessageFlags.Ephemeral);
-  assert.equal(reply.embeds[0].toJSON().color, UI.colors.danger);
+  // A value to fix is input (yellow ✏️), not a red failure.
+  const card = reply.embeds[0].toJSON();
+  assert.equal(card.color, UI.colors.progress);
+  assert.ok(card.title.startsWith("✏️  "), card.title);
 });

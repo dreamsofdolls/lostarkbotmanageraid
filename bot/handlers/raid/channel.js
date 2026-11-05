@@ -7,6 +7,7 @@
 "use strict";
 
 const {
+  NoticeKind,
   editEmbed,
   editNotice,
   replyEmbed,
@@ -117,7 +118,6 @@ function createRaidChannelCommand({
 
   const { handleSetLanguage } = createRaidChannelLanguageActions({
     EmbedBuilder,
-    UI,
     GuildConfig,
     getGuildLanguage,
     setGuildLanguage,
@@ -127,7 +127,6 @@ function createRaidChannelCommand({
 
   const { handleScheduleToggle } = createRaidChannelScheduleActions({
     EmbedBuilder,
-    UI,
     GuildConfig,
     getCachedMonitorChannelId,
     getTargetCleanupSlotKey,
@@ -155,9 +154,10 @@ function createRaidChannelCommand({
 
     if (!guildId) {
       await replyChannelNotice({
-        type: "warn",
+        kind: NoticeKind.GUARD,
         title: t("raid-channel.auth.serverOnlyTitle", lang),
         description: t("raid-channel.auth.serverOnlyDescription", lang),
+        tip: t("raid-channel.auth.serverOnlyTip", lang),
       });
       return;
     }
@@ -167,9 +167,10 @@ function createRaidChannelCommand({
       !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)
     ) {
       await replyChannelNotice({
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-channel.auth.manageGuildTitle", lang),
         description: t("raid-channel.auth.manageGuildDescription", lang),
+        tip: t("raid-channel.auth.manageGuildTip", lang),
       });
       return;
     }
@@ -179,12 +180,13 @@ function createRaidChannelCommand({
     const handler = Object.hasOwn(actionHandlers, action) ? actionHandlers[action] : null;
     if (!handler) {
       await replyChannelNotice({
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-channel.invalidActionTitle", lang),
         description: t("raid-channel.invalidActionDescription", lang, {
           action,
           actions: Object.keys(actionHandlers).map((name) => `\`${name}\``).join(", "),
         }),
+        tip: t("raid-channel.invalidActionTip", lang),
       });
       return;
     }

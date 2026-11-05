@@ -1,8 +1,26 @@
 "use strict";
 
-const { deferEphemeralReply } = require("../../../utils/raid/common/shared");
+const {
+  NoticeKind,
+  buildDetailField,
+  buildNoticeEmbed,
+  deferEphemeralReply,
+} = require("../../../utils/raid/common/shared");
 
 const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000;
+
+// The repin result by what happened to the new welcome: anything short of
+// posted and pinned is partial.
+const REPIN_RESULTS = Object.freeze({
+  pinned: { kind: NoticeKind.DONE, stem: "success", welcomeKey: "newPostedPinned" },
+  unpinned: { kind: NoticeKind.PARTIAL, stem: "partial", welcomeKey: "newPostedNoPin" },
+  notPosted: { kind: NoticeKind.PARTIAL, stem: "partial", welcomeKey: "newNotPosted" },
+});
+
+function repinResult(welcome) {
+  if (!welcome.posted) return REPIN_RESULTS.notPosted;
+  return welcome.pinned ? REPIN_RESULTS.pinned : REPIN_RESULTS.unpinned;
+}
 
 function createRaidChannelCoreActions({
   EmbedBuilder,
@@ -106,18 +124,20 @@ function createRaidChannelCoreActions({
     const channel = interaction.options.getChannel("channel");
     if (!channel) {
       await replyChannelNotice({
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-channel.set.missingChannelTitle", lang),
         description: t("raid-channel.set.missingChannelDescription", lang),
+        tip: t("raid-channel.set.missingChannelTip", lang),
       });
       return;
     }
 
     if (!isTextMonitorEnabled()) {
       await replyChannelNotice({
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-channel.set.monitorDisabledTitle", lang),
         description: t("raid-channel.set.monitorDisabledDescription", lang),
+        tip: t("raid-channel.set.monitorDisabledTip", lang),
       });
       return;
     }
@@ -126,12 +146,13 @@ function createRaidChannelCoreActions({
     const missing = getMissingBotChannelPermissions(channel, botMember);
     if (missing.length > 0) {
       await replyChannelNotice({
-        type: "lock",
+        kind: NoticeKind.GUARD,
         title: t("raid-channel.set.missingPermsTitle", lang),
         description: t("raid-channel.set.missingPermsDescription", lang, {
           channelId: channel.id,
           missing: missing.join(", "),
         }),
+        tip: t("raid-channel.set.missingPermsTip", lang),
       });
       return;
     }
@@ -235,20 +256,22 @@ function createRaidChannelCoreActions({
       { $set: { raidChannelId: null, autoCleanupEnabled: false } }
     );
     setCachedMonitorChannelId(guildId, null);
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.muted)
-      .setTitle(`${UI.icons.reset} ${t("raid-channel.clear.title", lang)}`)
-      .setDescription(t("raid-channel.clear.description", lang));
-    await replyChannelEmbed(embed);
+    await replyChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: NoticeKind.DONE,
+      title: t("raid-channel.clear.title", lang),
+      description: t("raid-channel.clear.description", lang),
+      tip: t("raid-channel.clear.tip", lang),
+    }));
   }
 
   async function resolveMonitorChannelForAction({ interaction, guildId, lang, replyChannelNotice }) {
     const channelId = getCachedMonitorChannelId(guildId);
     if (!channelId) {
       await replyChannelNotice({
-        type: "warn",
-        title: t("raid-channel.cleanup.noConfigTitle", lang),
-        description: t("raid-channel.cleanup.noConfigDescription", lang),
+        kind: NoticeKind.EMPTY,
+        title: t("raid-channel.noChannelTitle", lang),
+        description: t("raid-channel.noChannelDescription", lang),
+        tip: t("raid-channel.noChannelTip", lang),
       });
       return null;
     }
@@ -256,9 +279,10 @@ function createRaidChannelCoreActions({
     const channel = await resolveRaidMonitorChannel(interaction, channelId);
     if (!channel) {
       await replyChannelNotice({
-        type: "warn",
+        kind: NoticeKind.GUARD,
         title: t("raid-channel.cleanup.channelGoneTitle", lang),
         description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
+        tip: t("raid-channel.cleanup.channelGoneTip", lang),
       });
       return null;
     }
@@ -290,32 +314,32 @@ function createRaidChannelCoreActions({
         guildId,
         protectedMessageIds,
       });
-      const embed = new EmbedBuilder()
-        .setColor(UI.colors.success)
-        .setTitle(`${UI.icons.done} ${t("raid-channel.cleanup.successTitle", lang)}`)
-        .setDescription(t("raid-channel.cleanup.successDescription", lang, { channelId: channel.id }))
-        .addFields({
-          name: t("raid-channel.cleanup.deletedField", lang),
-          value: t("raid-channel.cleanup.deletedValue", lang, { count: deleted }),
-          inline: true,
-        })
-        .setTimestamp();
-      if (skippedOld > 0) {
-        embed.addFields({
-          name: t("raid-channel.cleanup.skippedField", lang),
-          value: `${skippedOld}`,
-          inline: true,
-        });
-      }
-      await editChannelEmbed(embed);
+      await editChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+        kind: NoticeKind.DONE,
+        title: t("raid-channel.cleanup.successTitle", lang),
+        description: t("raid-channel.cleanup.successDescription", lang, { channelId: channel.id }),
+        fields: [
+          {
+            name: t("raid-channel.cleanup.deletedField", lang),
+            value: t("raid-channel.cleanup.deletedValue", lang, { count: deleted }),
+            inline: true,
+          },
+          skippedOld > 0 && {
+            name: t("raid-channel.cleanup.skippedField", lang),
+            value: `${skippedOld}`,
+            inline: true,
+          },
+        ],
+        tip: t("raid-channel.cleanup.successTip", lang),
+      }));
     } catch (err) {
       console.error("[raid-channel] manual cleanup failed:", err?.message || err);
       await editChannelNotice({
-        type: "error",
+        kind: NoticeKind.FAILURE,
         title: t("raid-channel.cleanup.failTitle", lang),
-        description: t("raid-channel.cleanup.failDescription", lang, {
-          error: err?.message || err,
-        }),
+        description: t("raid-channel.cleanup.failDescription", lang, { channelId: channel.id }),
+        fields: [buildDetailField(err?.message || String(err), lang)],
+        tip: t("raid-channel.cleanup.failTip", lang),
       }, {
         content: null,
       });
@@ -338,16 +362,12 @@ function createRaidChannelCoreActions({
       guildId,
       { client: interaction.client }
     );
-    const newKey = welcome.posted
-      ? welcome.pinned
-        ? "newPostedPinned"
-        : "newPostedNoPin"
-      : "newNotPosted";
-    const embed = new EmbedBuilder()
-      .setColor(welcome.posted && welcome.pinned ? UI.colors.success : UI.colors.progress)
-      .setTitle(`${UI.icons.roster} ${t("raid-channel.repin.title", lang)}`)
-      .setDescription(`<#${channel.id}>`)
-      .addFields(
+    const result = repinResult(welcome);
+    await editChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: result.kind,
+      title: t(`raid-channel.repin.${result.stem}Title`, lang),
+      description: t(`raid-channel.repin.${result.stem}Description`, lang, { channelId: channel.id }),
+      fields: [
         {
           name: t("raid-channel.repin.removedField", lang),
           value: `${welcome.removedOldCount}`,
@@ -355,12 +375,12 @@ function createRaidChannelCoreActions({
         },
         {
           name: t("raid-channel.repin.newField", lang),
-          value: t(`raid-channel.repin.${newKey}`, lang),
+          value: t(`raid-channel.repin.${result.welcomeKey}`, lang),
           inline: true,
         },
-      )
-      .setTimestamp();
-    await editChannelEmbed(embed);
+      ],
+      tip: t(`raid-channel.repin.${result.stem}Tip`, lang),
+    }));
   }
 
   return {

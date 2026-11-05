@@ -17,6 +17,7 @@ const {
   setUserLanguage,
   getSupportedLanguages,
 } = require("../../services/i18n");
+const { NoticeKind, buildNoticeEmbed } = require("../../utils/raid/common/shared");
 
 const SELECT_CUSTOM_ID = "raid-language:select";
 
@@ -88,22 +89,15 @@ function createRaidLanguageCommand(deps) {
     const target = supported.find((l) => l.code === next) || supported[0];
     const unchanged = next === previous;
 
-    const embed = new EmbedBuilder()
-      .setColor(unchanged ? UI.colors.neutral : UI.colors.success)
-      .setTitle(
-        t(
-          unchanged ? "raid-language.unchangedTitle" : "raid-language.successTitle",
-          next,
-        ),
-      )
-      .setDescription(
-        t(
-          unchanged ? "raid-language.unchangedDescription" : "raid-language.successDescription",
-          next,
-          { flag: target.flag, label: target.label },
-        ),
-      )
-      .setFooter({ text: t("raid-language.footer", next) });
+    // Picking the language already in use changes nothing: input, like the
+    // other "nothing to change" notices.
+    const stem = unchanged ? "unchanged" : "success";
+    const embed = buildNoticeEmbed(EmbedBuilder, {
+      kind: unchanged ? NoticeKind.INPUT : NoticeKind.DONE,
+      title: t(`raid-language.${stem}Title`, next),
+      description: t(`raid-language.${stem}Description`, next, { flag: target.flag, label: target.label }),
+      tip: t("raid-language.footer", next),
+    });
 
     // Refresh the dropdown so the new selection persists as the
     // `default: true` option if the user re-opens it without rerunning

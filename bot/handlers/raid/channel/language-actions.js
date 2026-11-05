@@ -1,8 +1,9 @@
 "use strict";
 
+const { NoticeKind, buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+
 function createRaidChannelLanguageActions({
   EmbedBuilder,
-  UI,
   GuildConfig,
   getGuildLanguage,
   setGuildLanguage,
@@ -27,18 +28,19 @@ function createRaidChannelLanguageActions({
 
   async function handleSetLanguage({ interaction, guildId, lang, replyChannelEmbed, replyChannelNotice }) {
     const requested = interaction.options.getString("language", false);
+    // Without the language option the reply shows the current setting and how
+    // to change it: an option left out, so input.
     if (!requested) {
       const currentEntry = await currentLanguageEntry(guildId);
-      const embed = new EmbedBuilder()
-        .setColor(UI.colors.neutral)
-        .setTitle(`${UI.icons.info} ${t("raid-channel-language.currentTitle", lang)}`)
-        .setDescription(
-          t("raid-channel-language.currentDescription", lang, {
-            flag: currentEntry?.flag || "",
-            label: currentEntry?.label || "",
-          })
-        );
-      await replyChannelEmbed(embed);
+      await replyChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+        kind: NoticeKind.INPUT,
+        title: t("raid-channel-language.currentTitle", lang),
+        description: t("raid-channel-language.currentDescription", lang, {
+          flag: currentEntry?.flag || "",
+          label: currentEntry?.label || "",
+        }),
+        tip: t("raid-channel-language.currentTip", lang),
+      }));
       return;
     }
 
@@ -46,26 +48,25 @@ function createRaidChannelLanguageActions({
     const langEntry = SUPPORTED_LANGUAGES.find((entry) => entry.code === normalizedRequested);
     if (!langEntry) {
       await replyChannelNotice({
-        type: "warn",
+        kind: NoticeKind.INPUT,
         title: t("raid-channel-language.invalidTitle", lang),
         description: t("raid-channel-language.invalidDescription", lang, { lang: requested }),
+        tip: t("raid-channel-language.invalidTip", lang),
       });
       return;
     }
 
     await setGuildLanguage(guildId, langEntry.code, { GuildConfigModel: GuildConfig });
     const newLang = langEntry.code;
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.success)
-      .setTitle(`${UI.icons.done} ${t("raid-channel-language.successTitle", newLang)}`)
-      .setDescription(
-        t("raid-channel-language.successDescription", newLang, {
-          flag: langEntry.flag,
-          label: langEntry.label,
-        })
-      )
-      .setTimestamp();
-    await replyChannelEmbed(embed);
+    await replyChannelEmbed(buildNoticeEmbed(EmbedBuilder, {
+      kind: NoticeKind.DONE,
+      title: t("raid-channel-language.successTitle", newLang),
+      description: t("raid-channel-language.successDescription", newLang, {
+        flag: langEntry.flag,
+        label: langEntry.label,
+      }),
+      tip: t("raid-channel-language.successTip", newLang),
+    }));
   }
 
   return {

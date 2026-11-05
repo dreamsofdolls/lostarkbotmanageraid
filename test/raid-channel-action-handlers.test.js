@@ -151,7 +151,7 @@ test("raid-channel cleanup action warns before deferring when no monitor channel
 
   assert.equal(deferred, false);
   assert.equal(replies.notices.length, 1);
-  assert.equal(replies.notices[0].type, "warn");
+  assert.equal(replies.notices[0].kind, "empty");
 });
 
 test("raid-channel manual cleanup forwards the tracked welcome ID as protected", async () => {
@@ -225,7 +225,7 @@ test("raid-channel schedule action rejects redundant no-op toggles", async () =>
 
   assert.equal(updates.length, 0);
   assert.equal(replies.notices.length, 1);
-  assert.equal(replies.notices[0].type, "info");
+  assert.equal(replies.notices[0].kind, "input");
 });
 
 test("raid-channel schedule action requires a monitor channel before enabling", async () => {
@@ -253,7 +253,7 @@ test("raid-channel schedule action requires a monitor channel before enabling", 
   });
 
   assert.equal(updates.length, 0);
-  assert.equal(replies.notices[0].type, "warn");
+  assert.equal(replies.notices[0].kind, "empty");
 });
 
 test("raid-channel schedule action enables schedule with a fresh slot key", async () => {
@@ -309,7 +309,7 @@ test("raid-channel language action rejects invalid free text", async () => {
   });
 
   assert.equal(writes.length, 0);
-  assert.equal(replies.notices[0].type, "warn");
+  assert.equal(replies.notices[0].kind, "input");
 });
 
 test("raid-channel language action persists valid language and renders success in new locale", async () => {

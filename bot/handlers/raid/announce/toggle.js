@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const { NoticeKind } = require("../../../utils/raid/common/shared");
 
 function buildToggleStateText({ enabled, lang }) {
   return enabled
@@ -24,12 +25,13 @@ async function handleToggleAnnouncement(ctx) {
 
   if (current.enabled === enabled) {
     await replyAnnounceNotice({
-      type: "info",
+      kind: NoticeKind.INPUT,
       title: t("raid-announce.toggle.noopTitle", lang),
       description: t("raid-announce.toggle.noopDescription", lang, {
         type,
         state: stateText,
       }),
+      tip: t("raid-announce.toggle.checkTip", lang),
     });
     return;
   }
@@ -40,20 +42,16 @@ async function handleToggleAnnouncement(ctx) {
     { upsert: true, setDefaultsOnInsert: true }
   );
   await replyAnnounceNotice({
-    type: "success",
+    kind: NoticeKind.DONE,
     title: t("raid-announce.toggle.successTitle", lang),
-    description: [
-      t("raid-announce.toggle.successLineType", lang, { type, typeLabel }),
-      t("raid-announce.toggle.successLineState", lang, { state: stateText }),
-      t(
-        enabled
-          ? "raid-announce.toggle.successLineImpactOn"
-          : "raid-announce.toggle.successLineImpactOff",
-        lang
-      ),
-      "",
-      t("raid-announce.toggle.successLineCheck", lang),
-    ].join("\n"),
+    description: t(
+      enabled
+        ? "raid-announce.toggle.successDescriptionOn"
+        : "raid-announce.toggle.successDescriptionOff",
+      lang,
+      { type, typeLabel, state: stateText }
+    ),
+    tip: t("raid-announce.toggle.checkTip", lang),
   });
 }
 
