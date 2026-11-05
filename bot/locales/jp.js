@@ -9,6 +9,9 @@
 
 module.exports = {
   common: {
+    fields: {
+      details: "🧾 詳細",
+    },
     pagination: {
       previous: "◀ 前へ",
       next: "次へ ▶",

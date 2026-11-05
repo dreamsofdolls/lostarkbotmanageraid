@@ -14,6 +14,9 @@ module.exports = {
   // surface in /raid-status, /raid-check, raid-check/all-mode, and any
   // future paginated view.
   common: {
+    fields: {
+      details: "🧾 Chi tiết",
+    },
     pagination: {
       previous: "◀ Trước",
       next: "Sau ▶",

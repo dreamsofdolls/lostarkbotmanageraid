@@ -36,6 +36,11 @@ class FakeEmbedBuilder {
     return this;
   }
 
+  setTimestamp(timestamp) {
+    this.data.timestamp = timestamp;
+    return this;
+  }
+
   addFields(...fields) {
     this.data.fields.push(...fields);
     return this;

@@ -4,6 +4,7 @@ const {
   buildModeAliasMap,
 } = require("../../../domain/difficulty-aliases");
 const { t } = require("../../../services/i18n");
+const { getClassEmoji } = require("../../../models/Class");
 
 const UI = {
   colors: {
@@ -33,6 +34,37 @@ const NOTICE_STYLE_BY_TYPE = Object.freeze({
   muted: { color: UI.colors.muted, icon: UI.icons.info },
   success: { color: UI.colors.success, icon: UI.icons.done },
   warn: { color: UI.colors.progress, icon: UI.icons.warn },
+});
+
+/**
+ * Kinds of notice. Each kind has one icon and one colour, so a situation
+ * reads the same in every command; red is kept for real failures. ✅ is the
+ * done icon because 🟢 already means "raid cleared" on /raid-status.
+ */
+const NoticeKind = Object.freeze({
+  GUARD: "guard",         // blocked by permission, wrong user, wrong place, view-only share
+  EXPIRED: "expired",     // session, button, picker or card no longer valid
+  INPUT: "input",         // input to fix, an option missing, nothing to do
+  EMPTY: "empty",         // a normal empty result: no roster, not found
+  BUSY: "busy",           // cooldown, another sync running, an outside service not answering
+  FAILURE: "failure",     // something actually broke
+  PROGRESS: "progress",   // work in flight
+  DONE: "done",           // saved, changed, switched, cancelled on request
+  PARTIAL: "partial",     // done in part
+  CONFIRM: "confirm",     // a prompt waiting for a button
+});
+
+const NOTICE_STYLE_BY_KIND = Object.freeze({
+  guard: { color: UI.colors.progress, icon: "🔒" },
+  expired: { color: UI.colors.muted, icon: "⌛" },
+  input: { color: UI.colors.progress, icon: "✏️" },
+  empty: { color: UI.colors.neutral, icon: "🔍" },
+  busy: { color: UI.colors.progress, icon: "🚦" },
+  failure: { color: UI.colors.danger, icon: "❌" },
+  progress: { color: UI.colors.neutral, icon: "⏳" },
+  done: { color: UI.colors.success, icon: "✅" },
+  partial: { color: UI.colors.progress, icon: "⚠️" },
+  confirm: { color: UI.colors.progress, icon: "❔" },
 });
 
 class ConcurrencyLimiter {
@@ -219,26 +251,97 @@ function buildDiscordIdentityFields(source) {
 const EMBED_DESCRIPTION_MAX_LENGTH = 4096;
 const EMBED_TITLE_MAX_LENGTH = 256;
 
-// Build a richer ephemeral notice embed for user-facing rejection /
-// guidance / "session expired" surfaces. Replaces the plain
-// `interaction.reply({ content: "⚠️ ..." })` pattern. A color-coded embed
-// makes severity visible and keeps public wording in the locale layer.
-//
-// Caller passes EmbedBuilder so this helper stays in raid/shared
-// (Discord.js dep doesn't need to leak in here). `type` picks color +
-// header icon by intent; defaults: info=blue, warn=yellow, lock=red,
-// success=green, error=red, muted=gray.
-function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
-  const { color, icon } = NOTICE_STYLE_BY_TYPE[type]
-    || NOTICE_STYLE_BY_TYPE.info;
-  const embed = new EmbedBuilder().setColor(color);
-  // Titles and descriptions can carry raw user input (e.g. a roster name
-  // interpolated into a notice); clamp both to Discord's embed limits so
-  // setTitle/setDescription cannot throw and turn the notice into a generic
-  // command failure.
-  if (title) embed.setTitle(truncateText(`${icon} ${title}`, EMBED_TITLE_MAX_LENGTH));
+const EMBED_FIELD_NAME_MAX_LENGTH = 256;
+const EMBED_FIELD_VALUE_MAX_LENGTH = 1024;
+const EMBED_FOOTER_MAX_LENGTH = 2048;
+const TIP_ICON = "💡";
+
+/**
+ * Discord renders no markdown in an embed footer, so bold and code marks in
+ * a tip would arrive as literal `**` and backticks. The marks are dropped,
+ * the text kept: "Gõ `/raid-status`" reads as "Gõ /raid-status".
+ * @param {string} value
+ * @returns {string}
+ */
+function stripInlineMarkdown(value) {
+  return String(value ?? "")
+    .replace(/\*\*(.+?)\*\*/gsu, "$1")
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/gsu, "$1")
+    .replace(/__(.+?)__/gsu, "$1")
+    .replace(/`([^`]+)`/gu, "$1");
+}
+
+/**
+ * Build a notice embed for a refusal, an empty result, a wait, a failure,
+ * a progress line, a confirmation or a prompt.
+ *
+ * A `kind` (NoticeKind) sets the title icon and the colour from one table,
+ * so the same situation looks the same in every command. `type` is the
+ * older severity option, kept until every caller names a kind. Every text
+ * part is clamped to Discord's limits, since titles and errors can carry
+ * user input and an over-long part would make the builder throw.
+ *
+ * Caller passes EmbedBuilder so this helper stays free of a discord.js
+ * import.
+ *
+ * @param {Function} EmbedBuilder - discord.js EmbedBuilder class
+ * @param {object} options
+ * @param {string} [options.kind] - one of NoticeKind.*
+ * @param {string} [options.type] - legacy severity (info, warn, lock, muted, success, error)
+ * @param {string} [options.title] - short result, shown behind the icon
+ * @param {string} [options.description] - hero sentence, markdown allowed
+ * @param {Array<{name: string, value: string, inline?: boolean}|null>} [options.fields] - concrete data; empty values and nulls are dropped
+ * @param {string} [options.tip] - next step, shown as the footer behind 💡 with markdown removed
+ * @returns {object} the EmbedBuilder instance
+ */
+function buildNoticeEmbed(EmbedBuilder, { kind, type = "info", title, description, fields = [], tip } = {}) {
+  const kindStyle = NOTICE_STYLE_BY_KIND[kind];
+  const { color, icon } = kindStyle || NOTICE_STYLE_BY_TYPE[type] || NOTICE_STYLE_BY_TYPE.info;
+  const separator = kindStyle ? "  " : " ";
+  const embed = new EmbedBuilder().setColor(color).setTimestamp(new Date());
+  if (title) embed.setTitle(truncateText(`${icon}${separator}${title}`, EMBED_TITLE_MAX_LENGTH));
   if (description) embed.setDescription(truncateText(description, EMBED_DESCRIPTION_MAX_LENGTH));
+  // Discord rejects a field with an empty value.
+  const cleanFields = fields
+    .filter((field) => field && String(field.value ?? "").trim() !== "")
+    .map((field) => ({
+      ...field,
+      name: truncateText(String(field.name), EMBED_FIELD_NAME_MAX_LENGTH),
+      value: truncateText(String(field.value), EMBED_FIELD_VALUE_MAX_LENGTH),
+    }));
+  if (cleanFields.length > 0) embed.addFields(...cleanFields);
+  if (tip) embed.setFooter({ text: truncateText(`${TIP_ICON} ${stripInlineMarkdown(tip)}`, EMBED_FOOTER_MAX_LENGTH) });
   return embed;
+}
+
+/**
+ * A character name as notices show it: the class icon, then the name in
+ * bold. A class with no emoji (unknown, or not bootstrapped yet) leaves the
+ * bare bold name, as `/raid-status` does.
+ * @param {string} name
+ * @param {string} [className]
+ * @returns {string}
+ */
+function formatCharacterLabel(name, className) {
+  const icon = className ? getClassEmoji(className) : "";
+  return icon ? `${icon} **${name}**` : `**${name}**`;
+}
+
+/**
+ * The "🧾 Chi tiết" field a failure card uses for the technical error,
+ * in code font and clamped to the field limit (the two backticks included).
+ * @param {string} [detail] - the error text; empty gives no field
+ * @param {string} [lang]
+ * @returns {{name: string, value: string, inline: boolean}|null}
+ */
+function buildDetailField(detail, lang) {
+  const text = String(detail ?? "").trim();
+  if (!text) return null;
+  return {
+    name: t("common.fields.details", lang),
+    value: `\`${truncateText(text, EMBED_FIELD_VALUE_MAX_LENGTH - 2)}\``,
+    inline: false,
+  };
 }
 
 /**
@@ -441,6 +544,9 @@ function pack2Columns(fields) {
 module.exports = {
   addChunkedEmbedField,
   buildNoticeEmbed,
+  buildDetailField,
+  formatCharacterLabel,
+  NoticeKind,
   ConcurrencyLimiter,
   UI,
   normalizeName,

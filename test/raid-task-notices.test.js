@@ -27,6 +27,21 @@ class FakeEmbedBuilder {
     this.data.description = value;
     return this;
   }
+
+  setTimestamp(value) {
+    this.data.timestamp = value;
+    return this;
+  }
+
+  setFooter(value) {
+    this.data.footer = value;
+    return this;
+  }
+
+  addFields(...fields) {
+    this.data.fields = [...(this.data.fields || []), ...fields];
+    return this;
+  }
 }
 
 // Embed titles start with the notice icon.

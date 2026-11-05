@@ -7,6 +7,9 @@
 
 module.exports = {
   common: {
+    fields: {
+      details: "🧾 Details",
+    },
     pagination: {
       previous: "◀ Previous",
       next: "Next ▶",
