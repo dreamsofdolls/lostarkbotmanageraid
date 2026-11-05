@@ -1936,7 +1936,7 @@ module.exports = {
           "**11 types**:",
           "• `weekly-reset` - Wed 10:00 UTC weekly reset",
           "• `daily-roster-sync` - summary of the 00:00 VN roster refresh; rides the cleanup notice when channel cleanup is on and this type has no channel of its own",
-          "• `stuck-nudge` - nudges users with all-private-log rosters",
+          "• `stuck-nudge` - retired: daily auto-sync no longer sends the private-log nudge",
           "• `set-greeting` - greeting after /raid-channel set",
           "• `hourly-cleanup` - cleanup notice",
           "• `artist-bedtime` - 03:00 UTC bedtime",
@@ -1996,7 +1996,7 @@ module.exports = {
     currentTitle: "Current broadcast language",
     currentDescription: "This guild is broadcasting public announcements in **{flag} {label}**.\nTo change it, run `/raid-channel config` again with `action:set-language` and the `language:` option (vi/jp/en). Example: `language:jp`.",
     successTitle: "Broadcast language updated",
-    successDescription: "All public announcements for this guild (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) will now render in **{flag} {label}**. Per-user `/raid-language` settings are unaffected.",
+    successDescription: "All public announcements for this guild (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, whisper-ack, raid-update) will now render in **{flag} {label}**. Per-user `/raid-language` settings are unaffected.",
     showCurrentLine: "Broadcast language: **{flag} {label}**",
   },
   "text-parser": {
@@ -2316,10 +2316,6 @@ module.exports = {
     },
     "weekly-reset": {
       body: "New week, fresh raid progress. Artist just reset everyone's weekly raid progress - time to start over. Have a good raid week. This notice self-deletes in 30 minutes.",
-    },
-    "stuck-nudge": {
-      body: "<@{discordId}> heads up - your roster has auto-manage enabled, but every character is currently a private log. Two options: (1) enable **Show on Profile** at <https://lostark.bible/me/logs>, or (2) click **Switch to Local Sync**. Local Reader reads `encounters.db` on-device and syncs right on the web; no public log or raw-file upload is needed. This notice self-deletes in 30 minutes.",
-      switchButtonLabel: "Switch to Local Sync",
     },
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready to enter~ This reminder clears itself after 6 minutes.",

@@ -363,9 +363,8 @@ module.exports = {
       footer: "Phí bán 5% đã tính cho cả bid lẫn lời người thắng · Công thức: la-utils",
     },
   },
-  // Top-level "stuck-nudge" copy belongs to the channel-button click
-  // handler. Keep it separate from `announcements.stuck-nudge.body`,
-  // which is the scheduler's broadcast text.
+  // Top-level "stuck-nudge" copy belongs to the Switch to Local Sync
+  // button handler (bot/handlers/local-sync/stuck-nudge-button.js).
   "stuck-nudge": {
     notForYouTitle: "Button này không dành cho cậu",
     notForYouDescription: "Button **Switch to Local Sync** chỉ <@{target}> mới bấm được nha. Cậu nhầm rồi~",
@@ -1959,7 +1958,7 @@ module.exports = {
           "**11 loại**:",
           "• `weekly-reset` - Wed 17 VN reset tuần",
           "• `daily-roster-sync` - tổng kết làm mới roster lúc 00:00 VN; đi kèm tin dọn kênh khi guild bật dọn kênh và chưa đặt kênh riêng cho loại này",
-          "• `stuck-nudge` - tag user toàn char private log",
+          "• `stuck-nudge` - đã ngừng: daily auto-sync không còn gửi lời nhắc private log",
           "• `set-greeting` - chào sau /raid-channel set",
           "• `hourly-cleanup` - notice sau cleanup",
           "• `artist-bedtime` - 3h sáng VN Artist đi ngủ",
@@ -2023,7 +2022,7 @@ module.exports = {
     currentTitle: "Ngôn ngữ broadcast hiện tại",
     currentDescription: "Guild đang dùng **{flag} {label}** cho mọi thông báo public.\nMuốn đổi? Chạy lại `/raid-channel config` với `action:set-language` và kèm option `language:` (vi/jp/en). Ví dụ: `language:jp`.",
     successTitle: "Ngôn ngữ broadcast đổi rồi",
-    successDescription: "Từ giờ mọi thông báo public của guild này (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) sẽ dùng **{flag} {label}** nha~ Per-user `/raid-language` không bị ảnh hưởng.",
+    successDescription: "Từ giờ mọi thông báo public của guild này (welcome, weekly-reset, daily-roster-sync, cleanup, bedtime, wakeup, maintenance, whisper-ack, raid-update) sẽ dùng **{flag} {label}** nha~ Per-user `/raid-language` không bị ảnh hưởng.",
     showCurrentLine: "Ngôn ngữ broadcast: **{flag} {label}**",
   },
   // Public-broadcast strings (no single per-user viewer). Resolved with
@@ -2349,10 +2348,6 @@ module.exports = {
     },
     "weekly-reset": {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
-    },
-    "stuck-nudge": {
-      body: "<@{discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Hai cách: (1) bật **Show on Profile** ở https://lostark.bible/me/logs cho char cần sync, hoặc (2) bấm **Switch to Local Sync** - Local Reader đọc `encounters.db` trên máy rồi đồng bộ ngay trên web, không cần public log và không upload file gốc. Biển báo này Artist cuỗm đi sau 30 phút.",
-      switchButtonLabel: "Switch to Local Sync",
     },
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị vào event nhé~ Tin nhắc này tự biến mất sau 6 phút.",

@@ -1937,7 +1937,7 @@ module.exports = {
           "**11 種別**:",
           "• `weekly-reset` - 水曜 19:00 JST 週次リセット",
           "• `daily-roster-sync` - 00:00 VN のロスター更新の集計。チャンネル掃除が有効で、この種別に専用チャンネルがなければ掃除のお知らせに同梱しますわ",
-          "• `stuck-nudge` - プライベートログのユーザー全員にメンション",
+          "• `stuck-nudge` - 終了済み: daily auto-sync はプライベートログのお知らせを送らなくなりましたの",
           "• `set-greeting` - /raid-channel set 後のごあいさつ",
           "• `hourly-cleanup` - クリーンアップ後の通知",
           "• `artist-bedtime` - JST 朝3時にアーティストが寝る",
@@ -1997,7 +1997,7 @@ module.exports = {
     currentTitle: "現在のブロードキャスト言語",
     currentDescription: "このギルドは公開アナウンスを **{flag} {label}** でお届けしていますわ♪\n変更されたい場合は `/raid-channel config` を `action:set-language` と `language:` オプション (vi/jp/en) 付きで再実行してくださいませ。例: `language:jp`。",
     successTitle: "ブロードキャスト言語を変更しましたわ♪",
-    successDescription: "これからこのギルドの全公開アナウンス (ウェルカム / 週次リセット / daily-roster-sync / クリーンアップ / おやすみ / おはよう / メンテナンス / stuck-nudge / whisper-ack / レイド更新) は **{flag} {label}** でお届けしますの～♪ 各メンバーの `/raid-language` 設定には影響しませんわ。",
+    successDescription: "これからこのギルドの全公開アナウンス (ウェルカム / 週次リセット / daily-roster-sync / クリーンアップ / おやすみ / おはよう / メンテナンス / whisper-ack /レイド更新) は **{flag} {label}** でお届けしますの～♪ 各メンバーの `/raid-language` 設定には影響しませんわ。",
     showCurrentLine: "ブロードキャスト言語: **{flag} {label}**",
   },
   "text-parser": {
@@ -2317,10 +2317,6 @@ module.exports = {
     },
     "weekly-reset": {
       body: "新しい週が来ましたわね～♪ 今週のレイド進捗をアーティストがリセットしましたわ、皆さんは最初からまた挑戦してくださいませ。素敵なレイド週間をお過ごしくださいね♪ この案内は30分後にお片付けしますの。",
-    },
-    "stuck-nudge": {
-      body: "<@{discordId}> ちょっとお知らせですわ～♪ 全キャラが非公開ログなので自動同期できませんの。 (1) <https://lostark.bible/me/logs> で **Show on Profile** を有効化、または (2) **Switch to Local Sync** を押してね。Local Reader が端末内の `encounters.db` を読み、ウェブ上でそのまま同期しますわ。Public Log もファイル本体の upload も不要ですの。この案内は30分後にお片付けしますわ。",
-      switchButtonLabel: "Local Sync に切り替え",
     },
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。入場準備をしてね～♪ この通知は6分後にお片付けしますの。",

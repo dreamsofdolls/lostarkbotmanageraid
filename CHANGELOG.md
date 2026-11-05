@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-05
+
+### Changed
+- `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
+
 ## 2026-11-04
 
 ### Changed
