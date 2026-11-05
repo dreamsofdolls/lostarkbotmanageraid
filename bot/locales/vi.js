@@ -363,18 +363,6 @@ module.exports = {
       footer: "Phí bán 5% đã tính cho cả bid lẫn lời người thắng · Công thức: la-utils",
     },
   },
-  // Top-level "stuck-nudge" copy belongs to the Switch to Local Sync
-  // button handler (bot/handlers/local-sync/stuck-nudge-button.js).
-  "stuck-nudge": {
-    notForYouTitle: "Button này không dành cho cậu",
-    notForYouDescription: "Button **Switch to Local Sync** chỉ <@{target}> mới bấm được nha. Cậu nhầm rồi~",
-    flipFailTitle: "Switch fail",
-    flipFailDescription: "Artist gặp lỗi khi flip mode: `{error}`. Thử `/raid-auto-manage action:local-on` thủ công nha.",
-    switchedTitle: "Giờ chạy Local Sync",
-    switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Mở `/raid-status` rồi chọn `🗃️ Local Sync` để vào console hoặc lấy link Local Reader mới nha~",
-    dmTitle: "Local Sync setup",
-    dmDescription: "Bấm **Mở Local Reader**, thả `encounters.db` ở `%localappdata%\\LOA Logs\\` vào trang rồi bấm **Đồng bộ** là xong. Reader nhớ file cho lần sau và chỉ gửi một bản tóm tắt nhỏ về Artist. Link có hiệu lực 30 phút.",
-  },
   // Shared /raid-share copy. Keep this namespace aligned across locale
   // packs; the handler resolves every grant/revoke/list message through it.
   share: {

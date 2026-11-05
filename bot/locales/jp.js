@@ -351,16 +351,6 @@ module.exports = {
       footer: "売却手数料5%は入札額と純利益の両方に適用 · 計算式: la-utils",
     },
   },
-  "stuck-nudge": {
-    notForYouTitle: "このボタンはあなた用ではありませんわ",
-    notForYouDescription: "**Local Sync に切り替え** ボタンは <@{target}> さん専用ですわ。 押し間違いだと思いますの～",
-    flipFailTitle: "切り替え失敗ですわ",
-    flipFailDescription: "アーティスト、モード切り替えで失敗しましたわ: `{error}`。 代わりに `/raid-auto-manage action:local-on` を試してね♪",
-    switchedTitle: "ローカル同期に切り替えましたわ♪",
-    switchedDescription: "<@{target}> さんは bible 自動同期からローカル同期モードに切り替えましたわ。`/raid-status` から `🗃️ ローカル同期` を選ぶと、コンソールや新しい Local Reader リンクを開けますの♪",
-    dmTitle: "ローカル同期セットアップ",
-    dmDescription: "下の **Local Reader を開く** を押し、`%localappdata%\\LOA Logs\\` の `encounters.db` をページにドロップして **同期** を押せば完了ですわ。Reader はファイルを記憶し、アーティストには小さな要約だけ送りますの。リンクは30分間有効ですわ。",
-  },
   share: {
     accessLevel: {
       edit: "編集可",

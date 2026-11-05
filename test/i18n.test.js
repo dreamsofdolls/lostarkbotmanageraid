@@ -170,7 +170,6 @@ test("Local Sync copy matches the signed-token lifecycle in every language", () 
     );
 
     const ttlCopy = [
-      locale["stuck-nudge"].dmDescription,
       autoManage.localEnable.successDescriptionWithLink,
       localOnHelp,
     ];
@@ -198,11 +197,6 @@ test("Local Sync copy matches the signed-token lifecycle in every language", () 
       autoManage.localEnable.successDescriptionWithLink,
       /action:local-on/,
       `${code} must not send enabled users through the blocked local-on gate`
-    );
-    assert.match(
-      locale["stuck-nudge"].switchedDescription,
-      /\/raid-status/,
-      `${code} nudge confirmation must expose the Local Sync status view`
     );
     assert.doesNotMatch(
       flattenStrings(locale).join("\n"),

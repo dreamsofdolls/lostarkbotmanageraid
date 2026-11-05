@@ -349,16 +349,6 @@ module.exports = {
       footer: "5% AH sell fee applied to both the bid and the winner's net · Formula: la-utils",
     },
   },
-  "stuck-nudge": {
-    notForYouTitle: "This button isn't for you",
-    notForYouDescription: "The **Switch to Local Sync** button is only for <@{target}>.",
-    flipFailTitle: "Switch failed",
-    flipFailDescription: "Artist hit an error switching modes: `{error}`. Try `/raid-auto-manage action:local-on` manually.",
-    switchedTitle: "Switched to Local Sync",
-    switchedDescription: "<@{target}> moved from bible auto-sync to **local-sync mode**. Open `/raid-status` and pick `🗃️ Local Sync` for the console or a fresh Local Reader link.",
-    dmTitle: "Local Sync setup",
-    dmDescription: "Click **Open Local Reader**, drop `encounters.db` from `%localappdata%\\LOA Logs\\` onto the page, and press **Sync**. The reader remembers the file and sends Artist only a small summary. The link is valid for 30 minutes.",
-  },
   // Roster-share embeds (used by /raid-share grant/revoke/list).
   share: {
     accessLevel: {

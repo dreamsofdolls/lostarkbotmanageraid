@@ -88,7 +88,6 @@ function createRaidInteractionRouter({
       { prefix: "edit-roster:", handle: handlers.handleEditRosterButton },
       { prefix: "raid-task:", handle: handlers.handleRaidTaskButton },
       { prefix: "gold-earner:", handle: handlers.handleRaidGoldEarnerButton },
-      { prefix: "stuck-nudge:", handle: handlers.handleStuckNudgeButton },
     ],
   });
 }

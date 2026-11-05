@@ -199,7 +199,7 @@ function isCurrentStoredToken(
 
 /**
  * Mint + persist on User. Used by /raid-auto-manage local-on,
- * /raid-status local-sync "New link" button, stuck-nudge button -
+ * /raid-status local-sync "New link" button -
  * any flow that explicitly produces a fresh token. Replaces any
  * existing stored token. Endpoints require this current stored token when
  * one exists, so rotation/reset hard-revokes older URLs immediately.

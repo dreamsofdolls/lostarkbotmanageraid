@@ -67,7 +67,6 @@ const { createRaidLanguageCommand } = require("./handlers/meta/language");
 const { createRaidBgCommand } = require("./handlers/raid/bg");
 const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createRaidTaskCommand } = require("./handlers/raid/task");
-const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const { createLocalSyncDiscordConsole } = require("./handlers/local-sync/discord-console");
 const { applyPreviewJob } = require("./services/local-sync");
 const {
@@ -721,16 +720,6 @@ const { handleRaidShareCommand } = createRaidShareCommand({
   UI,
 });
 
-const { handleStuckNudgeButton } = createStuckNudgeButtonHandler({
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  MessageFlags,
-  UI,
-  User,
-});
-
 const {
   handleRaidLanguageCommand,
   handleRaidLanguageSelect,
@@ -917,7 +906,6 @@ module.exports = {
   startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
   parseRaidMessage,
-  handleStuckNudgeButton,
   __test: {
     STATUS_PAGINATION_SESSION_MS,
     RAID_CHECK_PAGINATION_SESSION_MS,

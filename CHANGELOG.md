@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
+- The retired nudge's **Switch to Local Sync** button handler, its route and its strings are removed; nothing has posted that button since the nudge stopped. `/raid-auto-manage action:local-on` and the `/raid-status` Local Sync view still switch a roster to Local Sync.
 
 ## 2026-11-04
 
