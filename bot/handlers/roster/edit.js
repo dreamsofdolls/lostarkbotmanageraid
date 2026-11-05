@@ -3,6 +3,7 @@
 const {
   NoticeKind,
   buildDetailField,
+  buildKeyedNotice,
   buildNoRosterNotice,
   buildNoticeEmbed,
 } = require("../../utils/raid/common/shared");
@@ -50,13 +51,7 @@ function unknownRosterVars(rosterName) {
 
 // A C+ roster notice whose copy lives at `raid-edit-roster.notice.<stem>{Title,Description,Tip}`.
 function rosterNotice(kind, stem, rosterName, lang) {
-  const vars = unknownRosterVars(rosterName);
-  return {
-    kind,
-    title: t(`raid-edit-roster.notice.${stem}Title`, lang, vars),
-    description: t(`raid-edit-roster.notice.${stem}Description`, lang, vars),
-    tip: t(`raid-edit-roster.notice.${stem}Tip`, lang, vars),
-  };
+  return buildKeyedNotice({ kind, keyBase: `raid-edit-roster.notice.${stem}`, lang, vars: unknownRosterVars(rosterName) });
 }
 
 function createEditRosterCommand({

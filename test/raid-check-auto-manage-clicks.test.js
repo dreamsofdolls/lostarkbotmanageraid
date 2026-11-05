@@ -8,6 +8,7 @@ const {
 } = require("../bot/handlers/raid-check/auto-manage/auto-manage");
 const {
   clearUserLanguageCache,
+  t,
 } = require("../bot/services/i18n");
 const { UI } = require("../bot/utils/raid/common/shared");
 
@@ -183,6 +184,27 @@ test("raid-check auto-manage manager enable sends target DM and success reply", 
   assert.equal(interaction.deferredReplies.length, 1);
   assert.equal(interaction.edits.length, 1);
   assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.success);
+});
+
+test("raid-check auto-manage manager enable reads its card copy from the enable-button keys", async () => {
+  clearUserLanguageCache();
+  const User = makeUserModel({
+    findOneAndUpdateImpl: () => Promise.resolve({
+      discordId: "user-1",
+      autoManageEnabled: true,
+      accounts: [{ accountName: "Alpha", characters: [{ name: "Qiylyn", itemLevel: 1730, publicLogDisabled: false }] }],
+    }),
+  });
+  const interaction = makeInteraction();
+
+  await createUi(User).handleRaidCheckEnableAutoOneClick(interaction, "user-1");
+
+  const card = interaction.edits[0].embeds[0].data;
+  const key = (part) => t(`raid-auto-manage.enableButton.${part}`, "vi", { target: "user-1" });
+  assert.equal(card.title, `✅  ${key("successTitle")}`);
+  assert.equal(card.description, key("successDescription"));
+  assert.equal(card.footer.text, `💡 ${key("successTip")}`);
+  assert.equal(card.fields[0].name, key("successDmLabel"));
 });
 
 test("raid-check auto-manage manager disable sends the matching self-enable action", async () => {

@@ -6,6 +6,7 @@ const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const {
   NoticeKind,
   buildDetailField,
+  buildKeyedNotice,
   deferEphemeralReply,
   editNotice,
   followUpNotice,
@@ -31,10 +32,7 @@ function createRaidCheckAutoManageUi(deps) {
   // Every notice here reads `${keyPrefix}.${stem}Title|Description|Tip`; a
   // failure also carries the raw error in the detail field.
   const keyedNotice = ({ kind, keyPrefix, stem, lang, vars, detail }) => ({
-    kind,
-    title: t(`${keyPrefix}.${stem}Title`, lang),
-    description: t(`${keyPrefix}.${stem}Description`, lang, vars),
-    tip: t(`${keyPrefix}.${stem}Tip`, lang),
+    ...buildKeyedNotice({ kind, keyBase: `${keyPrefix}.${stem}`, lang, vars }),
     fields: detail ? [buildDetailField(detail, lang)] : [],
   });
 

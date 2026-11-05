@@ -9,9 +9,12 @@ const {
   UI,
   buildNoticeEmbed,
   buildDetailField,
+  buildKeyedNotice,
   formatCharacterLabel,
 } = require("../bot/utils/raid/common/shared");
 const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
+const { t } = require("../bot/services/i18n");
+const { TRANSLATIONS } = require("../bot/locales");
 
 // One icon and one colour per kind; the spec's kind table, verbatim.
 const KIND_LOOK = {
@@ -95,6 +98,25 @@ test("buildDetailField wraps the error in code font and skips empty", () => {
 test("the detail field keeps an error with backticks or line breaks in one code span", () => {
   const field = buildDetailField("User validation failed: Path `accountName` is required.\n  second line", "en");
   assert.equal(field.value, "`User validation failed: Path 'accountName' is required. second line`");
+});
+
+test("a keyed notice reads its title, description and tip from one key base", () => {
+  const vars = { rosterIcon: "❓", rosterName: "Vencone" };
+  const notice = buildKeyedNotice({ kind: NoticeKind.EMPTY, keyBase: "raid-edit-roster.notice.notFound", lang: "en", vars });
+  assert.deepEqual(notice, {
+    kind: NoticeKind.EMPTY,
+    title: t("raid-edit-roster.notice.notFoundTitle", "en", vars),
+    description: t("raid-edit-roster.notice.notFoundDescription", "en", vars),
+    tip: t("raid-edit-roster.notice.notFoundTip", "en", vars),
+  });
+  assert.match(notice.title, /Vencone/);
+});
+
+test("a keyed notice picks one phrasing from a pooled sentence", () => {
+  const pool = TRANSLATIONS.en.share.revoke.successDescription.variants
+    .map((line) => line.replace("{target}", "123"));
+  const notice = buildKeyedNotice({ kind: NoticeKind.DONE, keyBase: "share.revoke.success", lang: "en", vars: { target: "123" } });
+  assert.ok(pool.includes(notice.description), notice.description);
 });
 
 test("a notice without a known kind still reaches the user, plain and neutral", () => {

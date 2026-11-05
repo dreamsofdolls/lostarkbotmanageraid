@@ -3,8 +3,7 @@
 const {
   filterAutocompleteChoices,
 } = require("../../../utils/discord/select-options");
-const { t } = require("../../../services/i18n");
-const { NoticeKind } = require("../../../utils/raid/common/shared");
+const { NoticeKind, buildKeyedNotice } = require("../../../utils/raid/common/shared");
 
 // One definition per state notice. The action gates below and the handlers
 // that hit the same state later (a Local Sync conflict found while saving)
@@ -111,12 +110,7 @@ function getAutoManageStateGate(action, state = {}) {
  */
 function buildAutoManageStateNotice(name, lang) {
   const { kind, keyBase } = STATE_NOTICES[name];
-  return {
-    kind,
-    title: t(`${keyBase}Title`, lang),
-    description: t(`${keyBase}Description`, lang),
-    tip: t(`${keyBase}Tip`, lang),
-  };
+  return buildKeyedNotice({ kind, keyBase, lang });
 }
 
 function buildAutoManageAutocompleteChoices({ bibleOn = false, localOn = false, needle = "", lang, t, normalizeName }) {

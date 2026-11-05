@@ -14,7 +14,7 @@ const {
   getCharacterMatches,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { formatGold } = require("../../utils/raid/common/shared");
+const { buildKeyedNotice, formatGold } = require("../../utils/raid/common/shared");
 const {
   getStatusRaidsForCharacter,
   summarizeAccountGold,
@@ -48,12 +48,7 @@ function createRemoveRosterCommand(deps) {
 
   // A notice whose copy lives at `raid-remove-roster.<stem>{Title,Description,Tip}`.
   function removeNotice(kind, stem, lang, vars) {
-    return {
-      kind,
-      title: t(`raid-remove-roster.${stem}Title`, lang, vars),
-      description: t(`raid-remove-roster.${stem}Description`, lang, vars),
-      tip: t(`raid-remove-roster.${stem}Tip`, lang, vars),
-    };
+    return buildKeyedNotice({ kind, keyBase: `raid-remove-roster.${stem}`, lang, vars });
   }
 
   async function autocompleteRemoveRosterRoster(interaction, focused) {

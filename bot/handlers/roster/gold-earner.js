@@ -2,6 +2,7 @@
 
 const {
   NoticeKind,
+  buildKeyedNotice,
   buildNoticeEmbed,
   buildRosterNotFoundNotice,
   deferEphemeralReply,
@@ -74,12 +75,7 @@ function createRaidGoldEarnerCommand({
 
   // A notice whose copy lives at `raid-gold-earner.<stem>{Title,Description,Tip}`.
   function goldEarnerNotice(kind, stem, lang, vars) {
-    return {
-      kind,
-      title: t(`raid-gold-earner.${stem}Title`, lang, vars),
-      description: t(`raid-gold-earner.${stem}Description`, lang, vars),
-      tip: t(`raid-gold-earner.${stem}Tip`, lang, vars),
-    };
+    return buildKeyedNotice({ kind, keyBase: `raid-gold-earner.${stem}`, lang, vars });
   }
 
   const handleRaidGoldEarnerAutocomplete = createAutocompleteDispatcher("raid-gold-earner", {

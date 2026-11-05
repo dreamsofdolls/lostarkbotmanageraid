@@ -15,6 +15,7 @@ const { isManagerId } = require("../../services/access/manager");
 const { tPick: t, getUserLanguage } = require("../../services/i18n");
 const {
   NoticeKind,
+  buildKeyedNotice,
   buildManagerOnlyField,
   deferEphemeralReply,
   editEmbed,
@@ -24,12 +25,7 @@ const {
 
 // A notice whose copy lives at `share.<stem>{Title,Description,Tip}`.
 function shareNotice(kind, stem, lang, vars) {
-  return {
-    kind,
-    title: t(`share.${stem}Title`, lang),
-    description: t(`share.${stem}Description`, lang, vars),
-    tip: t(`share.${stem}Tip`, lang),
-  };
+  return buildKeyedNotice({ kind, keyBase: `share.${stem}`, lang, vars });
 }
 
 function ownerLabel(userDoc, fallbackId) {

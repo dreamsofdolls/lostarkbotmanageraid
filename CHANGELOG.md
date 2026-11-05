@@ -14,6 +14,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-help` for `/raid-announce` marks `stuck-nudge` as retired, and the `/raid-language` server confirmation no longer lists it among the announcements Artist posts. The unused copy of the retired nudge (its message and button label) is removed.
 - The retired nudge's **Switch to Local Sync** button handler, its route and its strings are removed; nothing has posted that button since the nudge stopped. `/raid-auto-manage action:local-on` and the `/raid-status` Local Sync view still switch a roster to Local Sync.
 
+### Changed (internal)
+- Notices whose copy sits at `<key>Title`, `<key>Description` and `<key>Tip` are built by one `buildKeyedNotice` in `shared.js` instead of a near-identical builder per command (share, roster edit/remove, gold earner, auto-manage, the shared no-roster and roster-not-found notices). No behavior change.
+
 ## 2026-11-04
 
 ### Changed

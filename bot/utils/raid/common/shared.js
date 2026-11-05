@@ -3,7 +3,7 @@ const {
   SHORTHAND_MODE_ALIASES,
   buildModeAliasMap,
 } = require("../../../domain/difficulty-aliases");
-const { t } = require("../../../services/i18n");
+const { t, tPick } = require("../../../services/i18n");
 const { getClassEmoji } = require("../../../models/Class");
 
 const UI = {
@@ -324,17 +324,28 @@ function formatCharacterLabel(name, className) {
 }
 
 /**
+ * Notice options whose copy lives at `<keyBase>Title`, `<keyBase>Description`
+ * and `<keyBase>Tip`. The vars fill all three, and a pooled key gives one of
+ * its phrasings.
+ * @param {{kind: string, keyBase: string, lang?: string, vars?: Object}} options
+ * @returns {{kind: string, title: string, description: string, tip: string}}
+ */
+function buildKeyedNotice({ kind, keyBase, lang, vars }) {
+  return {
+    kind,
+    title: tPick(`${keyBase}Title`, lang, vars),
+    description: tPick(`${keyBase}Description`, lang, vars),
+    tip: tPick(`${keyBase}Tip`, lang, vars),
+  };
+}
+
+/**
  * The shared "no roster yet" notice, one copy for every command.
  * @param {string} [lang]
  * @returns {{kind: string, title: string, description: string, tip: string}}
  */
 function buildNoRosterNotice(lang) {
-  return {
-    kind: NoticeKind.EMPTY,
-    title: t("common.notice.noRosterTitle", lang),
-    description: t("common.notice.noRosterDescription", lang),
-    tip: t("common.notice.noRosterTip", lang),
-  };
+  return buildKeyedNotice({ kind: NoticeKind.EMPTY, keyBase: "common.notice.noRoster", lang });
 }
 
 /**
@@ -346,12 +357,7 @@ function buildNoRosterNotice(lang) {
  * @returns {{kind: string, title: string, description: string, tip: string}}
  */
 function buildRosterNotFoundNotice(rosterName, lang) {
-  return {
-    kind: NoticeKind.EMPTY,
-    title: t("common.notice.rosterNotFoundTitle", lang),
-    description: t("common.notice.rosterNotFoundDescription", lang, { rosterName }),
-    tip: t("common.notice.rosterNotFoundTip", lang),
-  };
+  return buildKeyedNotice({ kind: NoticeKind.EMPTY, keyBase: "common.notice.rosterNotFound", lang, vars: { rosterName } });
 }
 
 /**
@@ -589,6 +595,7 @@ module.exports = {
   buildChunkedFields,
   buildNoticeEmbed,
   buildDetailField,
+  buildKeyedNotice,
   buildManagerOnlyField,
   buildNoRosterNotice,
   buildRosterNotFoundNotice,
