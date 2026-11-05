@@ -11,7 +11,7 @@ const {
 } = require("../bot/handlers/raid-status/gold/gold-ui/toggle-rows");
 const { createGoldFilterState } = require("../bot/handlers/raid-status/gold/gold-ui/filters");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
-const { getStatusRaidsForCharacter } = require("../bot/utils/raid/common/character");
+const { getStatusRaidsForCharacter, summarizeCharacterGold } = require("../bot/utils/raid/common/character");
 const { UI, formatGold, truncateText } = require("../bot/utils/raid/common/shared");
 
 const cleared = { difficulty: "Normal", completedDate: 1 };
@@ -181,6 +181,14 @@ for (const selected of [["Soulrano"], ["Soulrano", "Nailaduk", "Priscilladuk"]])
 test("the gold set row allows at most three raids", () => {
   const select = goldUiFor(["Soulrano"]).buildGoldReceiveRow(false).toJSON().components[0];
   assert.equal(select.max_values, 3);
+});
+
+test("character options keep the name and item level in the label and the gold in the description", () => {
+  const select = goldUiFor(["Soulrano"]).buildGoldCharsRow(false).toJSON().components[0];
+  const soulrano = select.options.find((option) => option.value === "Soulrano");
+  const totals = summarizeCharacterGold(getStatusRaidsForCharacter(exampleCharacters()[0]));
+  assert.equal(soulrano.label, "Soulrano · 1771");
+  assert.equal(soulrano.description, `${formatGold(totals.earned)}/${formatGold(totals.total)}`);
 });
 
 test("selected characters carry the ✏️ marker in the gold embed", () => {

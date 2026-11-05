@@ -320,11 +320,11 @@ function createGoldToggleRows({
     const options = candidates.map((character) => {
       const name = getCharacterName(character);
       const totals = summarizeCharacterGold(getRaidsFor(character));
+      // A closed multi-select lists each picked label on its own line, so the
+      // label stays short; the gold shows in the description once it opens.
       const option = {
-        label: truncateText(
-          `${name} · ${Number(character.itemLevel) || 0} · ${formatGold(totals.earned)}/${formatGold(totals.total)}`,
-          100
-        ),
+        label: truncateText(`${name} · ${Number(character.itemLevel) || 0}`, 100),
+        description: truncateText(`${formatGold(totals.earned)}/${formatGold(totals.total)}`, 100),
         value: name.slice(0, 100),
         default: selected.some((selectedName) => sameCharacterName(selectedName, name)),
       };
