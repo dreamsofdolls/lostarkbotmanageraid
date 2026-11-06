@@ -2521,7 +2521,7 @@ module.exports = {
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready to enter~ This reminder clears itself after {ttlMinutes} minutes.",
       fieldBoss: "👹 **Field Boss** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready for the hunt~ This reminder clears itself after {ttlMinutes} minutes.",
-      both: "🌪️ **Chaos Gate** and 👹 **Field Boss** spawn <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Both are up on Sunday, so pick the event you need~ This reminder clears itself after {ttlMinutes} minutes.",
+      both: "🌪️ **Chaos Gate** and 👹 **Field Boss** spawn <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Chaos Gate opens on the hour and the Field Boss a few minutes later, so clear Chaos Gate first, then run to the boss~ This reminder clears itself after {ttlMinutes} minutes.",
     },
     "cleanup-volume": {
       empty: [

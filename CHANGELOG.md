@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - The Chaos Gate / Field Boss reminder (`world-event-reminder`) posts 20 minutes before each spawn instead of 5, and the post clears itself one minute after the spawn (21 minutes); its copy reads that time from the same setting. It still names only the event that spawns: Field Boss alone on Tuesday and Friday, Chaos Gate alone on Monday, Thursday and Saturday, both on Sunday.
+- The Sunday reminder no longer says to pick one event: Chaos Gate opens on the hour and the Field Boss a few minutes later, so it says to clear Chaos Gate first, then run to the boss.
 
 ## 2026-11-05
 

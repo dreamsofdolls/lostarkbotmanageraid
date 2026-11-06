@@ -71,6 +71,22 @@ test("world-event reminder opens 20 minutes before Friday's Field Boss and names
   assert.equal(tooEarly, null);
 });
 
+test("the Sunday reminder tells players to clear Chaos Gate first, then the Field Boss", () => {
+  // Chaos Gate opens on the hour and the Field Boss spawns a few minutes
+  // later, so players do both in that order rather than pick one.
+  const vars = { spawnUnix: 1762444800, ttlMinutes: 21 };
+  const copy = {
+    vi: t("announcements.world-event-reminder.both", "vi", vars),
+    en: t("announcements.world-event-reminder.both", "en", vars),
+    jp: t("announcements.world-event-reminder.both", "jp", vars),
+  };
+  assert.match(copy.vi, /làm Chaos Gate trước rồi chạy qua boss/);
+  assert.doesNotMatch(copy.vi, /chọn event/);
+  assert.match(copy.en, /clear Chaos Gate first, then run to the boss/);
+  assert.doesNotMatch(copy.en, /pick the event/);
+  assert.match(copy.jp, /Chaos Gate を済ませてからボスへ/);
+});
+
 test("world-event reminder matches Field Boss alone on Tuesday", () => {
   const match = resolveWorldEventReminderForNow(utc(2026, 4, 28, 14, 56));
   assert.deepEqual(match?.presetKeys, ["field_boss"]);

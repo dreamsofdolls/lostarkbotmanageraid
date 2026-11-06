@@ -2522,7 +2522,7 @@ module.exports = {
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。入場準備をしてね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
       fieldBoss: "👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。討伐準備をしてね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
-      both: "🌪️ **Chaos Gate** と 👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。日曜日は両方ありますから、必要な方を選んでね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
+      both: "🌪️ **Chaos Gate** と 👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。Chaos Gate が先に開いて、Field Boss は数分後に出ますの。Chaos Gate を済ませてからボスへ急いでね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
     },
     "cleanup-volume": {
       empty: [

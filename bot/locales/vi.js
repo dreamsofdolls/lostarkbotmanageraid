@@ -2551,7 +2551,7 @@ module.exports = {
     "world-event-reminder": {
       chaosGate: "🌪️ **Chaos Gate** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị vào event nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
       fieldBoss: "👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị săn boss nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
-      both: "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chủ nhật có cả hai, nhớ chọn event cần làm nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
+      both: "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chaos Gate mở đúng giờ, Field Boss ra sau vài phút, làm Chaos Gate trước rồi chạy qua boss nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
     },
     "cleanup-volume": {
       empty: [
