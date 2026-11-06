@@ -8,8 +8,9 @@ const {
 } = require("../tasks/shared-tasks/schedule");
 
 const WORLD_EVENT_PRESET_KEYS = Object.freeze(["chaos_gate", "field_boss"]);
-const WORLD_EVENT_REMINDER_LEAD_MS = 5 * 60 * 1000;
-const WORLD_EVENT_REMINDER_TTL_MS = 6 * 60 * 1000;
+const WORLD_EVENT_REMINDER_LEAD_MS = 20 * 60 * 1000;
+// The post clears itself one minute after the spawn.
+const WORLD_EVENT_REMINDER_TTL_MS = WORLD_EVENT_REMINDER_LEAD_MS + 60 * 1000;
 const WORLD_EVENT_REMINDER_TICK_MS = 60 * 1000;
 
 function toDate(value) {
@@ -56,8 +57,8 @@ function getNextScheduledSpawnAtMs(presetKey, after = new Date()) {
 }
 
 /**
- * Match the single upcoming spawn whose T-5 reminder window currently
- * contains `now`. Looking five minutes ahead reuses the shared-task schedule
+ * Match the single upcoming spawn whose T-20 reminder window currently
+ * contains `now`. Looking one lead ahead reuses the shared-task schedule
  * resolver as the source of truth and naturally handles the overnight window.
  */
 function resolveWorldEventReminderForNow(
@@ -100,7 +101,7 @@ function resolveWorldEventReminderForNow(
 }
 
 /**
- * Find the next future T-5 boundary across both presets. If the current
+ * Find the next future T-20 boundary across both presets. If the current
  * reminder window is already open, this intentionally advances to the next
  * hourly spawn so `/raid-announce show` never labels a past instant as next.
  */

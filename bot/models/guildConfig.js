@@ -84,7 +84,7 @@ const guildConfigSchema = new mongoose.Schema(
     // T-10m, T-5m, T-1m). Same shape as `lastMaintenanceEarlyKey` but the
     // slotKey set is "T-15m" / "T-10m" / "T-5m" / "T-1m".
     lastMaintenanceCountdownKey: { type: String, default: null },
-    // Per-guild dedup for the opt-in Chaos Gate / Field Boss T-5 reminder.
+    // Per-guild dedup for the opt-in Chaos Gate / Field Boss T-20 reminder.
     // Value is `world-event:<spawn ISO>` and is shared by both presets so
     // their overlapping Sunday slot produces one combined announcement.
     lastWorldEventReminderKey: { type: String, default: null },

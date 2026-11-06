@@ -2142,7 +2142,7 @@ module.exports = {
           "• `whisper-ack` - whisper on successful parse",
           "• `maintenance-early` - T-3h/2h/1h pre-maintenance reminder",
           "• `maintenance-countdown` - T-15m/10m/5m/1m countdown",
-          "• `world-event-reminder` - T-5m reminder for Chaos Gate / Field Boss, OFF by default",
+          "• `world-event-reminder` - T-20m reminder for Chaos Gate / Field Boss, OFF by default",
           "**Channel-overridable** (6 types): `weekly-reset`, `daily-roster-sync`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. The rest are bound to the monitor channel because their content references it specifically.",
           "**When to use**: enable `world-event-reminder` when the server wants world-event schedule alerts; Sunday combines both events into one post. Maintenance and event reminders can be redirected to a dedicated #announcements channel.",
           "**Admin-only**: requires `Manage Server`.",
@@ -2519,9 +2519,9 @@ module.exports = {
       body: "New week, fresh raid progress. Artist just reset everyone's weekly raid progress - time to start over. Have a good raid week. This notice self-deletes in 30 minutes.",
     },
     "world-event-reminder": {
-      chaosGate: "🌪️ **Chaos Gate** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready to enter~ This reminder clears itself after 6 minutes.",
-      fieldBoss: "👹 **Field Boss** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready for the hunt~ This reminder clears itself after 6 minutes.",
-      both: "🌪️ **Chaos Gate** and 👹 **Field Boss** spawn <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Both are up on Sunday, so pick the event you need~ This reminder clears itself after 6 minutes.",
+      chaosGate: "🌪️ **Chaos Gate** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready to enter~ This reminder clears itself after {ttlMinutes} minutes.",
+      fieldBoss: "👹 **Field Boss** spawns <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Get ready for the hunt~ This reminder clears itself after {ttlMinutes} minutes.",
+      both: "🌪️ **Chaos Gate** and 👹 **Field Boss** spawn <t:{spawnUnix}:R> (at <t:{spawnUnix}:t>). Both are up on Sunday, so pick the event you need~ This reminder clears itself after {ttlMinutes} minutes.",
     },
     "cleanup-volume": {
       empty: [

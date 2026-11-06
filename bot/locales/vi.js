@@ -2162,7 +2162,7 @@ module.exports = {
           "• `whisper-ack` - whisper khi parse clear thành công",
           "• `maintenance-early` - T-3h/2h/1h trước bảo trì",
           "• `maintenance-countdown` - T-15m/10m/5m/1m countdown",
-          "• `world-event-reminder` - nhắc T-5m trước Chaos Gate / Field Boss, mặc định OFF",
+          "• `world-event-reminder` - nhắc T-20m trước Chaos Gate / Field Boss, mặc định OFF",
           "**Channel-overridable** (6 loại): `weekly-reset`, `daily-roster-sync`, `stuck-nudge`, `maintenance-early`, `maintenance-countdown`, `world-event-reminder`. Còn lại bound với monitor channel vì content refer cụ thể.",
           "**Khi nào dùng**: bật `world-event-reminder` nếu server muốn nhắc lịch world event; Chủ nhật cả hai event được gộp một tin. Hoặc redirect maintenance / event reminder sang #announcements riêng.",
           "**Admin-only**: cần `Manage Server`.",
@@ -2549,9 +2549,9 @@ module.exports = {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
     },
     "world-event-reminder": {
-      chaosGate: "🌪️ **Chaos Gate** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị vào event nhé~ Tin nhắc này tự biến mất sau 6 phút.",
-      fieldBoss: "👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị săn boss nhé~ Tin nhắc này tự biến mất sau 6 phút.",
-      both: "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chủ nhật có cả hai, nhớ chọn event cần làm nhé~ Tin nhắc này tự biến mất sau 6 phút.",
+      chaosGate: "🌪️ **Chaos Gate** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị vào event nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
+      fieldBoss: "👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chuẩn bị săn boss nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
+      both: "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện <t:{spawnUnix}:R> (lúc <t:{spawnUnix}:t>). Chủ nhật có cả hai, nhớ chọn event cần làm nhé~ Tin nhắc này tự biến mất sau {ttlMinutes} phút.",
     },
     "cleanup-volume": {
       empty: [

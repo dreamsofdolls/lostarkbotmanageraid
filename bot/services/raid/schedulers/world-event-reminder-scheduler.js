@@ -35,7 +35,8 @@ async function claimWorldEventReminder({ GuildConfig, cfg, reminder }) {
 
 function buildWorldEventReminderContent({ reminder, lang, t }) {
   const spawnUnix = Math.floor(reminder.spawnAtMs / 1000);
-  return t(worldEventReminderMessageKey(reminder.presetKeys), lang, { spawnUnix });
+  const ttlMinutes = Math.round(WORLD_EVENT_REMINDER_TTL_MS / 60000);
+  return t(worldEventReminderMessageKey(reminder.presetKeys), lang, { spawnUnix, ttlMinutes });
 }
 
 function createWorldEventReminderSchedulerService({

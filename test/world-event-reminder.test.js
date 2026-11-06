@@ -22,6 +22,7 @@ const {
 const {
   createWorldEventReminderSchedulerService,
 } = require("../bot/services/raid/schedulers/world-event-reminder-scheduler");
+const { t } = require("../bot/services/i18n");
 
 function utc(year, month, day, hour, minute, second = 0) {
   return new Date(Date.UTC(year, month - 1, day, hour, minute, second, 0));
@@ -36,7 +37,7 @@ function makeGuild(channel) {
   };
 }
 
-test("world-event reminder matches Chaos Gate at T-5 and catches up inside the window", () => {
+test("world-event reminder matches Chaos Gate inside its window and catches up", () => {
   // Mon Apr 27 2026 11:00 UTC-4 = 15:00 UTC.
   const exact = resolveWorldEventReminderForNow(utc(2026, 4, 27, 14, 55, 30));
   const catchUp = resolveWorldEventReminderForNow(utc(2026, 4, 27, 14, 57));
@@ -56,6 +57,18 @@ test("world-event reminder follows US Eastern standard time in winter", () => {
   assert.deepEqual(firstSpawn?.presetKeys, ["chaos_gate"]);
   assert.equal(firstSpawn?.spawnAtMs, Date.UTC(2026, 10, 5, 16, 0, 0, 0));
   assert.equal(lastSpawn?.spawnAtMs, Date.UTC(2026, 10, 6, 10, 0, 0, 0));
+});
+
+test("world-event reminder opens 20 minutes before Friday's Field Boss and names it alone", () => {
+  // Fri Nov 6 2026 11:00 EST = 16:00 UTC: Field Boss only, no Chaos Gate.
+  const opens = resolveWorldEventReminderForNow(utc(2026, 11, 6, 15, 40));
+  const tooEarly = resolveWorldEventReminderForNow(utc(2026, 11, 6, 15, 39));
+
+  assert.deepEqual(opens?.presetKeys, ["field_boss"]);
+  assert.equal(opens?.spawnAtMs, Date.UTC(2026, 10, 6, 16, 0, 0, 0));
+  assert.equal(opens?.reminderAtMs, Date.UTC(2026, 10, 6, 15, 40, 0, 0));
+  assert.equal(worldEventReminderMessageKey(opens?.presetKeys), "announcements.world-event-reminder.fieldBoss");
+  assert.equal(tooEarly, null);
 });
 
 test("world-event reminder matches Field Boss alone on Tuesday", () => {
@@ -85,8 +98,8 @@ test("next reminder boundary advances past a reminder window already in progress
   const beforeWindow = nextWorldEventReminderBoundaryMs(utc(2026, 4, 27, 14, 0));
   const insideWindow = nextWorldEventReminderBoundaryMs(utc(2026, 4, 27, 14, 57));
 
-  assert.equal(beforeWindow, Date.UTC(2026, 3, 27, 14, 55, 0, 0));
-  assert.equal(insideWindow, Date.UTC(2026, 3, 27, 15, 55, 0, 0));
+  assert.equal(beforeWindow, Date.UTC(2026, 3, 27, 14, 40, 0, 0));
+  assert.equal(insideWindow, Date.UTC(2026, 3, 27, 15, 40, 0, 0));
 });
 
 test("world-event reminder helpers reject invalid dates and lead windows consistently", () => {
@@ -231,4 +244,42 @@ test("world-event scheduler releases its dedup claim when Discord send fails", a
     update: { $set: { lastWorldEventReminderKey: null } },
     options: { new: true },
   });
+});
+
+test("the reminder post clears one minute after the spawn and its copy says how long", async () => {
+  // Fri Nov 6 2026, 20 minutes before the 11:00 EST Field Boss.
+  const now = utc(2026, 11, 6, 15, 40);
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: null,
+    lastWorldEventReminderKey: null,
+    announcements: {
+      worldEventReminder: { enabled: true, channelId: "override-1" },
+    },
+  };
+  const posts = [];
+  const service = createWorldEventReminderSchedulerService({
+    GuildConfig: {
+      find: () => ({ lean: async () => [cfg] }),
+      findOneAndUpdate: async () => ({ ...cfg }),
+    },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => "vi",
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return { id: "message-1" };
+    },
+    t,
+    nowDate: () => now,
+  });
+
+  await service.runWorldEventReminderTick({
+    guilds: { cache: new Map([["guild-1", makeGuild({ id: "override-1" })]]) },
+  });
+
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0][2], 21 * 60 * 1000);
+  assert.match(posts[0][1], /Field Boss/);
+  assert.doesNotMatch(posts[0][1], /Chaos Gate/);
+  assert.match(posts[0][1], /sau 21 phút/);
 });

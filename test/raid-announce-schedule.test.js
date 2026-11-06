@@ -54,12 +54,12 @@ test("nextAnnouncementEligibleBoundaryMs advances cleanup to the next :30 slot f
   assert.equal(next, Date.UTC(2026, 3, 24, 12, 30, 0, 0));
 });
 
-test("world-event announce preview timing uses the next T-5 boundary", () => {
+test("world-event announce preview timing uses the next T-20 boundary", () => {
   // Mon Apr 27 2026 10:00 UTC-4. Chaos Gate starts at 11:00 UTC-4,
-  // so the first reminder boundary is 10:55 UTC-4 = 14:55 UTC.
+  // so the first reminder boundary is 10:40 UTC-4 = 14:40 UTC.
   const now = new Date(Date.UTC(2026, 3, 27, 14, 0, 0, 0));
   const next = __test.nextAnnouncementEligibleBoundaryMs("world-event-reminder", now);
-  assert.equal(next, Date.UTC(2026, 3, 27, 14, 55, 0, 0));
+  assert.equal(next, Date.UTC(2026, 3, 27, 14, 40, 0, 0));
 });
 
 test("world-event announce scheduler check follows its one-minute boot phase", () => {

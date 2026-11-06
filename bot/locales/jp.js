@@ -2143,7 +2143,7 @@ module.exports = {
           "• `whisper-ack` - クリア解析成功時のささやき",
           "• `maintenance-early` - メンテナンス T-3h/2h/1h 前のお知らせ",
           "• `maintenance-countdown` - T-15m/10m/5m/1m カウントダウン",
-          "• `world-event-reminder` - Chaos Gate / Field Boss の T-5m 通知、初期値は OFF",
+          "• `world-event-reminder` - Chaos Gate / Field Boss の T-20m 通知、初期値は OFF",
           "**チャンネル上書き可能** (6 種別): `weekly-reset`、`daily-roster-sync`、`stuck-nudge`、`maintenance-early`、`maintenance-countdown`、`world-event-reminder`。残りは内容が監視チャンネルを参照しているので固定ですわ。",
           "**使うタイミング**: ワールドイベントの時刻通知が欲しい時は `world-event-reminder` をオン。日曜日に両方ある時は一つの投稿にまとめますの。メンテナンスやイベント通知は専用 #announcements にリダイレクトできますわ♪",
           "**管理者限定**: `サーバー管理` 権限が必要ですわ。",
@@ -2520,9 +2520,9 @@ module.exports = {
       body: "新しい週が来ましたわね～♪ 今週のレイド進捗をアーティストがリセットしましたわ、皆さんは最初からまた挑戦してくださいませ。素敵なレイド週間をお過ごしくださいね♪ この案内は30分後にお片付けしますの。",
     },
     "world-event-reminder": {
-      chaosGate: "🌪️ **Chaos Gate** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。入場準備をしてね～♪ この通知は6分後にお片付けしますの。",
-      fieldBoss: "👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。討伐準備をしてね～♪ この通知は6分後にお片付けしますの。",
-      both: "🌪️ **Chaos Gate** と 👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。日曜日は両方ありますから、必要な方を選んでね～♪ この通知は6分後にお片付けしますの。",
+      chaosGate: "🌪️ **Chaos Gate** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。入場準備をしてね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
+      fieldBoss: "👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。討伐準備をしてね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
+      both: "🌪️ **Chaos Gate** と 👹 **Field Boss** は <t:{spawnUnix}:R> に出現しますわ (時刻 <t:{spawnUnix}:t>)。日曜日は両方ありますから、必要な方を選んでね～♪ この通知は{ttlMinutes}分後にお片付けしますの。",
     },
     "cleanup-volume": {
       empty: [
