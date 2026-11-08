@@ -1904,7 +1904,7 @@ module.exports = {
           "",
           "**Icons**: {iconDone} done all gates · {iconPartial} partial · {iconPending} pending · {iconLock} not eligible (iLvl too low).",
           "**When to use**: often - check which char still has raids pending this week.",
-          "**Auto-refresh**: roster data (iLvl/class) auto-updates every 2h, and the `🔄 Refresh roster` button pulls the current account immediately. If you opt-in via `/raid-auto-manage`, raid progress also auto-syncs from bible.",
+          "**Auto-refresh**: roster data (iLvl/class) auto-updates every 2h, and the `🔄 Refresh roster` button pulls the current account immediately. A character renamed in game is renamed here too and keeps its progress, once a refresh has seen it under its old name. If you opt-in via `/raid-auto-manage`, raid progress also auto-syncs from bible.",
           "**🔄 Sync now button**: only visible when you've enabled `/raid-auto-manage action:on`. Click to pull bible logs/progress immediately (cooldown 15s for Raid Managers, 10 min for regular users).",
           "**Filters**: raid filter dropdown to zoom into one specific raid. Toggle `📝 Side tasks` to view daily/weekly chores registered via `/raid-task`.",
           "**Solo**: Act 4/Kazeros/Serca/Belgardin Solo stays visible in character cards and the raid dropdown with its own pending count, but is excluded from all-raids, roster, header, and footer pending/success totals. A Solo raid that takes no gold slot this week stays on the card but is counted nowhere. Horizon has no Solo mode.",

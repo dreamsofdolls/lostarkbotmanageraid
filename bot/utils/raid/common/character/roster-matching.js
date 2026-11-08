@@ -10,6 +10,9 @@ const {
 function buildFetchedRosterIndexes(fetchedChars) {
   const byName = new Map();
   const byFoldedName = new Map();
+  // lostark.bible's character id survives a rename, so a saved character
+  // whose name left the roster is found again by its cached bibleCid.
+  const byCid = new Map();
 
   for (const fetched of fetchedChars || []) {
     const charName = fetched?.charName;
@@ -17,6 +20,7 @@ function buildFetchedRosterIndexes(fetchedChars) {
     if (!normalized) continue;
 
     byName.set(normalized, fetched);
+    if (fetched.cid) byCid.set(fetched.cid, fetched);
 
     const folded = foldName(charName);
     if (!folded) continue;
@@ -24,7 +28,7 @@ function buildFetchedRosterIndexes(fetchedChars) {
     byFoldedName.get(folded).push(fetched);
   }
 
-  return { byName, byFoldedName };
+  return { byName, byFoldedName, byCid };
 }
 
 function pickUniqueFetchedRosterCandidate(candidates, character) {

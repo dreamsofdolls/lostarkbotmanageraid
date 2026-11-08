@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-08
+
+### Fixed
+- A character renamed in game is renamed on its roster too and keeps its raid progress, gold-earner choice, side tasks and Bible ids. The roster refresh follows it by its lostark.bible character id, which a rename keeps. Before, the refresh lost track of it: the old name stayed with a frozen item level, and Bible Auto-sync dropped its clears because the logs carried the new name.
+- Each roster refresh records the lostark.bible character id of every character that lacks one (most Local Sync characters), with no extra Bible request, so their later renames are followed too.
+
 ## 2026-11-06
 
 ### Changed

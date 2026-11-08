@@ -50,7 +50,9 @@ function createRosterFetchService({ bibleLimiter }) {
   // One character of the page's `roster:[...]` data payload, in the key order
   // lostark.bible serialises it. If that order changes, nothing matches and
   // the fetch falls back to the rendered cards alone.
-  const ROSTER_PAYLOAD_ENTRY = /\{id:\d+,name:"((?:[^"\\]|\\.)*)",class:"((?:[^"\\]|\\.)*)",ilvl:([\d.]+),combatPower:(?:null|\{id:\d+,score:([\d.]+)\}),combatPowerIsEstimate:(true|false)/g;
+  // Its `id` is bible's character id (the `cid` of the logs API), which a
+  // rename keeps, so the refresh can follow a renamed character by it.
+  const ROSTER_PAYLOAD_ENTRY = /\{id:(\d+),name:"((?:[^"\\]|\\.)*)",class:"((?:[^"\\]|\\.)*)",ilvl:([\d.]+),combatPower:(?:null|\{id:\d+,score:([\d.]+)\}),combatPowerIsEstimate:(true|false)/g;
 
   // The cards print item level and CP rounded to two decimals, trailing
   // zeros dropped ("1722.5"); payload records are read the same way.
@@ -70,22 +72,31 @@ function createRosterFetchService({ bibleLimiter }) {
     if (entries.length === 0 && /\bname"?\s*:/.test(payload)) {
       console.warn("[roster] roster payload found but no character matched its expected shape");
     }
-    return entries.map(([, name, classId, ilvl, score, estimate]) => ({
+    return entries.map(([, cid, name, classId, ilvl, score, estimate]) => ({
       charName: unescapeJsonLike(name),
       className: getClassName(unescapeJsonLike(classId)),
       itemLevel: roundPayloadNumber(ilvl),
       combatScore: score ? `${estimate === "true" ? "≈" : ""}${roundPayloadNumber(score)}` : "?",
+      cid: Number(cid),
     }));
   }
 
   // lostark.bible renders a card only for characters it updated recently, so
   // an alt not refreshed for a few weeks is in the payload alone. It is
   // inserted by item level, where its card would have been. A page with no
-  // cards (a hidden or missing roster) stays empty.
-  function addPayloadOnlyCharacters(characters, html) {
+  // cards (a hidden or missing roster) stays empty. Cards take their bible
+  // character id from the payload record of the same name.
+  function mergeRosterPayload(characters, html) {
     if (characters.length === 0) return characters;
-    const listed = new Set(characters.map((character) => character.charName.toLowerCase()));
-    for (const record of extractRosterPayloadFromHtml(html)) {
+    const payload = extractRosterPayloadFromHtml(html);
+    const cidByName = new Map(payload.map((record) => [record.charName.toLowerCase(), record.cid]));
+    const listed = new Set();
+    for (const character of characters) {
+      const key = character.charName.toLowerCase();
+      listed.add(key);
+      if (cidByName.has(key)) character.cid = cidByName.get(key);
+    }
+    for (const record of payload) {
       const key = record.charName.toLowerCase();
       if (!record.charName || listed.has(key) || !(record.itemLevel > 0)) continue;
       listed.add(key);
@@ -146,7 +157,7 @@ function createRosterFetchService({ bibleLimiter }) {
       });
     }
 
-    return addPayloadOnlyCharacters(characters, html);
+    return mergeRosterPayload(characters, html);
   }
 
   return {

@@ -39,9 +39,11 @@ function getErrorMessage(err) {
  * @param {Function} deps.formatNextCooldownRemaining - "Nm remaining"
  *   formatter shared with /raid-auto-manage cooldown UX
  * @param {Function} deps.buildFetchedRosterIndexes - index builder for
- *   the parsed bible roster (used by the apply phase)
+ *   the parsed bible roster (used by the apply phase); its `byCid` map
+ *   follows a character renamed in game by its bible character id
  * @param {Function} deps.findFetchedRosterMatchForCharacter - resolves a
- *   saved character against the fresh bible parse (handles renames)
+ *   saved character against the fresh bible parse by exact or
+ *   accent-folded name
  * @param {Function} deps.fetchRosterCharacters - bible HTTP fetcher
  *   (wrapped in the global bibleLimiter at the compose root)
  * @returns {{
@@ -332,6 +334,12 @@ function createRosterRefreshService(deps) {
     return collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts);
   }
 
+  function applyFetchedDisplayFields(character, match) {
+    character.itemLevel = Number(match.itemLevel) || character.itemLevel;
+    character.combatScore = String(match.combatScore || character.combatScore || "");
+    if (match.className) character.class = match.className;
+  }
+
   function applyStaleAccountRefreshes(userDoc, collected) {
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       return false;
@@ -361,13 +369,20 @@ function createRosterRefreshService(deps) {
       if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
       const fetchedIndexes = buildFetchedRosterIndexes(fetched);
-      let matchedAny = false;
+      // Fetched characters already paired with a saved one. A rename found by
+      // character id never takes one of these, so a renamed character the
+      // user re-added by hand is not renamed over.
+      const claimed = new Set();
+      const unmatched = [];
       for (const character of account.characters || []) {
         const matchInfo = findFetchedRosterMatchForCharacter(character, fetchedIndexes);
-        if (!matchInfo) continue;
+        if (!matchInfo) {
+          unmatched.push(character);
+          continue;
+        }
 
         const match = matchInfo.match;
-        matchedAny = true;
+        claimed.add(match);
         const currentName = getCharacterName(character);
         if (match.charName && currentName !== match.charName) {
           character.name = match.charName;
@@ -375,10 +390,26 @@ function createRosterRefreshService(deps) {
           character.bibleCid = null;
           character.bibleRid = null;
         }
-        character.itemLevel = Number(match.itemLevel) || character.itemLevel;
-        character.combatScore = String(match.combatScore || character.combatScore || "");
-        if (match.className) character.class = match.className;
+        // A differing saved id is kept: the name match stays authoritative,
+        // and Auto Sync re-resolves ids that no longer fit.
+        if (match.cid && !character.bibleCid) character.bibleCid = match.cid;
+        applyFetchedDisplayFields(character, match);
       }
+
+      // lostark.bible keeps a character's id through a rename, so a saved
+      // character whose name left the roster follows its id to the new name.
+      // Its Bible ids, raids, tasks and settings stay as they are.
+      for (const character of unmatched) {
+        const match = fetchedIndexes.byCid?.get(character.bibleCid);
+        if (!match || claimed.has(match)) continue;
+        claimed.add(match);
+        console.log(
+          `[refresh] account "${account.accountName}": "${getCharacterName(character)}" is now "${match.charName}" on lostark.bible (same character id), renamed in place.`
+        );
+        character.name = match.charName;
+        applyFetchedDisplayFields(character, match);
+      }
+      const matchedAny = claimed.size > 0;
 
       if (!matchedAny) {
         console.warn(

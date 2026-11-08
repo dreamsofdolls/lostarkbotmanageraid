@@ -1924,7 +1924,7 @@ module.exports = {
           "",
           "**Icons**: {iconDone} done hết gate · {iconPartial} đang dở · {iconPending} chưa clear · {iconLock} chưa đủ iLvl.",
           "**Khi nào dùng**: thường xuyên - kiểm tra char nào còn pending tuần này.",
-          "**Auto-refresh**: roster (iLvl/class) tự update mỗi 2h, và có nút `🔄 Refresh roster` để kéo lại dữ liệu roster ngay cho account đang xem. Nếu cậu opt-in `/raid-auto-manage` thì progress raid cũng auto-sync luôn từ bible.",
+          "**Auto-refresh**: roster (iLvl/class) tự update mỗi 2h, và có nút `🔄 Refresh roster` để kéo lại dữ liệu roster ngay cho account đang xem. Char đổi tên trong game thì tớ cũng đổi tên ở đây và giữ nguyên progress, miễn là trước đó đã refresh được một lần với tên cũ. Nếu cậu opt-in `/raid-auto-manage` thì progress raid cũng auto-sync luôn từ bible.",
           "**🔄 Sync ngay button**: chỉ hiện khi đã `/raid-auto-manage action:on`. Bấm để pull bible logs/progress ngay (cooldown 15s cho Raid Manager, 10 phút cho user thường).",
           "**Filter**: dropdown raid filter để zoom 1 raid cụ thể. Toggle `📝 Side tasks` để xem checklist chore daily/weekly đã đăng ký qua `/raid-task`.",
           "**Solo**: Act 4/Kazeros/Serca/Belgardin Solo vẫn hiện trong card và dropdown raid với pending riêng, nhưng không cộng vào tổng pending/success ở all-raids, roster, header hay footer. Raid Solo không chiếm slot gold nào tuần này vẫn hiện trong card nhưng không được đếm ở đâu cả. Horizon không có Solo.",

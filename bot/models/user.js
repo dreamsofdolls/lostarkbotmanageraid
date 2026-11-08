@@ -84,8 +84,10 @@ const characterSchema = new mongoose.Schema(
     // lostark.bible identifiers cached after the first fetch of the
     // character's logs page - avoids re-scraping the SSR HTML on every
     // subsequent /raid-auto-manage sync. `sn` = characterSerial in
-    // bible's API payload, `cid` = class id, `rid` = roster id. Null
-    // until the first sync populates them.
+    // bible's API payload, `cid` = bible's character id, `rid` = roster id.
+    // Null until the first sync populates them; the roster refresh also
+    // fills `cid` from the roster page and follows a rename by it, since
+    // bible keeps both `sn` and `cid` through a rename.
     bibleSerial: { type: String, default: null },
     bibleCid: { type: Number, default: null },
     bibleRid: { type: Number, default: null },

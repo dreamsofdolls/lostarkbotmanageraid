@@ -32,7 +32,7 @@ test("a roster character bible shows no card for is still fetched, in item level
   }));
 
   assert.deepEqual(characters.map((c) => c.charName), ["Alpha", "Beta", "Gamma", "Delta"]);
-  assert.deepEqual(characters[1], { charName: "Beta", className: "Gunslinger", itemLevel: 1722.5, combatScore: "≈2741.46" });
+  assert.deepEqual(characters[1], { charName: "Beta", className: "Gunslinger", itemLevel: 1722.5, combatScore: "≈2741.46", cid: 2 });
   assert.equal(characters[3].className, "Gunlancer");
   assert.equal(characters[3].combatScore, "?");
 });
@@ -64,6 +64,21 @@ test("a roster payload in a shape the fetch does not know falls back to the card
   assert.deepEqual(characters.map((c) => c.charName), ["Alpha"]);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /roster payload/);
+});
+
+// The payload id is lostark.bible's character id (the `cid` its logs API
+// takes); it stays the same when the character is renamed.
+test("every fetched character carries its bible character id, cards included", async (t) => {
+  const characters = await fetchRoster(t, rosterPage({
+    cards: [{ name: "Alpha", ilvl: "1740.83", cp: "≈3264.49" }, { name: "gamma", ilvl: "1710.83", cp: "1617.64" }],
+    payload: [ALPHA, BETA, GAMMA],
+  }));
+
+  assert.deepEqual(characters.map((c) => [c.charName, c.cid]), [
+    ["Alpha", 1],
+    ["Beta", 2],
+    ["gamma", 3],
+  ]);
 });
 
 test("a roster page with no character cards still fetches no characters", async (t) => {

@@ -341,3 +341,156 @@ test("applyStaleAccountRefreshes indexes account-name collisions once", () => {
     `expected linear account reads, received ${accountReads}`,
   );
 });
+
+// ─── Renamed characters ─────────────────────────────────────────────────────
+// lostark.bible keeps a character's id (`cid`) through a rename, and the roster
+// page lists it beside each name. The refresh follows a saved character whose
+// name is gone from the roster to the roster character with its cid.
+
+function refreshAccount(service, characters, fetchedChars, accountName = "Chixpaul") {
+  const user = {
+    discordId: "user-1",
+    accounts: [{ accountName, lastRefreshedAt: 0, characters }],
+  };
+  const didUpdate = service.applyStaleAccountRefreshes(user, [
+    { accountName, attempted: true, resolvedSeed: accountName, fetchedChars },
+  ]);
+  return { didUpdate, account: user.accounts[0] };
+}
+
+function renamedCharacter() {
+  return {
+    id: "char-zedaxpaul",
+    name: "Zedaxpaul",
+    class: "Souleater",
+    itemLevel: 1750,
+    combatScore: "6000",
+    isGoldEarner: false,
+    bibleSerial: "200000067680670",
+    bibleCid: 291570,
+    bibleRid: 211957,
+    assignedRaids: {
+      serca: {
+        modeKey: "nightmare",
+        G1: { difficulty: "Nightmare", completedDate: 1794066141790 },
+        G2: { difficulty: "Nightmare", completedDate: null },
+      },
+    },
+    sideTasks: [{ taskId: "una", name: "Una dailies", reset: "daily", completed: true }],
+  };
+}
+
+test("a character renamed on bible is renamed in place by its bible character id", () => {
+  const service = makeService(async () => []);
+  const before = renamedCharacter();
+  const { didUpdate, account } = refreshAccount(service, [
+    { name: "Chixpaul", class: "Wildsoul", itemLevel: 1750, bibleCid: 106427776 },
+    renamedCharacter(),
+  ], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, combatScore: "4000", cid: 106427776 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "≈7139.95", cid: 291570 },
+  ]);
+
+  const renamed = account.characters[1];
+  assert.equal(didUpdate, true);
+  assert.equal(account.characters.length, 2);
+  assert.equal(renamed.name, "Sunxpaul");
+  assert.equal(renamed.itemLevel, 1781.67);
+  assert.equal(renamed.combatScore, "≈7139.95");
+  assert.equal(renamed.class, "Souleater");
+  assert.equal(renamed.id, before.id);
+  assert.equal(renamed.bibleSerial, before.bibleSerial);
+  assert.equal(renamed.bibleCid, before.bibleCid);
+  assert.equal(renamed.bibleRid, before.bibleRid);
+  assert.equal(renamed.isGoldEarner, false);
+  assert.deepEqual(renamed.assignedRaids, before.assignedRaids);
+  assert.deepEqual(renamed.sideTasks, before.sideTasks);
+});
+
+test("a rename alone counts as a refreshed roster", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [renamedCharacter()], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, cid: 106427776 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ]);
+
+  assert.equal(account.characters[0].name, "Sunxpaul");
+  assert.ok(account.lastRefreshedAt > 0, "the success stamp is written");
+});
+
+test("a refresh records the bible character id a saved character lacks, and keeps a different one", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    { name: "Alpha", class: "Bard", itemLevel: 1700 },
+    { name: "Beta", class: "Bard", itemLevel: 1700, bibleCid: 7 },
+  ], [
+    { charName: "Alpha", className: "Bard", itemLevel: 1710, cid: 1 },
+    { charName: "Beta", className: "Bard", itemLevel: 1710, cid: 8 },
+  ], "Alpha");
+
+  assert.equal(account.characters[0].bibleCid, 1);
+  assert.equal(account.characters[0].bibleSerial ?? null, null);
+  assert.equal(account.characters[1].bibleCid, 7);
+});
+
+test("a case-only rename clears the old bible ids and records the character id again", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    { name: "alpha", class: "Bard", itemLevel: 1700, bibleSerial: "s-1", bibleCid: 1, bibleRid: 9 },
+  ], [
+    { charName: "Alpha", className: "Bard", itemLevel: 1710, cid: 1 },
+  ], "Alpha");
+
+  const [character] = account.characters;
+  assert.equal(character.name, "Alpha");
+  assert.equal(character.bibleSerial, null);
+  assert.equal(character.bibleRid, null);
+  assert.equal(character.bibleCid, 1);
+});
+
+test("a saved character with no bible character id is not renamed", () => {
+  const service = makeService(async () => []);
+  const character = renamedCharacter();
+  delete character.bibleCid;
+  const { account } = refreshAccount(service, [character], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, cid: 106427776 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ]);
+
+  assert.equal(account.characters[0].name, "Zedaxpaul");
+});
+
+test("a roster without bible character ids renames nothing", () => {
+  const service = makeService(async () => []);
+  const character = renamedCharacter();
+  delete character.bibleCid;
+  const { account } = refreshAccount(service, [character], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67 },
+  ]);
+
+  assert.equal(account.characters[0].name, "Zedaxpaul");
+});
+
+test("two saved characters with one bible character id rename only the first", () => {
+  const service = makeService(async () => []);
+  const duplicate = { ...renamedCharacter(), id: "char-duplicate", name: "Zedaxpaul2" };
+  const { account } = refreshAccount(service, [renamedCharacter(), duplicate], [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ]);
+
+  assert.deepEqual(account.characters.map((c) => c.name), ["Sunxpaul", "Zedaxpaul2"]);
+});
+
+test("a renamed character the user already re-added is not renamed over it", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    renamedCharacter(),
+    { name: "Sunxpaul", class: "Souleater", itemLevel: 1781.67 },
+  ], [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ]);
+
+  assert.deepEqual(account.characters.map((c) => c.name), ["Zedaxpaul", "Sunxpaul"]);
+  assert.equal(account.characters[1].bibleCid, 291570);
+});
