@@ -1907,7 +1907,7 @@ module.exports = {
           "Artist mở card gộp char đã lưu với char trên Bible. Tick một char trong dropdown là đổi trạng thái của nó: char đã lưu thì giữ hoặc bỏ, char mới thì thêm hoặc không. Tiến độ raid của char còn lại được giữ nguyên.",
           "",
           "**Khi nào dùng**: cậu vừa tạo char mới chưa được track, hoặc muốn bỏ alt không chơi nữa.",
-          "**Icon**: `✅` giữ · `🆕` sẽ thêm · `➖` sẽ bỏ · `⬜` char mới chưa thêm · `📦` char đã lưu nhưng không còn trên Bible (đổi tên / private log).",
+          "**Icon**: `✅` giữ · `🆕` sẽ thêm · `➖` sẽ bỏ · `⬜` char mới chưa thêm · `📦` char đã lưu nhưng không còn trên Bible (đổi tên / private log). Char đổi tên trong game mà tớ đã biết ID Bible của nó thì chỉ hiện một dòng `✅` với tên mới và giữ nguyên progress.",
           "**Mẹo**: nếu bible offline tạm, vẫn vào được nhưng chỉ remove được. Đợi bible up rồi add char mới sau.",
           "**Khác `/raid-add-roster`**: edit-roster sửa roster đã có. Muốn add roster mới hoàn toàn (account khác) → dùng `/raid-add-roster`.",
         ],

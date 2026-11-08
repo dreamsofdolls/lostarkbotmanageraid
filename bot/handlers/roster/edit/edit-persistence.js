@@ -40,9 +40,11 @@ function createPersistEditedRoster({
           character,
         ])
       );
-      const selectedNameSet = new Set(
-        selectedChars.map((character) => normalizeName(character.charName))
-      );
+      // A row of a character renamed in game carries the saved name as its
+      // savedKey and the new name as charName; the saved record is found by
+      // savedKey, so Save renames it instead of replacing it.
+      const savedKeyOf = (character) => character.savedKey || normalizeName(character.charName);
+      const selectedNameSet = new Set(selectedChars.map(savedKeyOf));
 
       summary.added = [];
       summary.removed = [];
@@ -61,10 +63,11 @@ function createPersistEditedRoster({
       }
 
       const editedChars = selectedChars.map((character) => {
-        const key = normalizeName(character.charName);
+        const key = savedKeyOf(character);
         const existing = existingMap.get(key);
         if (existing) {
-          summary.kept.push(getCharacterName(existing));
+          const renamed = key !== normalizeName(character.charName);
+          summary.kept.push(renamed ? character.charName : getCharacterName(existing));
         } else {
           summary.added.push(character.charName);
         }

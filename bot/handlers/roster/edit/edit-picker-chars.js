@@ -1,5 +1,24 @@
 "use strict";
 
+// lostark.bible keeps a character's id (`cid`) through a rename, so a saved
+// character Bible no longer lists and a Bible character nobody saved, with
+// one id, are the same character under a new name. Returns savedKey ->
+// bibleKey for each such pair.
+function pairRenamedCharacters(savedMap, bibleMap) {
+  const bibleKeyByCid = new Map();
+  for (const [key, bible] of bibleMap) {
+    if (bible.cid && !savedMap.has(key)) bibleKeyByCid.set(bible.cid, key);
+  }
+  const renamedTo = new Map();
+  for (const [key, saved] of savedMap) {
+    const bibleKey = bibleMap.has(key) ? null : bibleKeyByCid.get(saved.bibleCid);
+    if (!bibleKey) continue;
+    renamedTo.set(key, bibleKey);
+    bibleKeyByCid.delete(saved.bibleCid);
+  }
+  return renamedTo;
+}
+
 function buildEditRosterPickerChars({
   savedChars,
   bibleChars,
@@ -10,11 +29,15 @@ function buildEditRosterPickerChars({
   const savedMap = new Map(savedChars.map((character) => [normalizeName(character.name), character]));
   const bibleMap = new Map(bibleChars.map((character) => [normalizeName(character.charName), character]));
   const allKeys = new Set([...savedMap.keys(), ...bibleMap.keys()]);
+  // A renamed character is one row: the saved record under its Bible name.
+  const renamedTo = pairRenamedCharacters(savedMap, bibleMap);
+  const pairedBibleKeys = new Set(renamedTo.values());
 
   const merged = [];
   for (const key of allKeys) {
+    if (pairedBibleKeys.has(key)) continue;
     const saved = savedMap.get(key);
-    const bible = bibleMap.get(key);
+    const bible = bibleMap.get(renamedTo.get(key) || key);
     merged.push({
       charName: bible?.charName || saved.name,
       className: bible?.className || saved.class,

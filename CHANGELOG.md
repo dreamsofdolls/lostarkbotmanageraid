@@ -9,6 +9,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Fixed
 - A character renamed in game is renamed on its roster too and keeps its raid progress, gold-earner choice, side tasks and Bible ids. The roster refresh follows it by its lostark.bible character id, which a rename keeps. Before, the refresh lost track of it: the old name stayed with a frozen item level, and Bible Auto-sync dropped its clears because the logs carried the new name.
 - Each roster refresh records the lostark.bible character id of every character that lacks one (most Local Sync characters), with no extra Bible request, so their later renames are followed too.
+- `/raid-edit-roster` shows a character renamed in game as one kept `✅` row under its new name, and Save renames the saved character, keeping its progress. Before, it showed `📦` for the old name and `⬜` for the new one, and removing the old one while adding the new one lost the character's progress.
+- An accent-only name match no longer wins over a different lostark.bible character id: when a saved character is renamed and another character on the same roster has a name that differs from its old name only by accents, the refresh follows the id instead of taking the other character's data.
 
 ## 2026-11-06
 

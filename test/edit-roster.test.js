@@ -918,3 +918,154 @@ test("fetchBibleRosterWithFallback: a saved name that differs from Bible's only 
   assert.equal(bibleError, null);
   assert.equal(bibleChars.length, 1);
 });
+
+// --------- characters renamed in game ---------
+// lostark.bible keeps a character's id (`cid`) through a rename. A saved
+// character whose name left the roster and a roster name nobody saved, with
+// the same id, are one character: the picker shows it once, kept, under the
+// new name, and Save renames the saved record instead of replacing it.
+
+test("buildEditRosterPickerChars: a character renamed in game is one kept row under its new name", () => {
+  const { factory } = makeFactory();
+  const { merged } = factory.__test.buildEditRosterPickerChars(
+    [
+      { name: "Chixpaul", class: "Wildsoul", itemLevel: 1750, combatScore: "4000", bibleCid: 106427776 },
+      { name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 },
+    ],
+    [
+      { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, combatScore: "4000", cid: 106427776 },
+      { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 },
+    ],
+    25
+  );
+
+  assert.equal(merged.length, 2);
+  const renamed = merged.find((c) => c.savedKey === "zedaxpaul");
+  assert.equal(renamed.charName, "Sunxpaul");
+  assert.equal(renamed.itemLevel, 1781.67);
+  assert.equal(renamed.inBible, true);
+});
+
+test("buildEditRosterPickerChars: a saved character with no bible character id stays apart from a new name", () => {
+  const { factory } = makeFactory();
+  const { merged } = factory.__test.buildEditRosterPickerChars(
+    [{ name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000" }],
+    [{ charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 }],
+    25
+  );
+
+  assert.deepEqual(
+    merged.map((c) => [c.charName, c.savedKey, c.inBible]),
+    [["Zedaxpaul", "zedaxpaul", false], ["Sunxpaul", null, true]]
+  );
+});
+
+test("buildEditRosterPickerChars: a new name the user already saved keeps its own row", () => {
+  const { factory } = makeFactory();
+  const { merged } = factory.__test.buildEditRosterPickerChars(
+    [
+      { name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 },
+      { name: "Sunxpaul", class: "Souleater", itemLevel: 1781.67, combatScore: "7139.95" },
+    ],
+    [{ charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 }],
+    25
+  );
+
+  assert.deepEqual(
+    merged.map((c) => [c.charName, c.savedKey]).sort(),
+    [["Sunxpaul", "sunxpaul"], ["Zedaxpaul", "zedaxpaul"]]
+  );
+});
+
+test("buildEditRosterPickerChars: two saved characters with one bible id pair only the first", () => {
+  const { factory } = makeFactory();
+  const { merged } = factory.__test.buildEditRosterPickerChars(
+    [
+      { name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 },
+      { name: "Zedaxpaul2", class: "Souleater", itemLevel: 1750, combatScore: "5000", bibleCid: 291570 },
+    ],
+    [{ charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 }],
+    25
+  );
+
+  assert.deepEqual(
+    merged.map((c) => [c.charName, c.savedKey]),
+    [["Sunxpaul", "zedaxpaul"], ["Zedaxpaul2", "zedaxpaul2"]]
+  );
+});
+
+test("/raid-edit-roster opens a renamed character as one kept row under its new name", async () => {
+  clearUserLanguageCache();
+  const { factory, docs } = makeFactory({
+    fetchRosterCharacters: async () => [
+      { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, combatScore: "4000", cid: 106427776 },
+      { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 },
+    ],
+  });
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [
+        { id: "chix-id", name: "Chixpaul", class: "Wildsoul", itemLevel: 1750, combatScore: "4000", bibleCid: 106427776 },
+        { id: "zed-id", name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 },
+      ],
+    }],
+  });
+
+  await factory.handleEditRosterCommand({
+    user: { id: "user-1" },
+    options: { getString: () => "Chixpaul" },
+    deferReply: async () => {},
+    editReply: async () => {},
+  });
+  const [session] = factory.__test.sessions.values();
+  for (const open of factory.__test.sessions.values()) clearTimeout(open.expireTimer);
+
+  assert.deepEqual(
+    session.chars.map((c) => [c.charName, c.savedKey]),
+    [["Sunxpaul", "zedaxpaul"], ["Chixpaul", "chixpaul"]]
+  );
+  assert.equal(session.selectedIndices.size, 2);
+});
+
+test("persistEditedRoster: a renamed row keeps the saved character and its progress under the new name", async () => {
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [{
+        id: "zed-id",
+        name: "Zedaxpaul",
+        class: "Souleater",
+        itemLevel: 1750,
+        combatScore: "6000",
+        isGoldEarner: false,
+        bibleSerial: "200000067680670",
+        bibleCid: 291570,
+        bibleRid: 211957,
+        assignedRaids: { serca: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 111 } } },
+        sideTasks: [{ taskId: "una", name: "Una dailies", reset: "daily", completed: true }],
+      }],
+    }],
+  });
+
+  const summary = await factory.__test.persistEditedRoster(makeEditSession({ accountName: "Chixpaul" }), [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", savedKey: "zedaxpaul", inBible: true },
+  ]);
+
+  const [stored] = docs.get("user-1").accounts[0].characters;
+  assert.equal(docs.get("user-1").accounts[0].characters.length, 1);
+  assert.equal(stored.name, "Sunxpaul");
+  assert.equal(stored.itemLevel, 1781.67);
+  assert.equal(stored.id, "zed-id");
+  assert.equal(stored.isGoldEarner, false);
+  assert.equal(stored.bibleSerial, "200000067680670");
+  assert.equal(stored.bibleCid, 291570);
+  assert.equal(stored.assignedRaids.serca.G1.completedDate, 111);
+  assert.equal(stored.sideTasks.length, 1);
+  assert.deepEqual(summary.removed, []);
+  assert.deepEqual(summary.added, []);
+  assert.deepEqual(summary.kept, ["Sunxpaul"]);
+});

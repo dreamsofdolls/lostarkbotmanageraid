@@ -494,3 +494,36 @@ test("a renamed character the user already re-added is not renamed over it", () 
   assert.deepEqual(account.characters.map((c) => c.name), ["Zedaxpaul", "Sunxpaul"]);
   assert.equal(account.characters[1].bibleCid, 291570);
 });
+
+test("an accent-only name match gives way to a different bible character id", () => {
+  // Saved Zoe (cid 10) was renamed to Zed; Zoë (cid 11) is another character
+  // on the same roster. The id, not the folded name, decides.
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    { name: "Main", class: "Bard", itemLevel: 1700, bibleCid: 1 },
+    { name: "Zoe", class: "Bard", itemLevel: 1700, bibleSerial: "sn-10", bibleCid: 10, bibleRid: 5 },
+  ], [
+    { charName: "Main", className: "Bard", itemLevel: 1700, cid: 1 },
+    { charName: "Zoë", className: "Bard", itemLevel: 1701, cid: 11 },
+    { charName: "Zed", className: "Bard", itemLevel: 1710, cid: 10 },
+  ], "Main");
+
+  const zoe = account.characters[1];
+  assert.equal(zoe.name, "Zed");
+  assert.equal(zoe.bibleCid, 10);
+  assert.equal(zoe.bibleSerial, "sn-10");
+});
+
+test("an accent-only name match with the same bible character id still renames", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    { name: "Main", class: "Bard", itemLevel: 1700, bibleCid: 1 },
+    { name: "Zoe", class: "Bard", itemLevel: 1700, bibleCid: 11 },
+  ], [
+    { charName: "Main", className: "Bard", itemLevel: 1700, cid: 1 },
+    { charName: "Zoë", className: "Bard", itemLevel: 1701, cid: 11 },
+  ], "Main");
+
+  assert.equal(account.characters[1].name, "Zoë");
+  assert.equal(account.characters[1].bibleCid, 11);
+});

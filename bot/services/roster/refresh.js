@@ -334,6 +334,17 @@ function createRosterRefreshService(deps) {
     return collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts);
   }
 
+  // An accent-only name match is a guess; a different known bible character
+  // id disproves it (another character on the roster whose name differs only
+  // by accents). The saved character then follows its id instead. An exact
+  // name match stays authoritative.
+  function foldedMatchContradictsCid(matchInfo, character) {
+    const fetchedCid = matchInfo.match?.cid;
+    return matchInfo.matchType === "folded"
+      && Boolean(character.bibleCid && fetchedCid)
+      && fetchedCid !== character.bibleCid;
+  }
+
   function applyFetchedDisplayFields(character, match) {
     character.itemLevel = Number(match.itemLevel) || character.itemLevel;
     character.combatScore = String(match.combatScore || character.combatScore || "");
@@ -376,7 +387,7 @@ function createRosterRefreshService(deps) {
       const unmatched = [];
       for (const character of account.characters || []) {
         const matchInfo = findFetchedRosterMatchForCharacter(character, fetchedIndexes);
-        if (!matchInfo) {
+        if (!matchInfo || foldedMatchContradictsCid(matchInfo, character)) {
           unmatched.push(character);
           continue;
         }

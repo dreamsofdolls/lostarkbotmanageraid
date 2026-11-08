@@ -1887,7 +1887,7 @@ module.exports = {
           "Opens a card that merges your saved chars with the Bible roster. Ticking a char in the dropdown flips it: a saved char switches between keep and remove, a new one between add and skip. Raid progress on the chars you keep is preserved.",
           "",
           "**When to use**: you just made a new char that isn't tracked yet, or you want to drop an alt you don't play anymore.",
-          "**Icons**: `✅` kept · `🆕` will be added · `➖` will be removed · `⬜` new char not added · `📦` saved char no longer on Bible (renamed / private log).",
+          "**Icons**: `✅` kept · `🆕` will be added · `➖` will be removed · `⬜` new char not added · `📦` saved char no longer on Bible (renamed / private log). A character renamed in game shows once, `✅` under its new name, and keeps its progress when Artist already knows its Bible id.",
           "**Tip**: if bible is temporarily offline, you can still enter but only remove. Wait until bible is back to add new chars.",
           "**Difference vs `/raid-add-roster`**: edit-roster modifies an existing roster. To add a brand new roster (different account) → use `/raid-add-roster`.",
         ],

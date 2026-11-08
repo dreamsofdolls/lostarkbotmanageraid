@@ -176,6 +176,8 @@ function createEditRosterCommand({
       class: getCharacterClass(character),
       itemLevel: Number(character.itemLevel) || 0,
       combatScore: character.combatScore || "",
+      // Pairs a character renamed in game with its new name on Bible.
+      bibleCid: character.bibleCid || null,
     }));
     const { bibleChars, bibleError } = await fetchBibleRosterWithFallback(
       savedChars,
