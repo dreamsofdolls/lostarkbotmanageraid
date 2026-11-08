@@ -25,6 +25,8 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.characters.raids",
   "accounts.characters.assignedRaids",
   "accounts.characters.publicLogDisabled",
+  "accounts.characters.renamedFrom",
+  "accounts.characters.renamedAt",
   "discordUsername",
   "discordGlobalName",
   "discordDisplayName",

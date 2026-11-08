@@ -784,6 +784,7 @@ module.exports = {
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_Not eligible yet_",
       noCharacters: "_No characters saved._",
+      renamedNote: "🔁 Renamed in game: {renames}",
       allIneligible: "_No character in this roster is eligible for this raid._",
       moreCharacters: "_+{n} more characters_",
       autoSyncOnBadge: " · 📝 Auto-sync",

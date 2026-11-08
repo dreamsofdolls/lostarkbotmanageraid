@@ -1100,6 +1100,33 @@ test("a renamed character the user unticks reads as a removal, like any saved ch
   assert.doesNotMatch(text, /🔁|đổi tên từ/u);
 });
 
+test("persistEditedRoster: a renamed row leaves a rename note that a later edit keeps", async () => {
+  const before = Date.now();
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [{ id: "zed-id", name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 }],
+    }],
+  });
+  const session = makeEditSession({ accountName: "Chixpaul" });
+
+  await factory.__test.persistEditedRoster(session, [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", savedKey: "zedaxpaul", inBible: true },
+  ]);
+  const [renamed] = docs.get("user-1").accounts[0].characters;
+  assert.equal(renamed.renamedFrom, "Zedaxpaul");
+  assert.ok(renamed.renamedAt >= before);
+
+  await factory.__test.persistEditedRoster(session, [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1782, combatScore: "7200", savedKey: "sunxpaul", inBible: true },
+  ]);
+  const [edited] = docs.get("user-1").accounts[0].characters;
+  assert.equal(edited.renamedFrom, "Zedaxpaul");
+  assert.equal(edited.renamedAt, renamed.renamedAt);
+});
+
 test("persistEditedRoster: a renamed row keeps the saved character and its progress under the new name", async () => {
   const { factory, docs } = makeFactory();
   docs.set("user-1", {

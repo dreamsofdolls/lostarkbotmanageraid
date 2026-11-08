@@ -417,6 +417,8 @@ function createRosterRefreshService(deps) {
         console.log(
           `[refresh] account "${account.accountName}": "${getCharacterName(character)}" is now "${match.charName}" on lostark.bible (same character id), renamed in place.`
         );
+        character.renamedFrom = getCharacterName(character);
+        character.renamedAt = now;
         character.name = match.charName;
         applyFetchedDisplayFields(character, match);
       }

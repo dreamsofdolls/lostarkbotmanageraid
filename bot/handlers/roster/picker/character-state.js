@@ -6,6 +6,8 @@ const PRESERVED_CHARACTER_FIELDS = Object.freeze([
   "bibleRid",
   "publicLogDisabled",
   "publicLogDisabledAt",
+  "renamedFrom",
+  "renamedAt",
 ]);
 
 function preserveRosterCharacterState(record, existing, fields = PRESERVED_CHARACTER_FIELDS) {

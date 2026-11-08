@@ -495,6 +495,56 @@ test("a renamed character the user already re-added is not renamed over it", () 
   assert.equal(account.characters[1].bibleCid, 291570);
 });
 
+test("a rename found by character id records the old name and when it happened", () => {
+  const before = Date.now();
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [renamedCharacter()], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, cid: 106427776 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ]);
+
+  const [character] = account.characters;
+  assert.equal(character.renamedFrom, "Zedaxpaul");
+  assert.ok(character.renamedAt >= before);
+});
+
+test("a refresh that only corrects a name's case leaves no rename note", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [
+    { name: "alpha", class: "Bard", itemLevel: 1700, bibleCid: 1 },
+  ], [
+    { charName: "Alpha", className: "Bard", itemLevel: 1710, cid: 1 },
+  ], "Alpha");
+
+  assert.equal(account.characters[0].name, "Alpha");
+  assert.equal(account.characters[0].renamedFrom ?? "", "");
+});
+
+test("the user schema keeps a character's rename note", () => {
+  const User = require("../bot/models/user");
+  const user = new User({
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [{
+        id: "c1", name: "Sunxpaul", class: "Souleater", itemLevel: 1781, renamedFrom: "Zedaxpaul", renamedAt: 5,
+      }],
+    }],
+  });
+
+  const [character] = user.accounts[0].characters;
+  assert.equal(character.renamedFrom, "Zedaxpaul");
+  assert.equal(character.renamedAt, 5);
+});
+
+test("/raid-check loads a character's rename note", () => {
+  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/queries/raid-check");
+  const fields = String(RAID_CHECK_USER_QUERY_FIELDS);
+
+  assert.match(fields, /accounts\.characters\.renamedFrom/u);
+  assert.match(fields, /accounts\.characters\.renamedAt/u);
+});
+
 test("an accent-only name match gives way to a different bible character id", () => {
   // Saved Zoe (cid 10) was renamed to Zed; Zoë (cid 11) is another character
   // on the same roster. The id, not the folded name, decides.

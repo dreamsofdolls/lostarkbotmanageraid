@@ -785,6 +785,7 @@ module.exports = {
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_まだ参加できませんわ_",
       noCharacters: "_キャラがまだ登録されていませんわ。_",
+      renamedNote: "🔁 ゲーム内で改名: {renames}",
       allIneligible: "_このロスター内にこのレイドへ参加できるキャラが居ませんわ。_",
       moreCharacters: "_他 {n} キャラ_",
       autoSyncOnBadge: " · 📝 自動同期",

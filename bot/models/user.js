@@ -91,6 +91,11 @@ const characterSchema = new mongoose.Schema(
     bibleSerial: { type: String, default: null },
     bibleCid: { type: Number, default: null },
     bibleRid: { type: Number, default: null },
+    // The name this character had before a rename in game was followed, and
+    // when. The roster card notes it for a week so anyone reading knows why
+    // the name changed.
+    renamedFrom: { type: String, default: "" },
+    renamedAt: { type: Number, default: null },
     // Set true when the most recent auto-manage sync for this character
     // returned "Logs not enabled" from lostark.bible (public logs OFF for
     // that player), cleared to false when a subsequent

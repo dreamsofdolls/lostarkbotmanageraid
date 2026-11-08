@@ -312,6 +312,38 @@ function makeChar(name, itemLevel, options = {}) {
 
 const NOOP_GET_RAIDS_FOR = () => [];
 
+function pageDescriptionFor(character) {
+  const account = { accountName: "Chixpaul", characters: [character], lastRefreshedAt: 0 };
+  return buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
+    NOOP_GET_RAIDS_FOR
+  ).toJSON().description || "";
+}
+
+test("buildAccountPageEmbed: a character renamed in the last week leaves a note on the card", () => {
+  const description = pageDescriptionFor({
+    ...makeChar("Sunxpaul", 1781),
+    renamedFrom: "Zedaxpaul",
+    renamedAt: Date.now() - 24 * 60 * 60 * 1000,
+  });
+
+  assert.match(description, /🔁 .*\*\*Zedaxpaul\*\* → \*\*Sunxpaul\*\*/u);
+});
+
+test("buildAccountPageEmbed: the rename note ends after a week and never shows without a rename", () => {
+  const expired = pageDescriptionFor({
+    ...makeChar("Sunxpaul", 1781),
+    renamedFrom: "Zedaxpaul",
+    renamedAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+  });
+
+  assert.doesNotMatch(expired, /🔁/u);
+  assert.doesNotMatch(pageDescriptionFor(makeChar("Chixpaul", 1750)), /🔁/u);
+});
+
 test("buildAccountPageEmbed: empty roster surfaces an explicit notice (not a blank embed)", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(

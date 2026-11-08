@@ -65,17 +65,22 @@ function createPersistEditedRoster({
       const editedChars = selectedChars.map((character) => {
         const key = savedKeyOf(character);
         const existing = existingMap.get(key);
+        const renamed = Boolean(existing) && key !== normalizeName(character.charName);
         if (existing) {
-          const renamed = key !== normalizeName(character.charName);
           summary.kept.push(renamed ? character.charName : getCharacterName(existing));
         } else {
           summary.added.push(character.charName);
         }
 
-        return buildPickedCharacterRecord(character, existing, {
+        const record = buildPickedCharacterRecord(character, existing, {
           buildCharacterRecord,
           createCharacterId,
         });
+        if (renamed) {
+          record.renamedFrom = getCharacterName(existing);
+          record.renamedAt = Date.now();
+        }
+        return record;
       });
 
       account.characters = [...preservedChars, ...editedChars];

@@ -804,6 +804,7 @@ module.exports = {
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_Chưa đủ điều kiện_",
       noCharacters: "_Chưa có character nào._",
+      renamedNote: "🔁 Đổi tên trong game: {renames}",
       allIneligible: "_Không có character nào đủ điều kiện cho raid này trong roster._",
       moreCharacters: "_+{n} character khác_",
       autoSyncOnBadge: " · 📝 Auto-sync",
