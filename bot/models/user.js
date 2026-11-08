@@ -153,6 +153,24 @@ const accountSchema = new mongoose.Schema(
     // of registering (which already gated through isManagerId) is the
     // authorization. Cleared only by /raid-remove-roster + /raid-add-roster cycle.
     registeredBy: { type: String, default: null },
+    // Bible character ids this roster has shown. A Bible roster also lists
+    // characters the player chose not to save, so only an id missing from
+    // this list counts as a new character at a later refresh.
+    knownBibleCids: { type: [Number], default: [] },
+    // Characters that appeared on the roster since; the card notes them for
+    // a week.
+    newRosterChars: {
+      type: [
+        new mongoose.Schema(
+          {
+            name: { type: String, required: true },
+            seenAt: { type: Number, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { _id: false }
 );

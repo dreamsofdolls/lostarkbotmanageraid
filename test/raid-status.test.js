@@ -344,6 +344,36 @@ test("buildAccountPageEmbed: the rename note ends after a week and never shows w
   assert.doesNotMatch(pageDescriptionFor(makeChar("Chixpaul", 1750)), /🔁/u);
 });
 
+function pageDescriptionForRoster(accountFields) {
+  const account = { accountName: "Alpha", characters: [makeChar("Alpha", 1710)], lastRefreshedAt: 0, ...accountFields };
+  return buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
+    NOOP_GET_RAIDS_FOR
+  ).toJSON().description || "";
+}
+
+test("buildAccountPageEmbed: a new character on the roster leaves a note on the card", () => {
+  const description = pageDescriptionForRoster({
+    newRosterChars: [{ name: "Neo", seenAt: Date.now() - 1000 }, { name: "Mio", seenAt: Date.now() - 2000 }],
+  });
+
+  assert.match(description, /🆕 .*\*\*Neo\*\*.*\*\*Mio\*\*.*\/raid-edit-roster/u);
+});
+
+test("buildAccountPageEmbed: the new-character note hides saved characters and ends after a week", () => {
+  const saved = pageDescriptionForRoster({ newRosterChars: [{ name: "alpha", seenAt: Date.now() - 1000 }] });
+  const expired = pageDescriptionForRoster({
+    newRosterChars: [{ name: "Neo", seenAt: Date.now() - 8 * 24 * 60 * 60 * 1000 }],
+  });
+
+  assert.doesNotMatch(saved, /🆕/u);
+  assert.doesNotMatch(expired, /🆕/u);
+  assert.doesNotMatch(pageDescriptionForRoster({}), /🆕/u);
+});
+
 test("buildAccountPageEmbed: empty roster surfaces an explicit notice (not a blank embed)", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(

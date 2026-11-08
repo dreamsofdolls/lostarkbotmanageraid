@@ -347,10 +347,10 @@ test("applyStaleAccountRefreshes indexes account-name collisions once", () => {
 // page lists it beside each name. The refresh follows a saved character whose
 // name is gone from the roster to the roster character with its cid.
 
-function refreshAccount(service, characters, fetchedChars, accountName = "Chixpaul") {
+function refreshAccount(service, characters, fetchedChars, accountName = "Chixpaul", accountFields = {}) {
   const user = {
     discordId: "user-1",
-    accounts: [{ accountName, lastRefreshedAt: 0, characters }],
+    accounts: [{ accountName, lastRefreshedAt: 0, characters, ...accountFields }],
   };
   const didUpdate = service.applyStaleAccountRefreshes(user, [
     { accountName, attempted: true, resolvedSeed: accountName, fetchedChars },
@@ -518,6 +518,105 @@ test("a refresh that only corrects a name's case leaves no rename note", () => {
 
   assert.equal(account.characters[0].name, "Alpha");
   assert.equal(account.characters[0].renamedFrom ?? "", "");
+});
+
+// ─── New characters on the roster ───────────────────────────────────────────
+// A Bible roster also lists characters the player chose not to save, so only
+// a character id the roster did not have at an earlier refresh counts as new.
+
+const ALPHA_SAVED = { name: "Alpha", class: "Bard", itemLevel: 1700, bibleCid: 1 };
+const ALPHA_FETCHED = { charName: "Alpha", className: "Bard", itemLevel: 1710, cid: 1 };
+const UNSAVED_FETCHED = { charName: "Mule", className: "Bard", itemLevel: 1640, cid: 9 };
+const NEW_FETCHED = { charName: "Neo", className: "Bard", itemLevel: 1660, cid: 10 };
+
+test("the first refresh of a roster only remembers its characters", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [ALPHA_FETCHED, UNSAVED_FETCHED], "Alpha");
+
+  assert.deepEqual([...account.knownBibleCids].sort((a, b) => a - b), [1, 9]);
+  assert.deepEqual([...(account.newRosterChars || [])], []);
+});
+
+test("a character that appears on the roster after that is noted as new", () => {
+  const before = Date.now();
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [ALPHA_FETCHED, UNSAVED_FETCHED, NEW_FETCHED], "Alpha", {
+    knownBibleCids: [1, 9],
+  });
+
+  assert.deepEqual(account.newRosterChars.map((c) => c.name), ["Neo"]);
+  assert.ok(account.newRosterChars[0].seenAt >= before);
+  assert.deepEqual([...account.knownBibleCids].sort((a, b) => a - b), [1, 9, 10]);
+});
+
+test("a roster refreshed again does not note the same character twice", () => {
+  const service = makeService(async () => []);
+  const seenAt = Date.now() - 1000;
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [ALPHA_FETCHED, NEW_FETCHED], "Alpha", {
+    knownBibleCids: [1, 10],
+    newRosterChars: [{ name: "Neo", seenAt }],
+  });
+
+  assert.deepEqual(account.newRosterChars.map((c) => [c.name, c.seenAt]), [["Neo", seenAt]]);
+});
+
+test("a new-character note past its week is dropped at the next refresh", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [ALPHA_FETCHED], "Alpha", {
+    knownBibleCids: [1],
+    newRosterChars: [{ name: "Neo", seenAt: Date.now() - 8 * 24 * 60 * 60 * 1000 }],
+  });
+
+  assert.deepEqual([...account.newRosterChars], []);
+});
+
+test("a renamed character is not noted as a new one", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [renamedCharacter()], [
+    { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, cid: 106427776 },
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, cid: 291570 },
+  ], "Chixpaul", { knownBibleCids: [106427776] });
+
+  assert.equal(account.characters[0].name, "Sunxpaul");
+  assert.deepEqual([...account.newRosterChars], []);
+});
+
+test("a roster read without character ids notes nothing and keeps what it remembers", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [
+    { charName: "Alpha", className: "Bard", itemLevel: 1710 },
+    { charName: "Neo", className: "Bard", itemLevel: 1660 },
+  ], "Alpha", { knownBibleCids: [1] });
+
+  assert.deepEqual([...account.knownBibleCids], [1]);
+  assert.deepEqual([...(account.newRosterChars || [])], []);
+});
+
+test("a roster sharing no character with the saved one notes nothing", () => {
+  const service = makeService(async () => []);
+  const { account } = refreshAccount(service, [{ ...ALPHA_SAVED }], [NEW_FETCHED], "Alpha", { knownBibleCids: [1] });
+
+  assert.deepEqual([...account.knownBibleCids], [1]);
+  assert.deepEqual([...(account.newRosterChars || [])], []);
+});
+
+test("the user schema keeps a roster's new-character notes and the ids it remembers", () => {
+  const User = require("../bot/models/user");
+  const user = new User({
+    discordId: "user-1",
+    accounts: [{ accountName: "Alpha", knownBibleCids: [1, 10], newRosterChars: [{ name: "Neo", seenAt: 5 }] }],
+  });
+
+  const [account] = user.accounts;
+  assert.deepEqual([...account.knownBibleCids], [1, 10]);
+  assert.equal(account.newRosterChars[0].name, "Neo");
+  assert.equal(account.newRosterChars[0].seenAt, 5);
+});
+
+test("/raid-check loads a roster's new-character notes", () => {
+  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/queries/raid-check");
+
+  assert.match(String(RAID_CHECK_USER_QUERY_FIELDS), /accounts\.newRosterChars/u);
 });
 
 test("the user schema keeps a character's rename note", () => {

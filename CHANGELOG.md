@@ -11,6 +11,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Each roster refresh records the lostark.bible character id of every character that lacks one (most Local Sync characters), with no extra Bible request, so their later renames are followed too.
 - `/raid-edit-roster` shows a character renamed in game as one `🔁` row under its new name, with the old name beside it, and Save renames the saved character, keeping its progress. Before, it showed `📦` for the old name and `⬜` for the new one, and removing the old one while adding the new one lost the character's progress.
 - When the bot renames a character this way, the `/raid-status` and `/raid-check` roster card says so for a week: `🔁 Renamed in game: **Zedaxpaul** → **Sunxpaul**`. Bible Auto-sync may record that character's clears one sync later than the rename.
+- A character that appears on a roster after the bot has first read it is noted on the `/raid-status` and `/raid-check` card for a week: `🆕 New on this roster: **Neo** · add with /raid-edit-roster`. Characters that were already on Bible and never saved are not noted, and the note goes away once the character is saved. The bot does not add it by itself.
 - An accent-only name match no longer wins over a different lostark.bible character id: when a saved character is renamed and another character on the same roster has a name that differs from its old name only by accents, the refresh follows the id instead of taking the other character's data.
 
 ## 2026-11-06

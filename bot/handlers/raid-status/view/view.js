@@ -12,8 +12,10 @@ const {
   pack2Columns,
   formatAutoManageFreshnessLine,
   formatProgressTotals,
+  normalizeName,
 } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
+const { ROSTER_NOTE_WINDOW_MS } = require("../../../services/roster/refresh");
 const {
   countedGoldEarners,
   summarizeCharacterGold,
@@ -24,7 +26,6 @@ const {
 // rosters get one full-width field per character, as the gold view does.
 const PAIRED_LAYOUT_CHARACTER_CAP = 16;
 const EMBED_FIELD_LIMIT = 25;
-const RENAMED_NOTE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function numberOrZero(value) {
   return Number(value) || 0;
@@ -336,19 +337,35 @@ function createRaidStatusView(deps) {
         ? t("raid-status.embed.goldEarnerHint", lang)
         : "",
       buildRenamedNoteLine(account, lang),
+      buildNewRosterCharsLine(account, lang),
     ].filter(Boolean));
     return lines;
   }
 
   // Renames in game are followed in the background, so the card says so for
-  // a week: long enough to cross one weekly reset for anyone reading it.
+  // anyone reading it.
   function buildRenamedNoteLine(account, lang) {
     const now = Date.now();
     const renames = (account.characters || [])
-      .filter((character) => character.renamedFrom && now - Number(character.renamedAt) < RENAMED_NOTE_WINDOW_MS)
+      .filter((character) => character.renamedFrom && now - Number(character.renamedAt) < ROSTER_NOTE_WINDOW_MS)
       .map((character) => `**${character.renamedFrom}** → **${getCharacterName(character)}**`);
     return renames.length > 0
       ? t("raid-status.embed.renamedNote", lang, { renames: renames.join(" · ") })
+      : "";
+  }
+
+  // A character that appeared on the roster. It goes off the card as soon as
+  // it is saved, without waiting for the next refresh.
+  function buildNewRosterCharsLine(account, lang) {
+    const now = Date.now();
+    const saved = new Set(
+      (account.characters || []).map((character) => normalizeName(getCharacterName(character)))
+    );
+    const names = (account.newRosterChars || [])
+      .filter((note) => now - Number(note.seenAt) < ROSTER_NOTE_WINDOW_MS && !saved.has(normalizeName(note.name)))
+      .map((note) => `**${note.name}**`);
+    return names.length > 0
+      ? t("raid-status.embed.newRosterCharsNote", lang, { names: names.join(" · ") })
       : "";
   }
 

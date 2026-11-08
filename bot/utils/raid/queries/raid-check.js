@@ -17,6 +17,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.accountName",
   "accounts.lastRefreshedAt",
   "accounts.lastRefreshAttemptAt",
+  "accounts.newRosterChars",
   "accounts.characters.name",
   "accounts.characters.charName",
   "accounts.characters.class",

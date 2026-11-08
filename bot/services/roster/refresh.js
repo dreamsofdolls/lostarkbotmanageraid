@@ -20,6 +20,9 @@ const {
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 const REFRESH_SEED_FAILURE_DETAIL_LIMIT = 3;
+// How long the roster card notes a rename or a new character: long enough to
+// cross one weekly reset for anyone reading it.
+const ROSTER_NOTE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function getErrorMessage(err) {
   return err?.message || String(err || "unknown error");
@@ -345,6 +348,29 @@ function createRosterRefreshService(deps) {
       && fetchedCid !== character.bibleCid;
   }
 
+  // A Bible roster also lists characters the player chose not to save, so
+  // only an id the roster did not have before counts as new, and the first
+  // refresh of a roster only remembers what is there. A roster read without
+  // ids (Bible changed its payload) can tell nothing and changes nothing.
+  function trackNewRosterCharacters(account, fetched, claimed, now) {
+    const fetchedWithIds = fetched.filter((character) => character.cid);
+    if (fetchedWithIds.length === 0) return;
+
+    const known = new Set(account.knownBibleCids || []);
+    const isFirstRead = known.size === 0;
+    const notes = (account.newRosterChars || [])
+      .filter((note) => now - Number(note.seenAt) < ROSTER_NOTE_WINDOW_MS)
+      .map((note) => ({ name: note.name, seenAt: note.seenAt }));
+    for (const character of fetchedWithIds) {
+      if (!isFirstRead && !known.has(character.cid) && !claimed.has(character)) {
+        notes.push({ name: character.charName, seenAt: now });
+      }
+      known.add(character.cid);
+    }
+    account.knownBibleCids = [...known];
+    account.newRosterChars = notes;
+  }
+
   function applyFetchedDisplayFields(character, match) {
     character.itemLevel = Number(match.itemLevel) || character.itemLevel;
     character.combatScore = String(match.combatScore || character.combatScore || "");
@@ -431,6 +457,8 @@ function createRosterRefreshService(deps) {
         continue;
       }
 
+      trackNewRosterCharacters(account, fetched, claimed, now);
+
       if (entry.resolvedSeed && account.accountName !== entry.resolvedSeed) {
         const normalizedSeed = normalizeName(entry.resolvedSeed);
         const freshCollides = hasOtherAccountWithName(
@@ -464,4 +492,5 @@ function createRosterRefreshService(deps) {
 module.exports = {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
+  ROSTER_NOTE_WINDOW_MS,
 };
