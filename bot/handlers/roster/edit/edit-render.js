@@ -16,6 +16,7 @@ const {
 } = require("../picker/render");
 
 const NEW_TAG = "\u{1f195}";
+const RENAMED_TAG = "\u{1f501}";
 
 const NAME_FORMAT = Object.freeze({
   bold: (name) => `**${name}**`,
@@ -23,18 +24,26 @@ const NAME_FORMAT = Object.freeze({
   struck: (name) => `~~${name}~~`,
 });
 
-// How each picker state reads, keyed by `<saved|new>:<on|off>`. A saved
-// character switched off is the one Save removes, so its line drops CP and
-// says so; a Bible-only character keeps its "new on Bible" tail either way.
+// How each picker state reads, keyed by `<saved|renamed|new>:<on|off>`. A
+// saved character switched off is the one Save removes, so its line drops CP
+// and says so; a Bible-only character keeps its "new on Bible" tail either
+// way. A renamed character is a saved one, so it switches off the same way.
 const EDIT_PICKER_STATE = Object.freeze({
   "saved:on": { glyph: "\u2705", name: NAME_FORMAT.bold, showCp: true, tailKey: null, optionKey: "optionKept", labelTag: "" },
   "saved:off": { glyph: "\u2796", name: NAME_FORMAT.struck, showCp: false, tailKey: "tailRemove", optionKey: "optionRemoving", labelTag: "" },
+  "renamed:on": { glyph: RENAMED_TAG, name: NAME_FORMAT.bold, showCp: true, tailKey: "tailRenamed", optionKey: "optionRenamed", labelTag: ` ${RENAMED_TAG}` },
+  "renamed:off": { glyph: "\u2796", name: NAME_FORMAT.struck, showCp: false, tailKey: "tailRemove", optionKey: "optionRemoving", labelTag: "" },
   "new:on": { glyph: NEW_TAG, name: NAME_FORMAT.bold, showCp: true, tailKey: "tailNew", optionKey: "optionAdding", labelTag: ` ${NEW_TAG}` },
   "new:off": { glyph: "\u2b1c", name: NAME_FORMAT.plain, showCp: true, tailKey: "tailNew", optionKey: "optionNotAdded", labelTag: ` ${NEW_TAG}` },
 });
 
+function editOriginOf(character) {
+  if (character.renamedFrom) return "renamed";
+  return character.savedKey ? "saved" : "new";
+}
+
 function editStateOf(session, character, index) {
-  const origin = character.savedKey ? "saved" : "new";
+  const origin = editOriginOf(character);
   const toggle = session.selectedIndices.has(index) ? "on" : "off";
   return EDIT_PICKER_STATE[`${origin}:${toggle}`];
 }
@@ -74,7 +83,9 @@ function createEditRosterRenderers({
     const lang = session.lang;
     const state = editStateOf(session, character, index);
     const cp = state.showCp ? ` \u00b7 CP \`${character.combatScore || "?"}\`` : "";
-    const tail = state.tailKey ? t(`raid-edit-roster.picker.${state.tailKey}`, lang) : "";
+    const tail = state.tailKey
+      ? t(`raid-edit-roster.picker.${state.tailKey}`, lang, { oldName: character.renamedFrom })
+      : "";
     const stale = isStaleOnBible(session, character) ? t("raid-edit-roster.picker.tailStale", lang) : "";
     return `${state.glyph} **${index + 1}.** ${formatClassIcon(character.className)} ${state.name(character.charName)} \u00b7 \`${character.itemLevel}\`${cp}${tail}${stale}`;
   }

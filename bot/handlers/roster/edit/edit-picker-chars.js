@@ -45,6 +45,7 @@ function buildEditRosterPickerChars({
       combatScore: bible?.combatScore || saved.combatScore,
       savedKey: saved ? key : null,
       inBible: !!bible,
+      renamedFrom: renamedTo.has(key) ? saved.name : null,
     });
   }
 

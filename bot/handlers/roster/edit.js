@@ -236,6 +236,7 @@ function createEditRosterCommand({
         combatScore: character.combatScore,
         savedKey: character.savedKey,
         inBible: character.inBible,
+        renamedFrom: character.renamedFrom,
       })),
       selectedIndices,
       expiresAt: Date.now() + SESSION_TTL_MS,

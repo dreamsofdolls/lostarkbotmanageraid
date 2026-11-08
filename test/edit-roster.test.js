@@ -24,6 +24,7 @@ const {
 } = require("discord.js");
 
 const { createEditRosterCommand } = require("../bot/handlers/roster/edit");
+const { createEditRosterRenderers } = require("../bot/handlers/roster/edit/edit-render");
 const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
 const { clearUserLanguageCache, t } = require("../bot/services/i18n");
@@ -1027,6 +1028,76 @@ test("/raid-edit-roster opens a renamed character as one kept row under its new 
     [["Sunxpaul", "zedaxpaul"], ["Chixpaul", "chixpaul"]]
   );
   assert.equal(session.selectedIndices.size, 2);
+});
+
+function pickerText(embed) {
+  const json = embed.toJSON();
+  return [json.description, ...(json.fields || []).map((field) => field.value)].join("\n");
+}
+
+test("the picker marks a renamed character with its old name and leaves the others as kept", async () => {
+  clearUserLanguageCache();
+  const { factory, docs } = makeFactory({
+    fetchRosterCharacters: async () => [
+      { charName: "Chixpaul", className: "Wildsoul", itemLevel: 1750, combatScore: "4000", cid: 106427776 },
+      { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", cid: 291570 },
+    ],
+  });
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [
+        { id: "chix-id", name: "Chixpaul", class: "Wildsoul", itemLevel: 1750, combatScore: "4000", bibleCid: 106427776 },
+        { id: "zed-id", name: "Zedaxpaul", class: "Souleater", itemLevel: 1750, combatScore: "6000", bibleCid: 291570 },
+      ],
+    }],
+  });
+  const edits = [];
+
+  await factory.handleEditRosterCommand({
+    user: { id: "user-1" },
+    options: { getString: () => "Chixpaul" },
+    deferReply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+  const [session] = factory.__test.sessions.values();
+  for (const open of factory.__test.sessions.values()) clearTimeout(open.expireTimer);
+
+  assert.equal(session.chars[0].renamedFrom, "Zedaxpaul");
+  assert.equal(session.chars[1].renamedFrom ?? null, null);
+  const text = pickerText(edits[0].embeds[0]);
+  assert.match(text, /🔁 \*\*1\.\*\* .*\*\*Sunxpaul\*\*.*đổi tên từ Zedaxpaul/u);
+  assert.match(text, /✅ \*\*2\.\*\* .*\*\*Chixpaul\*\*/u);
+  assert.doesNotMatch(text, /Chixpaul.*đổi tên từ/u);
+  const options = edits[0].components
+    .map((row) => row.toJSON())
+    .flatMap((row) => row.components)
+    .flatMap((component) => component.options || []);
+  assert.equal(options[0].label, "1. Sunxpaul 🔁");
+  assert.match(options[0].description, /^🔁/u);
+});
+
+test("a renamed character the user unticks reads as a removal, like any saved character", () => {
+  const { buildSelectionEmbed } = createEditRosterRenderers({
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, UI, pickerMaxOptions: 20,
+  });
+  const session = {
+    ...makeEditSession({ accountName: "Chixpaul" }),
+    lang: "vi",
+    preservedSavedClasses: [],
+    expiresAt: Date.now() + 60000,
+    chars: [{
+      charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95",
+      savedKey: "zedaxpaul", inBible: true, renamedFrom: "Zedaxpaul",
+    }],
+    selectedIndices: new Set(),
+  };
+
+  const text = pickerText(buildSelectionEmbed(session));
+
+  assert.match(text, /➖ \*\*1\.\*\* .*~~Sunxpaul~~.*sẽ bỏ/u);
+  assert.doesNotMatch(text, /🔁|đổi tên từ/u);
 });
 
 test("persistEditedRoster: a renamed row keeps the saved character and its progress under the new name", async () => {
