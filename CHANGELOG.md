@@ -9,6 +9,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Security
 - `undici` 6.29.1 (used by discord.js) closes the advisories `npm audit` reported.
 
+### Changed
+- Updated `discord.js` to 14.28.1 and `@napi-rs/canvas` to 1.1.0.
+
 ## 2026-11-08
 
 ### Fixed
