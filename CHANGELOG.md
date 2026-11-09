@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-09
+
+### Security
+- `undici` 6.29.1 (used by discord.js) closes the advisories `npm audit` reported.
+
 ## 2026-11-08
 
 ### Fixed
