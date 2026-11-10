@@ -6,6 +6,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-11-10
 
+### Changed
+- Updated `mongoose` to 8.24.8 (patch release within 8.x).
+
 ### Fixed
 - `/raid-announce show` describes the Chaos Gate / Field Boss reminder with its real timing: posted 20 minutes before the spawn and cleared after 21 minutes (it still said 5 and 6). The text now reads its minutes from the scheduler's own constants.
 
