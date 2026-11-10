@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed
 - Updated `mongoose` to 8.24.8 (patch release within 8.x).
 - The Docker image runs Node 24 LTS (`node:24-bookworm-slim`) instead of Node 20, which reached end of life on 2026-04-30 and no longer gets security fixes.
+- Updated `jsdom` to 31.0.0 (needs Node 22.22.2+, 24.15.0+ or 26+; the Docker image carries 24.22.2).
 - Updated `mongoose` to 9.12.1 (MongoDB driver 7). Queries that return the updated document now ask with `returnDocument: "after"` instead of the deprecated `new: true`.
 
 ### Fixed
