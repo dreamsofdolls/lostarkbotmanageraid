@@ -28,7 +28,7 @@ const { getClassEmoji: defaultGetClassEmoji } = require("../../../models/Class")
 const { createStatusRedraw } = require("../view/redraw");
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildNoticeEmbed,
   deferEphemeralReply,
   editEmbed,
@@ -244,7 +244,7 @@ function createStatusComponentRouteHandlers(ctx) {
       kind: NoticeKind.FAILURE,
       title: t(titleKey, lang),
       description: t(descriptionKey, lang),
-      fields: [buildDetailField(err?.message || String(err), lang)],
+      fields: [buildErrorDetailField(err, lang)],
       tip: t("raid-status.sync.linkFailedTip", lang),
     };
   }
@@ -547,7 +547,7 @@ function createStatusComponentRouteHandlers(ctx) {
           description: t("raid-status.sync.rosterRefreshFailedDescription", lang, {
             accountName: targetAccountName,
           }),
-          fields: [buildDetailField(err?.message || String(err), lang)],
+          fields: [buildErrorDetailField(err, lang)],
           tip: t("raid-status.sync.rosterRefreshRetryTip", lang),
         }).catch(() => {});
       }

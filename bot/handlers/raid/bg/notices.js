@@ -8,7 +8,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
-const { NoticeKind, buildDetailField } = require("../../../utils/raid/common/shared");
+const { NoticeKind, buildDetailField, buildErrorDetailField } = require("../../../utils/raid/common/shared");
 const {
   RAID_BG_UPLOAD_MAX_MB,
   RAID_BG_MIN_WIDTH,
@@ -76,7 +76,7 @@ function buildSaveFailedNotice(err, lang) {
     kind: NoticeKind.FAILURE,
     title: t("raidBg.set.saveFailedTitle", lang),
     description: t("raidBg.errors.storageFailed", lang),
-    fields: [buildDetailField(err?.message || String(err), lang)],
+    fields: [buildErrorDetailField(err, lang)],
     tip: t("raidBg.set.saveFailedTip", lang),
   };
 }

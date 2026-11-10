@@ -437,7 +437,7 @@ function createRosterRefreshService(deps) {
       // character whose name left the roster follows its id to the new name.
       // Its Bible ids, raids, tasks and settings stay as they are.
       for (const character of unmatched) {
-        const match = fetchedIndexes.byCid?.get(character.bibleCid);
+        const match = fetchedIndexes.byCid.get(character.bibleCid);
         if (!match || claimed.has(match)) continue;
         claimed.add(match);
         console.log(
@@ -448,9 +448,7 @@ function createRosterRefreshService(deps) {
         character.name = match.charName;
         applyFetchedDisplayFields(character, match);
       }
-      const matchedAny = claimed.size > 0;
-
-      if (!matchedAny) {
+      if (claimed.size === 0) {
         console.warn(
           `[refresh] account "${account.accountName}" fetched ${fetched.length} chars but zero overlap with saved roster - skipping success stamp.`
         );

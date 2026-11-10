@@ -3,6 +3,7 @@
 const {
   NoticeKind,
   buildDetailField,
+  buildErrorDetailField,
   buildNoticeEmbed,
   replyNotice: replySharedNotice,
 } = require("../../utils/raid/common/shared");
@@ -378,7 +379,7 @@ function createAddRosterCommand({
           kind: NoticeKind.FAILURE,
           title: t("raid-add-roster.persistFail.title", session.lang, sessionTitleVars(session)),
           description: t("raid-add-roster.persistFail.description", session.lang, { adminMention }),
-          fields: [buildDetailField(err?.message || String(err), session.lang)],
+          fields: [buildErrorDetailField(err, session.lang)],
           tip: t("raid-add-roster.persistFail.tip", session.lang),
         });
         return;

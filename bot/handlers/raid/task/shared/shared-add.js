@@ -305,4 +305,4 @@ function createSharedAddHandler(deps) {
   });
 }
 
-module.exports = { buildSharedAddNotice, createSharedAddHandler };
+module.exports = { createSharedAddHandler };

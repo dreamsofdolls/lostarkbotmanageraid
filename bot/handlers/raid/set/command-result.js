@@ -167,93 +167,35 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
     });
   }
 
+  // Results that answer with a notice, in the order they are checked: the
+  // first that applies is the reply. A result past all of them was written
+  // and gets the receipt.
+  const RESULT_NOTICES = Object.freeze([
+    { applies: (result) => result.noRoster, reply: replyMissingRoster },
+    { applies: (result) => result.authLost, reply: replyAuthLost },
+    { applies: (result) => !result.matched, reply: replyCharacterMissing },
+    { applies: (result) => result.alreadyComplete, reply: (context) => replyAlready({ ...context, type: "complete" }) },
+    { applies: (result) => result.alreadyReset, reply: (context) => replyAlready({ ...context, type: "reset" }) },
+    { applies: (result) => !result.updated, reply: replyIneligible },
+  ]);
+
   /**
    * Reply to a /raid-set run with the notice or receipt its result calls for.
-   * @param {object} params
+   * @param {object} params - the reply functions, the run's inputs and:
    * @param {object} params.result - from applyRaidSetForDiscordId
    * @param {Array<{accountName: string, account: object}>} params.accounts -
    *   the owner's rosters read after the write; the receipt draws the
    *   character's card from them
    * @returns {Promise<void>}
    */
-  async function replyRaidSetResult({
-    replySetNotice,
-    replySetEmbed,
-    result,
-    accounts,
-    lang,
-    rosterName,
-    characterName,
-    raidMeta,
-    localizedRaid,
-    effectiveGate,
-    statusType,
-    actingForOther,
-    targetDiscordId,
-    ownerLabel,
-  }) {
-    if (result.noRoster) {
-      await replyMissingRoster({ replySetNotice, actingForOther, targetDiscordId, lang });
-      return;
-    }
-    if (result.authLost) {
-      await replyAuthLost({ replySetNotice, lang, rosterName, targetDiscordId });
-      return;
-    }
-    if (!result.matched) {
-      await replyCharacterMissing({ replySetNotice, lang, characterName, rosterName });
-      return;
-    }
-    const characterLabel = formatCharacterLabel(result.displayName || characterName, result.displayClass);
-    if (result.alreadyComplete) {
-      await replyAlready({
-        replySetNotice,
-        lang,
-        type: "complete",
-        localizedRaid,
-        effectiveGate,
-        characterLabel,
-      });
-      return;
-    }
-    if (result.alreadyReset) {
-      await replyAlready({
-        replySetNotice,
-        lang,
-        type: "reset",
-        localizedRaid,
-        effectiveGate,
-        characterLabel,
-      });
-      return;
-    }
-    if (!result.updated) {
-      await replyIneligible({
-        replySetNotice,
-        lang,
-        characterLabel,
-        result,
-        raidMeta,
-        localizedRaid,
-      });
-      return;
-    }
-
-    await replySuccess({
-      replySetEmbed,
-      lang,
-      result,
-      raidMeta,
-      accounts,
-      rosterName,
-      statusType,
-      localizedRaid,
-      effectiveGate,
-      characterName,
-      actingForOther,
-      targetDiscordId,
-      ownerLabel,
-    });
+  async function replyRaidSetResult(params) {
+    const { result, characterName } = params;
+    const context = {
+      ...params,
+      characterLabel: formatCharacterLabel(result.displayName || characterName, result.displayClass),
+    };
+    const notice = RESULT_NOTICES.find((rule) => rule.applies(result));
+    await (notice ? notice.reply(context) : replySuccess(context));
   }
 
   return {

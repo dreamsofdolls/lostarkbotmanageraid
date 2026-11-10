@@ -13,7 +13,7 @@ function createRaidStatusComponentLayout({
   buildGoldCharsRow,
   buildGoldModeRow,
   buildGoldReceiveRow,
-  buildGoldResetButton = () => null,
+  buildGoldResetButton,
   buildSyncButton,
   buildSyncRow,
   buildLocalSyncNewButton,

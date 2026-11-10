@@ -2,7 +2,7 @@
 
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildKeyedNotice,
   buildNoRosterNotice,
   buildNoticeEmbed,
@@ -324,7 +324,7 @@ function createEditRosterCommand({
           kind: NoticeKind.FAILURE,
           title: t("raid-edit-roster.persistFail.title", session.lang, sessionTitleVars(session)),
           description: t("raid-edit-roster.persistFail.description", session.lang, { adminMention }),
-          fields: [buildDetailField(err?.message || String(err), session.lang)],
+          fields: [buildErrorDetailField(err, session.lang)],
           tip: t("raid-edit-roster.persistFail.tip", session.lang),
         };
       await interaction.editReply({

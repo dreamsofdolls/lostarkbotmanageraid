@@ -4,7 +4,7 @@ const { RAID_ORDER } = require("../../../../domain/raid-catalog");
 const { t } = require("../../../../services/i18n");
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildNoticeEmbed,
 } = require("../../../../utils/raid/common/shared");
 const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
@@ -155,7 +155,7 @@ function createAutoManageResetHandler({
         kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.reset.failTitle", lang),
         description: t("raid-auto-manage.reset.failDescription", lang),
-        fields: [buildDetailField(err?.message || String(err), lang)],
+        fields: [buildErrorDetailField(err, lang)],
         tip: t("raid-auto-manage.reset.failTip", lang),
       }, {
         components: [],

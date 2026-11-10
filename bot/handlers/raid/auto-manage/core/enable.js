@@ -2,7 +2,7 @@
 
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildNoticeEmbed,
   deferEphemeralReply,
 } = require("../../../../utils/raid/common/shared");
@@ -228,7 +228,7 @@ function createAutoManageEnableHandler({
         kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.enable.probeFailTitle", lang),
         description: t("raid-auto-manage.enable.probeFailDescription", lang),
-        fields: [buildDetailField(err?.message || String(err), lang)],
+        fields: [buildErrorDetailField(err, lang)],
         tip: t("raid-auto-manage.enable.probeFailTip", lang),
       }, {
         content: null,

@@ -45,7 +45,6 @@ const {
 const {
   UI,
   truncateText,
-  formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
   getCharacterName,
@@ -96,7 +95,6 @@ function makeFactory() {
     ensureFreshWeek: () => false,
     getCharacterName,
     truncateText,
-    formatShortRelative,
     formatNextCooldownRemaining,
     waitWithBudget,
     summarizeRaidProgress,

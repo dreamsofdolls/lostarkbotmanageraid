@@ -142,16 +142,6 @@ function truncateText(s, max) {
   return s.length > max ? `${s.slice(0, max - 3)}...` : s;
 }
 
-function formatShortRelative(timestamp) {
-  const diffMs = Date.now() - Number(timestamp);
-  if (!Number.isFinite(diffMs) || diffMs < 60_000) return "just now";
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
 function formatNextCooldownRemaining(lastAttemptAt, cooldownMs) {
   const last = Number(lastAttemptAt) || 0;
   if (last <= 0 || cooldownMs <= 0) return null;
@@ -382,6 +372,17 @@ function buildDetailField(detail, lang) {
 }
 
 /**
+ * The detail field for a caught error: its message, or the thrown value as
+ * text when it is not an Error.
+ * @param {unknown} err - what the failed call threw
+ * @param {string} [lang]
+ * @returns {{name: string, value: string, inline: boolean}|null}
+ */
+function buildErrorDetailField(err, lang) {
+  return buildDetailField(err?.message || String(err), lang);
+}
+
+/**
  * The "👥 Ai dùng được: Raid Manager" field a guard card shows when only a
  * Raid Manager may run the command or press the button.
  * @param {string} [lang]
@@ -584,6 +585,7 @@ module.exports = {
   buildChunkedFields,
   buildNoticeEmbed,
   buildDetailField,
+  buildErrorDetailField,
   buildKeyedNotice,
   buildManagerOnlyField,
   buildNoRosterNotice,
@@ -601,7 +603,6 @@ module.exports = {
   getCharacterName,
   getCharacterClass,
   truncateText,
-  formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
   buildDiscordIdentityFields,

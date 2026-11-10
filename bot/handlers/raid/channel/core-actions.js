@@ -2,7 +2,7 @@
 
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildNoticeEmbed,
   deferEphemeralReply,
 } = require("../../../utils/raid/common/shared");
@@ -338,7 +338,7 @@ function createRaidChannelCoreActions({
         kind: NoticeKind.FAILURE,
         title: t("raid-channel.cleanup.failTitle", lang),
         description: t("raid-channel.cleanup.failDescription", lang, { channelId: channel.id }),
-        fields: [buildDetailField(err?.message || String(err), lang)],
+        fields: [buildErrorDetailField(err, lang)],
         tip: t("raid-channel.cleanup.failTip", lang),
       }, {
         content: null,

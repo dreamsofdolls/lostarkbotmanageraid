@@ -9,6 +9,7 @@ const {
   UI,
   buildNoticeEmbed,
   buildDetailField,
+  buildErrorDetailField,
   buildKeyedNotice,
   formatCharacterLabel,
 } = require("../bot/utils/raid/common/shared");
@@ -99,6 +100,12 @@ test("buildDetailField wraps the error in code font and skips empty", () => {
   assert.equal(buildDetailField("", "vi"), null);
   assert.equal(buildDetailField(undefined, "vi"), null);
   assert.equal(buildDetailField("x".repeat(2000), "vi").value.length, 1024);
+});
+
+test("buildErrorDetailField shows a caught error's message, or a thrown non-error as text", () => {
+  assert.deepEqual(buildErrorDetailField(new Error("E11000 duplicate key"), "en"), buildDetailField("E11000 duplicate key", "en"));
+  assert.deepEqual(buildErrorDetailField("socket hang up", "vi"), buildDetailField("socket hang up", "vi"));
+  assert.deepEqual(buildErrorDetailField({ code: 50013 }, "vi"), buildDetailField("[object Object]", "vi"));
 });
 
 test("the detail field keeps an error with backticks or line breaks in one code span", () => {

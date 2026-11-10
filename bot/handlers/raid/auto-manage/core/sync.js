@@ -2,7 +2,7 @@
 
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   buildNoRosterNotice,
   deferEphemeralReply,
 } = require("../../../../utils/raid/common/shared");
@@ -183,7 +183,7 @@ function createAutoManageSyncHandler({
         kind: NoticeKind.FAILURE,
         title: t("raid-auto-manage.sync.failTitle", lang),
         description: t("raid-auto-manage.sync.failDescription", lang),
-        fields: [buildDetailField(err?.message || String(err), lang)],
+        fields: [buildErrorDetailField(err, lang)],
         tip: t("raid-auto-manage.sync.failTip", lang),
       }, {
         content: null,

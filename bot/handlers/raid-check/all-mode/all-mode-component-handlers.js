@@ -8,7 +8,7 @@
 
 const {
   NoticeKind,
-  buildDetailField,
+  buildErrorDetailField,
   followUpNotice,
   replyNotice,
 } = require("../../../utils/raid/common/shared");
@@ -202,7 +202,7 @@ function createAllModeComponentHandlers({
           description: t("raid-check.refreshFlow.failedDescription", lang, {
             accountName: targetAccountName,
           }),
-          fields: [buildDetailField(err?.message || String(err), lang)],
+          fields: [buildErrorDetailField(err, lang)],
           tip: t("raid-check.refreshFlow.retryTip", lang),
         }).catch(() => {});
       }
