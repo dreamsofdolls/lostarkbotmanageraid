@@ -450,7 +450,7 @@ Logic-only changes (inside a command, no new option or name tweak) don't require
 1. Push to the GitHub branch Railway tracks (`main`).
 2. Create the Railway service → link repo.
 3. In the service's **Variables** tab, set every env var (minimum: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
-4. Railway builds from `Dockerfile` (node:20-slim, `npm ci --omit=dev`) and starts via `node bot.js`.
+4. Railway builds from `Dockerfile` (node:24-bookworm-slim, `npm ci --omit=dev`) and starts via `node bot.js`.
 5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
 
 The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema (fail-soft). `scripts/deploy-commands.js` stays around only for dev-machine force-registers.

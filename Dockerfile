@@ -1,4 +1,6 @@
-FROM node:20-slim
+# Node 24 LTS on Debian bookworm; the Debian release is pinned because the
+# Playwright step below installs Chromium's system packages for it.
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 ENV NODE_ENV=production

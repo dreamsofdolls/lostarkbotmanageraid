@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - Updated `mongoose` to 8.24.8 (patch release within 8.x).
+- The Docker image runs Node 24 LTS (`node:24-bookworm-slim`) instead of Node 20, which reached end of life on 2026-04-30 and no longer gets security fixes.
 
 ### Fixed
 - `/raid-announce show` describes the Chaos Gate / Field Boss reminder with its real timing: posted 20 minutes before the spawn and cleared after 21 minutes (it still said 5 and 6). The text now reads its minutes from the scheduler's own constants.
