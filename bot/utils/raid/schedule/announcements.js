@@ -10,6 +10,17 @@
 
 "use strict";
 
+const {
+  WORLD_EVENT_REMINDER_LEAD_MS,
+  WORLD_EVENT_REMINDER_TTL_MS,
+} = require("./world-events");
+
+// The world-event reminder text takes its minutes from the scheduler's own
+// constants, so a new lead or TTL cannot leave /raid-announce show describing
+// the old timing.
+const WORLD_EVENT_LEAD_MINUTES = WORLD_EVENT_REMINDER_LEAD_MS / 60000;
+const WORLD_EVENT_TTL_MINUTES = WORLD_EVENT_REMINDER_TTL_MS / 60000;
+
 // ---------------------------------------------------------------------------
 // Announcement registry for all automated channel messages. Adding a new
 // type requires:
@@ -141,7 +152,7 @@ const ANNOUNCEMENT_REGISTRY = {
       "Random pick mỗi mốc, voice gấp gáp dần.\nT-15m / T-10m / T-5m / T-1m: không tag, giọng đếm ngược tới 'thoát game thôi'.",
   },
   "world-event-reminder": {
-    label: "Chaos Gate / Field Boss · T-20m",
+    label: `Chaos Gate / Field Boss · T-${WORLD_EVENT_LEAD_MINUTES}m`,
     subdocKey: "worldEventReminder",
     channelOverridable: true,
     // This is intentionally opt-in. Unlike the other low-frequency types,
@@ -149,11 +160,11 @@ const ANNOUNCEMENT_REGISTRY = {
     // enabling it for every legacy guild would be an unexpectedly noisy
     // migration.
     defaultEnabled: false,
-    trigger: "5 phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch ET (giờ miền Đông Mỹ, có đổi giờ mùa đông). Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.",
-    dedup: "1 post/spawn/guild (`lastWorldEventReminderKey`). Tick 1 phút và chỉ claim trong cửa sổ T-20m → T-0 để restart trễ vẫn catch-up mà không post lặp.",
-    messageTtl: "6 phút rồi Artist tự xóa",
+    trigger: `${WORLD_EVENT_LEAD_MINUTES} phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch ET (giờ miền Đông Mỹ, có đổi giờ mùa đông). Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.`,
+    dedup: `1 post/spawn/guild (\`lastWorldEventReminderKey\`). Tick 1 phút và chỉ claim trong cửa sổ T-${WORLD_EVENT_LEAD_MINUTES}m → T-0 để restart trễ vẫn catch-up mà không post lặp.`,
+    messageTtl: `${WORLD_EVENT_TTL_MINUTES} phút rồi Artist tự xóa`,
     previewContent:
-      "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện **sau 5 phút**. Tin thật sẽ kèm timestamp Discord theo giờ local của người xem.",
+      `🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện **sau ${WORLD_EVENT_LEAD_MINUTES} phút**. Tin thật sẽ kèm timestamp Discord theo giờ local của người xem.`,
   },
 };
 

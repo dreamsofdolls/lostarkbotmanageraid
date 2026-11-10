@@ -8,6 +8,7 @@ const {
   announcementSubdocDefaultEnabled,
   announcementSubdocKeys,
   announcementOverridableTypeKeys,
+  announcementTypeEntry,
 } = require("../bot/utils/raid/schedule/announcements");
 const {
   createSchedulingHelpers,
@@ -298,4 +299,14 @@ test("the reminder post clears one minute after the spawn and its copy says how 
   assert.match(posts[0][1], /Field Boss/);
   assert.doesNotMatch(posts[0][1], /Chaos Gate/);
   assert.match(posts[0][1], /sau 21 phút/);
+});
+
+test("/raid-announce show describes the reminder with its real lead and clear-up time", () => {
+  const entry = announcementTypeEntry("world-event-reminder");
+
+  assert.match(entry.label, /T-20m/);
+  assert.match(entry.trigger, /^20 phút trước /);
+  assert.match(entry.dedup, /T-20m → T-0/);
+  assert.match(entry.messageTtl, /^21 phút /);
+  assert.match(entry.previewContent, /sau 20 phút/);
 });

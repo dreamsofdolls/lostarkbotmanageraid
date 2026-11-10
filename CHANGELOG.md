@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-10
+
+### Fixed
+- `/raid-announce show` describes the Chaos Gate / Field Boss reminder with its real timing: posted 20 minutes before the spawn and cleared after 21 minutes (it still said 5 and 6). The text now reads its minutes from the scheduler's own constants.
+
 ## 2026-11-09
 
 ### Security

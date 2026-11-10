@@ -154,6 +154,7 @@ function buildWorldEventReminderConfigQuery() {
 }
 
 module.exports = {
+  WORLD_EVENT_REMINDER_LEAD_MS,
   WORLD_EVENT_REMINDER_TTL_MS,
   WORLD_EVENT_REMINDER_TICK_MS,
   resolveWorldEventReminderForNow,
