@@ -113,6 +113,6 @@ test("maintenance scheduler retries once then releases a failed announcement cla
       lastMaintenanceEarlyKey: "2026-04-22:T-3h",
     },
     update: { $set: { lastMaintenanceEarlyKey: null } },
-    options: { new: true },
+    options: { returnDocument: "after" },
   });
 });

@@ -164,7 +164,7 @@ function createRaidChannelCoreActions({
     await GuildConfig.findOneAndUpdate(
       { guildId },
       { guildId, raidChannelId: channel.id },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
     setCachedMonitorChannelId(guildId, channel.id);
 

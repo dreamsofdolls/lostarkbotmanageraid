@@ -208,7 +208,7 @@ async function claimPreviewJob(jobId, discordId, deps = {}) {
         expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -233,7 +233,7 @@ async function authorizePreviewParty(jobId, discordId, partyDeltas, deps = {}) {
         partyAuthorized: true,
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -250,7 +250,7 @@ async function releasePreviewJob(jobId, discordId, reason, deps = {}, options = 
   return PreviewModel.findOneAndUpdate(
     applyingOwnerFilter(jobId, discordId, deps),
     { $set: update },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -267,7 +267,7 @@ async function finishPreviewJob(jobId, discordId, result, deps = {}) {
         appliedAt: new Date(),
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -283,7 +283,7 @@ async function failPreviewJob(jobId, discordId, reason, result = null, deps = {}
         applyingAt: null,
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 
@@ -305,7 +305,7 @@ async function cancelPreviewJob(jobId, discordId, deps = {}) {
         cancelledAt: new Date(nowMs),
       },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 

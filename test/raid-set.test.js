@@ -698,7 +698,7 @@ for (const [facadeName, apply] of RAID_SET_FACADES) {
       }],
     });
     let delta = null;
-    doc.save = async () => { delta = doc.getChanges(); };
+    doc.save = async () => { delta = doc.$getChanges(); };
     const { factory, User: FakeUser } = makeFactory();
     FakeUser.findOne = async () => doc;
 
@@ -734,7 +734,7 @@ test("applyRaidSetBatchForDiscordId: every changed character reaches the save of
     }],
   });
   let delta = null;
-  doc.save = async () => { delta = doc.getChanges(); };
+  doc.save = async () => { delta = doc.$getChanges(); };
   const { factory, User: FakeUser } = makeFactory();
   FakeUser.findOne = async () => doc;
 
@@ -755,7 +755,7 @@ test("applyRaidSetBatchForDiscordId: every changed character reaches the save of
   assert.ok(Number(lyra.serca.G1.completedDate) > 0);
 });
 
-// Replays the $set, $unset and $inc paths that doc.getChanges() emits for
+// Replays the $set, $unset and $inc paths that doc.$getChanges() emits for
 // these tests onto a plain copy of the stored document, so a test can compare
 // what a save writes with the in-memory document.
 function replayDelta(stored, delta) {
@@ -819,7 +819,7 @@ test("applyRaidSetBatchForDiscordId: the save of a stored document carries the w
   const snapshot = () => JSON.parse(JSON.stringify(doc.toObject({ minimize: false })));
   const stored = snapshot();
   let delta = null;
-  doc.save = async () => { delta = doc.getChanges(); };
+  doc.save = async () => { delta = doc.$getChanges(); };
   const { factory, User: FakeUser } = makeFactory({ ensureFreshWeek });
   FakeUser.findOne = async () => doc;
 
@@ -1381,7 +1381,7 @@ test("clearCharacterProgress puts the cleared gold flags in the save delta of a 
   clearCharacterProgress(doc.accounts[0].characters[0]);
 
   // The bug lived in what save() writes, not in the in-memory document.
-  const sets = doc.getChanges().$set || {};
+  const sets = doc.$getChanges().$set || {};
   const raidPath = "accounts.0.characters.0.assignedRaids";
   const written = sets[raidPath]?.armoche ?? sets[`${raidPath}.armoche`];
   assert.ok(written, "the save rewrites the raid so the cleared flags reach MongoDB");

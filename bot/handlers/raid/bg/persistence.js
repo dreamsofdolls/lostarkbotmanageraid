@@ -31,7 +31,7 @@ async function upsertLibrary(discordId, images, assignments, mode) {
   return UserBackground.findOneAndUpdate(
     { discordId },
     buildLibraryUpdate({ discordId, images, assignments, mode }),
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
   );
 }
 
@@ -39,7 +39,7 @@ async function saveLibrary(discordId, images, assignments, mode) {
   return UserBackground.findOneAndUpdate(
     { discordId },
     buildLibraryUpdate({ discordId, images, assignments, mode }),
-    { new: true },
+    { returnDocument: "after" },
   );
 }
 

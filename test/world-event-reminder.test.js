@@ -259,7 +259,7 @@ test("world-event scheduler releases its dedup claim when Discord send fails", a
   assert.deepEqual(mutations[1], {
     filter: { guildId: "guild-1", lastWorldEventReminderKey: reminderKey },
     update: { $set: { lastWorldEventReminderKey: null } },
-    options: { new: true },
+    options: { returnDocument: "after" },
   });
 });
 

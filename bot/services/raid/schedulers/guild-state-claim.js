@@ -35,7 +35,7 @@ async function rollbackGuildState({
   return GuildConfig.findOneAndUpdate(
     { guildId, ...claimedState },
     { $set: normalizePreviousState(claimedState, previousState) },
-    { new: true }
+    { returnDocument: "after" }
   );
 }
 

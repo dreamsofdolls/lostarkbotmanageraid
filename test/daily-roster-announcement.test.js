@@ -273,7 +273,7 @@ test("send failure rolls back the exact daily claim so a later tick can retry", 
       lastDailyRosterSyncKey: TARGET_DAY_KEY,
     },
     update: { $set: { lastDailyRosterSyncKey: "2026-10-01" } },
-    options: { new: true },
+    options: { returnDocument: "after" },
   });
 });
 

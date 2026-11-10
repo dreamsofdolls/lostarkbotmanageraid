@@ -304,7 +304,7 @@ test("failed cleanup conditionally rolls its slot claim back for retry", async (
   assert.deepEqual(updates[1], {
     filter: { guildId: "guild-retry", lastAutoCleanupKey: targetKey },
     update: { $set: { lastAutoCleanupKey: "old-slot" } },
-    options: { new: true },
+    options: { returnDocument: "after" },
   });
 });
 

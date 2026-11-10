@@ -217,7 +217,7 @@ async function rotateLocalSyncToken(discordId, lang, deps = {}) {
   await UserModel.findOneAndUpdate(
     { discordId },
     { $set: { lastLocalSyncToken: token, lastLocalSyncTokenExpAt: expAt } },
-    { new: true }
+    { returnDocument: "after" }
   );
   return token;
 }

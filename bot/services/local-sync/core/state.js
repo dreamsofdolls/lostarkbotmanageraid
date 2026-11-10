@@ -77,8 +77,8 @@ async function updateExclusiveSyncMode({
     ? { ...enableSet, ...(force ? forceSet : {}) }
     : disableSet;
   const options = enabled
-    ? { upsert: true, setDefaultsOnInsert: true, new: true }
-    : { new: true };
+    ? { upsert: true, setDefaultsOnInsert: true, returnDocument: "after" }
+    : { returnDocument: "after" };
 
   // Mode changes must invalidate any document read by an in-flight Bible
   // commit; its optimistic save then retries and observes the new mode.
@@ -90,7 +90,7 @@ async function updateExclusiveSyncMode({
     if (!requiresConflictGuard || err?.code !== 11000) throw err;
     // A guarded upsert can try to insert the existing discordId when the
     // opposite mode is active. Retry as update-only, then classify the miss.
-    updated = await UserModel.findOneAndUpdate(filter, update, { new: true });
+    updated = await UserModel.findOneAndUpdate(filter, update, { returnDocument: "after" });
   }
   if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
   if (!enabled) {
@@ -252,7 +252,7 @@ async function recordLocalSyncSuccess(discordId, deps = {}) {
   const updated = await UserModel.findOneAndUpdate(
     buildCompanionStateFilter(discordId, scope),
     { $set: { lastLocalSyncAt: Date.now() } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!updated) return { ok: false, reason: RESULT.conflict };
   return { ok: true, reason: RESULT.ok };

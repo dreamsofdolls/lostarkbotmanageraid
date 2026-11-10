@@ -7,7 +7,7 @@ async function tryEnableAutoManage(UserModel, discordId) {
     updated = await UserModel.findOneAndUpdate(
       { discordId, autoManageEnabled: { $ne: true }, localSyncEnabled: { $ne: true } },
       { $set: { autoManageEnabled: true }, $inc: { __v: 1 } },
-      { new: true }
+      { returnDocument: "after" }
     );
   } catch (err) {
     return { outcome: "error", error: err };
@@ -42,7 +42,7 @@ async function tryDisableAutoManage(UserModel, discordId) {
         },
         $inc: { __v: 1 },
       },
-      { new: true }
+      { returnDocument: "after" }
     );
   } catch (err) {
     return { outcome: "error", error: err };
