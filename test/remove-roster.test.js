@@ -258,6 +258,19 @@ test("remove-roster: seed reselection indexes account-name collisions once", asy
   );
 });
 
+test("remove-roster: a blank character name is never picked as the roster name", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Alpha"), makeChar("  "), makeChar("Soulrano")] },
+  ]);
+
+  await factory.handleRemoveRosterCommand(makeInteraction({
+    options: { roster: "Alpha", action: "remove_char", character: "Alpha" },
+  }));
+
+  assert.equal(docs.get("user-1").accounts[0].accountName, "Soulrano");
+});
+
 test("remove-roster: remove_char on the seed when no remaining chars leaves accountName intact", async () => {
   // Edge case: removing the only char (also the seed) leaves an empty
   // account. Schema allows accountName to point at nothing; reseed walk

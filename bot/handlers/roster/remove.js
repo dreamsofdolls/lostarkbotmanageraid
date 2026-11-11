@@ -95,17 +95,16 @@ function createRemoveRosterCommand(deps) {
     character: autocompleteRemoveRosterCharacter,
   });
   // Re-points accountName after its seed character left: the first remaining
-  // character no other roster of this user is named after, since roster
-  // autocomplete and removal treat accountName as unique per user. Returns the
-  // new name, or null when none is free and the old name stays.
+  // character with a non-blank name that no other roster of this user is named
+  // after, since roster autocomplete and removal treat accountName as unique per
+  // user. Returns the new name, or null when none is free and the old name stays.
   function reseedAccountName(userDoc, account) {
     const otherAccountNames = new Set(userDoc.accounts
       .filter((other) => other !== account)
-      .map((other) => normalizeName(other.accountName))
-      .filter(Boolean));
+      .map((other) => normalizeName(other.accountName)));
     const candidate = account.characters.find((character) => {
-      const name = getCharacterName(character);
-      return name && !otherAccountNames.has(normalizeName(name));
+      const key = normalizeName(getCharacterName(character));
+      return key && !otherAccountNames.has(key);
     });
     if (!candidate) return null;
     account.accountName = getCharacterName(candidate);
