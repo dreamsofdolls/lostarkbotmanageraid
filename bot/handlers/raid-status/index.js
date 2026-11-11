@@ -26,7 +26,6 @@ const {
 const { t } = require("../../services/i18n");
 const {
   buildMergedAccounts,
-  resolveBackgroundLookup,
 } = require("./view/accounts");
 const {
   createRaidStatusSyncControls,
@@ -578,5 +577,4 @@ module.exports = {
   createRaidStatusCommand,
   STATUS_PAGINATION_SESSION_MS,
   STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
-  _resolveBackgroundLookup: resolveBackgroundLookup,
 };

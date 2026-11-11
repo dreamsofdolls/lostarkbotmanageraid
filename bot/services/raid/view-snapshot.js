@@ -55,7 +55,9 @@ function createRaidViewSnapshotService({
 }) {
   if (!User) throw new Error("[raid-view-snapshot] User model required");
   // The function dependencies are checked in this order; the first missing one is named.
-  for (const [name, dependency] of Object.entries({ saveWithRetry, ensureFreshWeek, getTargetResetKey })) {
+  for (const [name, dependency] of Object.entries({
+    saveWithRetry, ensureFreshWeek, getTargetResetKey, hasStaleAccountRefreshes,
+  })) {
     if (typeof dependency !== "function") throw new Error(`[raid-view-snapshot] ${name} required`);
   }
 
@@ -141,17 +143,22 @@ function createRaidViewSnapshotService({
     }
   }
 
-  // Ordered checks where the first that applies decides. Each reads a different
-  // fact and the answers alternate, so they stay plain returns, not a rules table.
+  /**
+   * Whether a view must load a fresh snapshot: a known user whose week turned,
+   * or whose saved roster has a stale account refresh or an Auto Sync piggyback
+   * due. Each check runs only when the ones before it leave the answer open.
+   * @param {object|null} seedDoc - the user document the view started from
+   * @param {{allowAutoManage?: boolean}} [options] - false keeps Auto Sync out
+   * @returns {boolean}
+   */
   function shouldLoadFreshUserSnapshotForRaidViews(
     seedDoc,
     { allowAutoManage = true } = {}
   ) {
     if (!seedDoc?.discordId) return false;
-    if (seedDoc.weeklyResetKey !== getTargetResetKey()) return true;
-    if (!hasRosterAccounts(seedDoc)) return false;
-    if (typeof hasStaleAccountRefreshes === "function" && hasStaleAccountRefreshes(seedDoc)) return true;
-    return wantsAutoManagePiggyback(seedDoc, allowAutoManage);
+    return seedDoc.weeklyResetKey !== getTargetResetKey()
+      || (hasRosterAccounts(seedDoc)
+        && (hasStaleAccountRefreshes(seedDoc) || wantsAutoManagePiggyback(seedDoc, allowAutoManage)));
   }
 
   return {

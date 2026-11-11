@@ -45,6 +45,7 @@ test("raid-view-snapshot refuses to build without a dependency, naming the first
     [{ saveWithRetry: null }, "[raid-view-snapshot] saveWithRetry required"],
     [{ ensureFreshWeek: "not a function" }, "[raid-view-snapshot] ensureFreshWeek required"],
     [{ getTargetResetKey: {} }, "[raid-view-snapshot] getTargetResetKey required"],
+    [{ hasStaleAccountRefreshes: undefined }, "[raid-view-snapshot] hasStaleAccountRefreshes required"],
     [{ User: null, saveWithRetry: null }, "[raid-view-snapshot] User model required"],
     [{ ensureFreshWeek: null, getTargetResetKey: null }, "[raid-view-snapshot] ensureFreshWeek required"],
   ];

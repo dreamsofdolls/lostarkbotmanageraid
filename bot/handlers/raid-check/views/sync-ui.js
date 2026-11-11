@@ -121,14 +121,15 @@ function createSyncUi({
   }
 
   async function loadAllRaidSyncSnapshot() {
+    // The query holds the opt-in rule; each user's fresh document is checked
+    // again before its sync writes.
     const users = await User.find({
       autoManageEnabled: true,
       localSyncEnabled: { $ne: true },
       "accounts.0": { $exists: true },
-    }).select("discordId autoManageEnabled localSyncEnabled accounts.accountName accounts.characters.name accounts.characters.charName").lean();
+    }).select("discordId accounts.accountName accounts.characters.name accounts.characters.charName").lean();
     const pendingChars = [];
     for (const user of users) {
-      if (!user.autoManageEnabled || user.localSyncEnabled) continue;
       for (const account of user.accounts || []) {
         for (const character of account.characters || []) {
           const charName = getCharacterName(character);

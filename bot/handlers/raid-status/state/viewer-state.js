@@ -97,7 +97,6 @@ async function loadStatusViewerState({
     return {
       lang,
       seedDoc,
-      hasOwnAccounts,
       hasIncomingShare,
       incomingSharedAccounts,
       noRoster: false,
@@ -112,7 +111,6 @@ async function loadStatusViewerState({
     return {
       lang,
       seedDoc,
-      hasOwnAccounts,
       hasIncomingShare,
       incomingSharedAccounts,
       noRoster: true,
@@ -126,7 +124,6 @@ async function loadStatusViewerState({
     return {
       lang,
       seedDoc,
-      hasOwnAccounts,
       hasIncomingShare,
       incomingSharedAccounts,
       noRoster: false,
@@ -143,7 +140,6 @@ async function loadStatusViewerState({
   return {
     lang,
     seedDoc,
-    hasOwnAccounts,
     hasIncomingShare,
     incomingSharedAccounts,
     noRoster,

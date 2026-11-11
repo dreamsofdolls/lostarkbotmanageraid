@@ -13,6 +13,7 @@ const {
 } = require("../bot/services/i18n");
 const { EmbedBuilder } = require("discord.js");
 const { UI } = require("../bot/utils/raid/common/shared");
+const { docMatchesQuery } = require("./helpers/mongo-match");
 
 class FakeEmbedBuilder {
   constructor() { this.fields = []; }
@@ -159,11 +160,15 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
     { discordId: "opted-out", autoManageEnabled: false, accounts: [
       { accountName: "Off", characters: [{ name: "Offchar" }] },
     ] },
+    { discordId: "no-roster", autoManageEnabled: true, accounts: [] },
   ];
+  let selected = [];
   const User = {
-    find() {
+    // Answers as Mongo would, so the query alone keeps the other users out.
+    find(query) {
       events.push("query");
-      return { select() { return this; }, lean: async () => docs };
+      selected = docs.filter((doc) => docMatchesQuery(doc, query));
+      return { select() { return this; }, lean: async () => selected };
     },
     findOne({ discordId }) {
       if (discordId === "all-manager") return { lean: async () => ({ language: "en" }) };
@@ -200,6 +205,7 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
     editReply: async payload => { reply = payload; },
   });
   assert.deepEqual(events, ["defer", "query", "acquire", "week", "gather", "commit", "release"]);
+  assert.deepEqual(selected.map((doc) => doc.discordId), ["all-target"]);
   assert.match(reply.embeds[0].description, /all raids/i);
   // A clean run carries only the three always-on counters: nothing was
   // skipped, nothing failed, no gate moved, so no optional field fires.

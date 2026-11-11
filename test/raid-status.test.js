@@ -28,8 +28,8 @@ const {
 
 const {
   createRaidStatusCommand,
-  _resolveBackgroundLookup,
 } = require("../bot/handlers/raid-status");
+const { resolveBackgroundLookup } = require("../bot/handlers/raid-status/view/accounts");
 const {
   createRaidStatusRenderPayload,
 } = require("../bot/handlers/raid-status/view/render-payload");
@@ -233,7 +233,7 @@ test("REGRESSION: raid-status background renders inside the status embed below d
 });
 
 test("REGRESSION: raid-status shared roster background uses the viewer image pool", () => {
-  const lookup = _resolveBackgroundLookup("viewer-b", {
+  const lookup = resolveBackgroundLookup("viewer-b", {
     accountName: "Shared Roster",
     _sharedFrom: { ownerDiscordId: "owner-a" },
   });
