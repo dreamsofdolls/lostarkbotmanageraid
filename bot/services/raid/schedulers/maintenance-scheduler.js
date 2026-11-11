@@ -32,13 +32,22 @@ function maintenanceTickKey(now, slot) {
   return `${toLocalClock(now, "vi").toISOString().slice(0, 10)}:${slot.key}`;
 }
 
+// What a guild must still be for this tick: its group switched on (both
+// maintenance types default on) and this tick not yet posted. The guild query
+// and the claim share it, so the claim rechecks what the query selected.
+function dueForTick(groupConfig, tickKey) {
+  return {
+    [groupConfig.dedupField]: { $ne: tickKey },
+    [`announcements.${groupConfig.subdocKey}.enabled`]: { $ne: false },
+  };
+}
+
 async function claimMaintenanceTick({ GuildConfig, cfg, conf, groupConfig, tickKey }) {
   return claimGuildState({
     GuildConfig,
     guildId: cfg.guildId,
     guard: {
-      [groupConfig.dedupField]: { $ne: tickKey },
-      [`announcements.${groupConfig.subdocKey}.enabled`]: { $ne: false },
+      ...dueForTick(groupConfig, tickKey),
       raidChannelId: cfg.raidChannelId ?? null,
       [`announcements.${groupConfig.subdocKey}.channelId`]: conf.channelId ?? null,
     },
@@ -126,7 +135,10 @@ function createMaintenanceSchedulerService({
     const tickKey = maintenanceTickKey(now, slot);
     let configs;
     try {
-      configs = await GuildConfig.find(buildMaintenanceConfigQuery()).lean();
+      configs = await GuildConfig.find({
+        ...buildMaintenanceConfigQuery(),
+        ...dueForTick(groupConfig, tickKey),
+      }).lean();
     } catch (err) {
       console.error("[maintenance] config load failed:", err?.message || err);
       return;
@@ -135,9 +147,6 @@ function createMaintenanceSchedulerService({
     for (const cfg of configs) {
       const announcements = getAnnouncementsConfig(cfg);
       const conf = announcements[groupConfig.subdocKey];
-      if (!conf?.enabled) continue;
-      if (cfg[groupConfig.dedupField] === tickKey) continue;
-
       const channel = await resolveGuildChannel(client, cfg.guildId, conf.channelId || cfg.raidChannelId);
       if (!channel) continue;
 

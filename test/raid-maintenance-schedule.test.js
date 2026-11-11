@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { __test } = require("../bot/commands");
+const { docMatchesQuery } = require("./helpers/mongo-match");
 const {
   announcementOverridableTypeKeys,
   announcementTypeEntry,
@@ -210,19 +211,6 @@ test("maintenance registry preview matches the runtime ping policy", () => {
 // well enough to verify a guild config doc would survive the scheduler's
 // initial filter. This validates the query shape supplied to GuildConfig.find,
 // not MongoDB itself.
-function docMatchesQuery(doc, query) {
-  if (query.$or) return query.$or.some((sub) => docMatchesQuery(doc, sub));
-  for (const [path, condition] of Object.entries(query)) {
-    const value = path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), doc);
-    if (condition && typeof condition === "object" && "$ne" in condition) {
-      if (value === condition.$ne || value === undefined) return false;
-    } else if (value !== condition) {
-      return false;
-    }
-  }
-  return true;
-}
-
 test("buildMaintenanceConfigQuery has $or with 3 channel-source paths", () => {
   const q = __test.buildMaintenanceConfigQuery();
   assert.ok(Array.isArray(q.$or), "filter must use $or");

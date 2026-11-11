@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   createMaintenanceSchedulerService,
 } = require("../bot/services/raid/schedulers/maintenance-scheduler");
+const { docMatchesQuery } = require("./helpers/mongo-match");
 
 function makeGuild(channel) {
   return {
@@ -64,6 +65,34 @@ test("maintenance scheduler claims the matching group and posts to override chan
   assert.equal(posts[0][0], channel);
   assert.equal(typeof posts[0][1], "string");
   assert.equal(posts[0][3], "maintenance T-3h");
+});
+
+test("the maintenance tick asks Mongo only for guilds where the group is on and this tick is not posted", async () => {
+  const now = new Date(Date.UTC(2026, 3, 22, 4, 0, 0, 0)); // Wed 11:00 VN = T-3h, early group
+  let query = null;
+  const service = createMaintenanceSchedulerService({
+    GuildConfig: { find: (filter) => { query = filter; return { lean: async () => [] }; } },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => "vi",
+    postChannelAnnouncement: async () => ({ id: "message-1" }),
+    nowDate: () => now,
+  });
+
+  await service.runMaintenanceTick({ guilds: { cache: new Map() } });
+
+  const guild = (fields) => ({ raidChannelId: "raid-1", ...fields });
+  const cases = [
+    ["on by default", guild({}), true],
+    ["switched on", guild({ announcements: { maintenanceEarly: { enabled: true } } }), true],
+    ["switched off", guild({ announcements: { maintenanceEarly: { enabled: false } } }), false],
+    ["already posted this tick", guild({ lastMaintenanceEarlyKey: "2026-04-22:T-3h" }), false],
+    ["posted an earlier tick", guild({ lastMaintenanceEarlyKey: "2026-04-15:T-3h" }), true],
+    ["only the other group switched off", guild({ announcements: { maintenanceCountdown: { enabled: false } } }), true],
+    ["no destination channel", { announcements: {} }, false],
+  ];
+  for (const [name, doc, expected] of cases) {
+    assert.equal(docMatchesQuery(doc, query), expected, name);
+  }
 });
 
 test("maintenance scheduler claims and posts a countdown slot under the countdown keys", async () => {
