@@ -17,7 +17,7 @@ async function claimGuildState({
     { $set: claimedState },
     // Return the exact state replaced by this claim so a failed side effect
     // can restore it without relying on the earlier (possibly stale) scan.
-    { new: false }
+    { returnDocument: "before" }
   );
 }
 

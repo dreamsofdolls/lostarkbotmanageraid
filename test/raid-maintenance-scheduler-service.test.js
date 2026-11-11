@@ -59,7 +59,7 @@ test("maintenance scheduler claims the matching group and posts to override chan
   assert.deepEqual(claims[0].filter.lastMaintenanceEarlyKey, { $ne: "2026-04-22:T-3h" });
   assert.deepEqual(claims[0].filter["announcements.maintenanceEarly.enabled"], { $ne: false });
   assert.deepEqual(claims[0].update.$set, { lastMaintenanceEarlyKey: "2026-04-22:T-3h" });
-  assert.deepEqual(claims[0].options, { new: false });
+  assert.deepEqual(claims[0].options, { returnDocument: "before" });
   assert.equal(posts.length, 1);
   assert.equal(posts[0][0], channel);
   assert.equal(typeof posts[0][1], "string");

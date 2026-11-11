@@ -177,7 +177,8 @@ async function startBot() {
     // continuous scheduler overhead negligible.
     startMaintenanceScheduler(readyClient);
     // Opt-in Chaos Gate / Field Boss reminder. The one-minute worker exits
-    // before querying Mongo unless the clock is inside a T-5m→T-0 window.
+    // before querying Mongo unless the clock is inside the lead window before
+    // a spawn (WORLD_EVENT_REMINDER_LEAD_MS).
     // Sunday overlaps are combined into one post and atomically deduped per
     // guild/spawn via lastWorldEventReminderKey.
     startWorldEventReminderScheduler(readyClient);

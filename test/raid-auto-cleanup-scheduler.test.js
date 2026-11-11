@@ -92,7 +92,7 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
     lastAutoCleanupKey: { $ne: getTargetCleanupSlotKey(now) },
   });
   assert.ok(updates[0].update.$set.lastAutoCleanupKey);
-  assert.deepEqual(updates[0].options, { new: false });
+  assert.deepEqual(updates[0].options, { returnDocument: "before" });
   assert.equal(posts.length, 1);
   assert.equal(posts[0][0], channel);
   assert.equal(posts[0][2], 5 * 60 * 1000);
@@ -151,7 +151,7 @@ test("auto-cleanup scheduler runs wakeup cleanup and stamps both dedup keys", as
         raidChannelId: "channel-1",
         lastArtistWakeupKey: { $ne: dayKey },
       },
-      options: { new: false },
+      options: { returnDocument: "before" },
       update: {
         $set: {
           lastArtistWakeupKey: dayKey,

@@ -1,8 +1,8 @@
 "use strict";
 
 // mongoose 9 deprecates the `new` option of findOneAndUpdate and its
-// relatives in favour of `returnDocument: "after"`, and warns on every call
-// that still passes it.
+// relatives in favour of `returnDocument`, and warns on every call whose
+// options carry a `new` key, whatever its value.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -24,7 +24,7 @@ test("no query passes the deprecated new option", () => {
   const hits = [];
   for (const file of listSourceFiles(path.join(ROOT, "bot"))) {
     fs.readFileSync(file, "utf8").split(/\r?\n/).forEach((line, index) => {
-      if (/\bnew:\s*true\b/.test(line)) hits.push(`${path.relative(ROOT, file)}:${index + 1}`);
+      if (/\bnew:\s/.test(line)) hits.push(`${path.relative(ROOT, file)}:${index + 1}`);
     });
   }
   assert.deepEqual(hits, []);

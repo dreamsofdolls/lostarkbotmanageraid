@@ -1,6 +1,6 @@
 # Artist - Lost Ark Raid Management Bot
 
-![Node](https://img.shields.io/badge/Node-20-339933?logo=node.js&logoColor=white)
+![Node](https://img.shields.io/badge/Node-24-339933?logo=node.js&logoColor=white)
 ![discord.js](https://img.shields.io/badge/discord.js-5865F2?logo=discord&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
 ![Railway](https://img.shields.io/badge/Railway-deploy-635BFF?logo=railway&logoColor=white)

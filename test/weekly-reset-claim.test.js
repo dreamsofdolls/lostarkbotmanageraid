@@ -89,7 +89,7 @@ test("failed weekly send rolls the exact claim back for the next tick", async ()
       "announcements.weeklyReset.channelId": null,
     },
     update: { $set: { lastWeeklyAnnouncementKey: targetKey } },
-    options: { new: false },
+    options: { returnDocument: "before" },
   });
   assert.deepEqual(updates[1], {
     filter: { guildId: "guild-1", lastWeeklyAnnouncementKey: targetKey },

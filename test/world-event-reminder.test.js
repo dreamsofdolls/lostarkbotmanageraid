@@ -212,7 +212,7 @@ test("world-event scheduler claims once and posts the combined Sunday message", 
   assert.equal(claims[0].filter.guildId, "guild-1");
   assert.equal(claims[0].filter["announcements.worldEventReminder.enabled"], true);
   assert.match(claims[0].update.$set.lastWorldEventReminderKey, /^world-event:/);
-  assert.deepEqual(claims[0].options, { new: false });
+  assert.deepEqual(claims[0].options, { returnDocument: "before" });
   assert.equal(posts.length, 1);
   assert.equal(posts[0][0], channel);
   assert.match(posts[0][1], /^announcements\.world-event-reminder\.both:en:/);
