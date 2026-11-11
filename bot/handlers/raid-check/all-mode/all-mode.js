@@ -5,6 +5,7 @@ const {
   buildManagerOnlyField,
   buildNoticeEmbed,
   deferEphemeralReply,
+  deferOrWarn,
   editNotice,
 } = require("../../../utils/raid/common/shared");
 // tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
@@ -334,9 +335,7 @@ function createAllModeHandler({
       const route = getRaidCheckAllComponentRoute(component.customId);
       if (component.user.id !== interaction.user.id) {
         if (route) {
-          const deferred = await deferEphemeralReply(component)
-            .then(() => true)
-            .catch(() => false);
+          const deferred = await deferOrWarn("[raid-check all] non-owner", deferEphemeralReply(component));
           if (!deferred) return;
           const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
           await editNotice(component, EmbedBuilder, {

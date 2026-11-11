@@ -26,6 +26,7 @@ const {
   createAutoManageReconciler,
 } = require("./pipeline/reconcile");
 const { assertBibleSyncAllowed } = require("./support/sync-mode");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 const {
   weeklyResetStartMs: weekResetStartMs,
 } = require("../../../utils/raid/schedule/reset-windows");
@@ -127,7 +128,7 @@ function createAutoManageCoreService({
     const seedDoc = await User.findOne({ discordId });
     if (!seedDoc) return { missingUser: true, collected: undefined };
     assertBibleSyncAllowed(seedDoc);
-    if (!Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+    if (!hasRosterAccounts(seedDoc)) {
       return { collected: [] };
     }
     ensureFreshWeek(seedDoc);
@@ -160,7 +161,7 @@ function createAutoManageCoreService({
       if (!fresh) return;
       assertBibleSyncAllowed(fresh);
       fresh.autoManageEnabled = true;
-      if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
+      if (!hasRosterAccounts(fresh)) {
         fresh.lastAutoManageAttemptAt = Date.now();
         await fresh.save();
         finalReport = { appliedTotal: 0, perChar: [] };

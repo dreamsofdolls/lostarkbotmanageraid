@@ -510,6 +510,24 @@ function deferEphemeralReply(interaction) {
 }
 
 /**
+ * Await a pending defer and say whether it took. A failed defer (an expired
+ * or already acknowledged interaction) is logged under `label`, and the
+ * caller stops instead of answering an interaction Discord no longer holds.
+ * @param {string} label - log prefix naming the step, e.g. "[raid-status] local-refresh"
+ * @param {Promise<unknown>} deferPromise - the pending deferUpdate or deferReply
+ * @returns {Promise<boolean>} true when the defer succeeded
+ */
+async function deferOrWarn(label, deferPromise) {
+  try {
+    await deferPromise;
+    return true;
+  } catch (err) {
+    console.warn(`${label} defer failed:`, err?.message || err);
+    return false;
+  }
+}
+
+/**
  * Follow up with a notice embed, ephemeral by default. Mirrors
  * replyNotice for component flows that already used deferUpdate and need
  * a lightweight toast without re-rendering the source message.
@@ -614,6 +632,7 @@ module.exports = {
   replyNotice,
   replyEmbed,
   deferEphemeralReply,
+  deferOrWarn,
   followUpNotice,
   editNotice,
   editEmbed,

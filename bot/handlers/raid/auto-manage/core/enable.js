@@ -11,6 +11,7 @@ const { t } = require("../../../../services/i18n");
 const { getAutoManageEntries } = require("../../../../services/auto-manage/reports/utils");
 const { buildAutoManageStateNotice } = require("../action-policy");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
+const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
 function buildEnableNoRosterEmbed({ EmbedBuilder, lang }) {
   return buildNoticeEmbed(EmbedBuilder, {
@@ -145,7 +146,7 @@ function createAutoManageEnableHandler({
       const weekResetStart = weekResetStartMs();
       const probeDoc = await User.findOne({ discordId });
       assertBibleSyncAllowed(probeDoc);
-      if (!probeDoc || !Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
+      if (!hasRosterAccounts(probeDoc)) {
         await enableBibleSync(User, discordId);
         await editAutoEmbed(buildEnableNoRosterEmbed({ EmbedBuilder, lang }));
         return;

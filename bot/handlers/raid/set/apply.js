@@ -12,7 +12,7 @@ const {
   resolveRequiredCompanionScope,
 } = require("../../../services/local-sync/core/scope");
 const { getStatusRaidModeKey } = require("../../../utils/raid/common/character");
-const { findAccountByName } = require("../../../utils/user-doc");
+const { findAccountByName, hasRosterAccounts } = require("../../../utils/user-doc");
 const { isCurrentWeekCompletion } = require("../../../utils/raid/schedule/reset-windows");
 
 function createRaidSetApplyService({
@@ -134,7 +134,7 @@ function createRaidSetApplyService({
     requireLocalSyncEnabled,
     raidMeta,
   }) {
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    if (!hasRosterAccounts(userDoc)) {
       result.noRoster = true;
       return { blocked: true, companionScope: null };
     }

@@ -13,6 +13,7 @@ const {
   stampAutoManageAttemptFromReport,
 } = require("../../../../services/auto-manage/reports/utils");
 const { buildAutoManageStateNotice } = require("../action-policy");
+const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
 function buildSyncCooldownNotice({
   lang,
@@ -72,10 +73,6 @@ async function editNoRosterNotice({ lang, editAutoNotice }) {
   await editAutoNotice(buildNoRosterNotice(lang), { content: null });
 }
 
-function hasSyncableRoster(userDoc) {
-  return !!userDoc && Array.isArray(userDoc.accounts) && userDoc.accounts.length > 0;
-}
-
 async function applyManualSync({
   User,
   saveWithRetry,
@@ -90,7 +87,7 @@ async function applyManualSync({
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
     assertBibleSyncAllowed(userDoc);
-    if (!hasSyncableRoster(userDoc)) {
+    if (!hasRosterAccounts(userDoc)) {
       report = { noRoster: true };
       return;
     }
@@ -146,7 +143,7 @@ function createAutoManageSyncHandler({
       const weekResetStart = weekResetStartMs();
       const seedDoc = await User.findOne({ discordId });
       assertBibleSyncAllowed(seedDoc);
-      if (!hasSyncableRoster(seedDoc)) {
+      if (!hasRosterAccounts(seedDoc)) {
         await editNoRosterNotice({ lang, editAutoNotice });
         return;
       }

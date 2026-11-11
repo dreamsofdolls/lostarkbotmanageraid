@@ -7,7 +7,7 @@ const {
   buildNoRosterNotice,
   buildNoticeEmbed,
 } = require("../../utils/raid/common/shared");
-const { findAccountByName } = require("../../utils/user-doc");
+const { findAccountByName, hasRosterAccounts } = require("../../utils/user-doc");
 const {
   handlePickerSessionTimeout,
   newPickerSessionId,
@@ -156,7 +156,7 @@ function createEditRosterCommand({
       UserModel: User,
       userDoc,
     });
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    if (!hasRosterAccounts(userDoc)) {
       await interaction.editReply({
         embeds: [buildNoticeEmbed(EmbedBuilder, buildNoRosterNotice(lang))],
       });

@@ -5,6 +5,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
 } = require("../reports/utils");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 
 function createAutoManageSyncService(deps) {
   const {
@@ -30,7 +31,7 @@ function createAutoManageSyncService(deps) {
       }
       if (
         options.requireRoster === true &&
-        (!Array.isArray(doc.accounts) || doc.accounts.length === 0)
+        !hasRosterAccounts(doc)
       ) {
         return { status: "missing-roster", report: null, snapshot: null };
       }

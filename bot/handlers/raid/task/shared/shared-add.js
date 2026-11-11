@@ -20,6 +20,7 @@ const {
   formatSharedResetDetail,
 } = require("../../../../utils/raid/tasks/side-tasks");
 const { NoticeKind, buildRosterNotFoundNotice } = require("../../../../utils/raid/common/shared");
+const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
 function resolveSharedTaskReset(preset, requestedReset) {
   if (preset.kind === "scheduled") return SCHEDULED_RESET;
@@ -82,7 +83,7 @@ function createSharedAddResult(rosterName) {
 }
 
 function resolveTargetAccountsForSharedAdd(userDoc, request, result) {
-  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  if (!hasRosterAccounts(userDoc)) {
     result.outcome = "no-roster";
     return [];
   }

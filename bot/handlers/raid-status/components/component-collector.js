@@ -4,6 +4,7 @@ const { t, getUserLanguage } = require("../../../services/i18n");
 const {
   NoticeKind,
   deferEphemeralReply,
+  deferOrWarn,
   editNotice,
   followUpNotice,
   replyNotice,
@@ -105,10 +106,7 @@ function attachRaidStatusComponentCollector({
     if (!route) return;
 
     if (route.editDriven) {
-      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-        console.warn("[raid-status component] defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status component]", component.deferUpdate());
       if (!deferred) return;
     }
 
@@ -139,10 +137,7 @@ function attachRaidStatusComponentCollector({
 
   collector.on("collect", async (component) => {
     if (component.user.id !== interaction.user.id) {
-      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
-        console.warn("[raid-status component] non-owner defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status component] non-owner", deferEphemeralReply(component));
       if (!deferred) return;
 
       let clickerLang = lang;

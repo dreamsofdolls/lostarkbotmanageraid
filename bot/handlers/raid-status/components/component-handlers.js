@@ -31,6 +31,7 @@ const {
   buildErrorDetailField,
   buildNoticeEmbed,
   deferEphemeralReply,
+  deferOrWarn,
   editEmbed,
   editNotice,
   followUpNotice,
@@ -352,10 +353,7 @@ function createStatusComponentRouteHandlers(ctx) {
     [STATUS_COMPONENT_ACTION.localNewLink]: async (component) => {
       // Rotation edits the original message in-place because the visible
       // Resume button is the URL the user needs after the click.
-      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-        console.warn("[raid-status] local-new-link defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status] local-new-link", component.deferUpdate());
       if (!deferred) return noRedraw();
 
       const baseUrl = publicBaseUrl();
@@ -406,10 +404,7 @@ function createStatusComponentRouteHandlers(ctx) {
     },
 
     [STATUS_COMPONENT_ACTION.soloCompanion]: async (component) => {
-      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
-        console.warn("[raid-status] solo-companion defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status] solo-companion", deferEphemeralReply(component));
       if (!deferred) return noRedraw();
 
       const baseUrl = publicBaseUrl();
@@ -462,10 +457,7 @@ function createStatusComponentRouteHandlers(ctx) {
     },
 
     [STATUS_COMPONENT_ACTION.localRefresh]: async (component) => {
-      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-        console.warn("[raid-status] local-refresh defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status] local-refresh", component.deferUpdate());
       if (!deferred) return noRedraw();
 
       try {
@@ -502,10 +494,7 @@ function createStatusComponentRouteHandlers(ctx) {
         await replyNotice(component, EmbedBuilder, staleCardNotice()).catch(() => {});
         return noRedraw();
       }
-      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-        console.warn("[raid-status] roster-refresh defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-status] roster-refresh", component.deferUpdate());
       if (!deferred) return noRedraw();
 
       // Checked after the defer so the RosterShare read cannot use up

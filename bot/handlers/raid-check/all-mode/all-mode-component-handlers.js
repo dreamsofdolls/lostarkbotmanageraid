@@ -9,6 +9,7 @@
 const {
   NoticeKind,
   buildErrorDetailField,
+  deferOrWarn,
   followUpNotice,
   replyNotice,
 } = require("../../../utils/raid/common/shared");
@@ -170,10 +171,7 @@ function createAllModeComponentHandlers({
         return;
       }
 
-      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-        console.warn("[raid-check all] roster-refresh defer failed:", err?.message || err);
-        return false;
-      });
+      const deferred = await deferOrWarn("[raid-check all] roster-refresh", component.deferUpdate());
       if (!deferred) return;
 
       try {

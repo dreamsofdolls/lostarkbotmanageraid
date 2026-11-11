@@ -17,6 +17,7 @@ const {
   isAutoManageAttemptStale,
 } = require("../../../services/auto-manage/runtime/support/freshness");
 const { isPublicLogDisabledError } = require("../../../services/auto-manage/bible/error-kinds");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 const {
   commitCollectedRaidViewRefresh,
 } = require("../../../services/raid/view-refresh-commit");
@@ -135,8 +136,7 @@ function createRaidStatusSync(deps) {
 
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
-      const hasRoster =
-        Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+      const hasRoster = hasRosterAccounts(seedDoc);
       if (
         seedDoc.autoManageEnabled &&
         hasRoster &&

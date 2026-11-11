@@ -11,7 +11,7 @@
  * limit window doesn't fan out to ~N more bible requests.
  */
 
-const { findAccountByName } = require("../../utils/user-doc");
+const { findAccountByName, hasRosterAccounts } = require("../../utils/user-doc");
 const { BIBLE_ERROR_KIND } = require("../auto-manage/bible/error-kinds");
 const {
   isBibleRateLimitError,
@@ -292,7 +292,7 @@ function createRosterRefreshService(deps) {
   }
 
   async function collectStaleAccountRefreshes(userDoc) {
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    if (!hasRosterAccounts(userDoc)) {
       return [];
     }
 
@@ -378,7 +378,7 @@ function createRosterRefreshService(deps) {
   }
 
   function applyStaleAccountRefreshes(userDoc, collected) {
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    if (!hasRosterAccounts(userDoc)) {
       return false;
     }
     if (!Array.isArray(collected) || collected.length === 0) return false;

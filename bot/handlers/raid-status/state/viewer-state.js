@@ -2,6 +2,7 @@
 
 const { getAccessibleAccounts } = require("../../../services/access/access-control");
 const { getUserLanguage } = require("../../../services/i18n");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 
 const LOCAL_SYNC_PROBE_BUDGET_MS = 750;
 
@@ -85,8 +86,7 @@ async function loadStatusViewerState({
     UserModel: User,
     userDoc: seedDoc,
   });
-  const hasOwnAccounts =
-    seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+  const hasOwnAccounts = hasRosterAccounts(seedDoc);
   const shareLookupFailed = incomingShareLookup === null;
   const incomingSharedAccounts = incomingShareLookup || [];
   const hasIncomingShare = incomingSharedAccounts.length > 0;
@@ -140,7 +140,7 @@ async function loadStatusViewerState({
   const userDoc = prepared.userDoc;
   const noRoster =
     !hasIncomingShare &&
-    (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0);
+    !hasRosterAccounts(userDoc);
 
   return {
     lang,

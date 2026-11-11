@@ -323,6 +323,70 @@ test("raid-channel message handler fails closed when character preflight cannot 
   assert.deepEqual(hints, ["text-parser.errorSystem\ntext-parser.errorRetryNote"]);
 });
 
+// Renders a key with its variables, so a test sees the names and icon a hint carries.
+const tWithVars = (key, _lang, vars) => (vars ? `${key} ${JSON.stringify(vars)}` : key);
+const ACT4_HARD = { armoche_hard: { raidKey: "armoche", modeKey: "hard", label: "Act 4 Hard", minItemLevel: 0 } };
+const OWN_ABC1 = [{
+  ownerDiscordId: "user-1",
+  accountName: "Main",
+  isOwn: true,
+  accessLevel: "edit",
+  account: { characters: [{ charName: "abc1" }] },
+}];
+
+// A handler for one Act 4 Hard message naming `charNames`; hints land in `hints`.
+function makeRefusalHandler({ charNames, getAccessibleAccounts, applyRaidSetForDiscordId = async () => ({}) }) {
+  const hints = [];
+  const { handler } = makeHandler({
+    RAID_REQUIREMENT_MAP: ACT4_HARD,
+    UI: { icons: { info: "i", warn: "warn" } },
+    parseRaidMessage: () => ({ raidKeys: ["armoche"], modeKey: "hard", charNames, gate: null }),
+    getAccessibleAccounts,
+    applyRaidSetForDiscordId,
+    postPersistentHint: async (_message, content) => hints.push(content),
+    t: tWithVars,
+  });
+  return { handler, hints };
+}
+
+test("raid-channel message handler answers no roster rather than listing every name as missing", async () => {
+  let writeCalls = 0;
+  const { handler, hints } = makeRefusalHandler({
+    charNames: ["abc1"],
+    getAccessibleAccounts: async () => [],
+    applyRaidSetForDiscordId: async () => { writeCalls += 1; return {}; },
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({ content: "act4 hm abc1" }));
+
+  assert.equal(writeCalls, 0);
+  assert.deepEqual(hints, ['text-parser.noRoster {"icon":"i"}']);
+});
+
+test("raid-channel message handler names each missing or unchecked character in backticks", async () => {
+  const cases = [
+    [async () => OWN_ABC1, 'text-parser.errorNotFound {"icon":"warn","names":"`gone`, `lost`"}'],
+    [async () => { throw new Error("mongo unavailable"); }, 'text-parser.errorSystem {"icon":"warn","names":"`abc1`, `gone`, `lost`"}'],
+  ];
+  for (const [getAccessibleAccounts, expected] of cases) {
+    const { handler, hints } = makeRefusalHandler({ charNames: ["abc1", "gone", "lost"], getAccessibleAccounts });
+    await handler.handleRaidChannelMessage(makeMessage({ content: "act4 hm abc1 gone lost" }));
+    assert.deepEqual(hints, [`${expected}\ntext-parser.errorRetryNote`]);
+  }
+});
+
+test("raid-channel message handler answers no roster when the write finds the roster gone", async () => {
+  const { handler, hints } = makeRefusalHandler({
+    charNames: ["abc1"],
+    getAccessibleAccounts: async () => OWN_ABC1,
+    applyRaidSetForDiscordId: async () => ({ noRoster: true }),
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({ content: "act4 hm abc1" }));
+
+  assert.deepEqual(hints, ['text-parser.noRoster {"icon":"i"}']);
+});
+
 test("raid-channel message handler batches every raid-character pair and DMs one receipt", async () => {
   const batchCalls = [];
   const dmPayloads = [];

@@ -17,7 +17,7 @@ const {
 const {
   commitCollectedRaidViewRefresh,
 } = require("./view-refresh-commit");
-const { toPlainUserDoc } = require("../../utils/user-doc");
+const { toPlainUserDoc, hasRosterAccounts } = require("../../utils/user-doc");
 
 /**
  * Build the view-snapshot service.
@@ -60,7 +60,7 @@ function createRaidViewSnapshotService({
     const discordId = seedDoc.discordId;
     if (!discordId) return toPlainUserDoc(seedDoc);
 
-    const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+    const hasRoster = hasRosterAccounts(seedDoc);
     const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
 
     if (!hasRoster) {
@@ -144,8 +144,7 @@ function createRaidViewSnapshotService({
   ) {
     if (!seedDoc?.discordId) return false;
     if (seedDoc.weeklyResetKey !== getTargetResetKey()) return true;
-    const hasRoster =
-      Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+    const hasRoster = hasRosterAccounts(seedDoc);
     if (!hasRoster) return false;
     if (
       typeof hasStaleAccountRefreshes === "function" &&

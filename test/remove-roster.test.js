@@ -81,14 +81,14 @@ function makeUserModel(events = null) {
   return { User, docs };
 }
 
-function makeFactory({ events = null, normalizeNameFn = normalizeName } = {}) {
+function makeFactory({ events = null, normalizeNameFn = normalizeName, saveWithRetry = async (op) => op() } = {}) {
   const { User, docs } = makeUserModel(events);
   const factory = createRemoveRosterCommand({
     EmbedBuilder,
     MessageFlags,
     UI,
     User,
-    saveWithRetry: async (op) => op(),
+    saveWithRetry,
     ensureFreshWeek: () => false,
     normalizeName: normalizeNameFn,
     getCharacterName,
@@ -297,6 +297,42 @@ test("remove-roster: rejects unknown action without touching state", async () =>
   assert.equal(deferArg.flags, MessageFlags.Ephemeral);
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /không hợp lệ/i);
+});
+
+test("remove-roster: an action named like an object property is rejected without touching state", async () => {
+  for (const action of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+    const { factory, docs } = makeFactory();
+    seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano")] }]);
+    const interaction = makeInteraction({ options: { roster: "Alpha", action } });
+    await factory.handleRemoveRosterCommand(interaction);
+    assert.equal(docs.get("user-1").accounts[0].characters.length, 1, action);
+    assert.match(interaction._calls.editReply[0].embeds[0].toJSON().title, /không hợp lệ/i, action);
+  }
+});
+
+test("remove-roster: a retried write answers from the attempt that saved, not the one that lost the race", async () => {
+  // The first attempt reseeds the roster to Bardella; before it lands, another
+  // writer adds a roster named Bardella, so the retry finds no free name.
+  let docs;
+  const { factory, docs: store } = makeFactory({
+    saveWithRetry: async (op) => {
+      await op();
+      seedUser(docs, [
+        { accountName: "Alpha", characters: [makeChar("Alpha"), makeChar("Bardella")] },
+        { accountName: "Bardella", characters: [makeChar("Bardella")] },
+      ]);
+      return op();
+    },
+  });
+  docs = store;
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Alpha"), makeChar("Bardella")] }]);
+
+  const interaction = makeInteraction({ options: { roster: "Alpha", action: "remove_char", character: "Alpha" } });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  assert.deepEqual(docs.get("user-1").accounts.map((a) => a.accountName), ["Alpha", "Bardella"]);
+  const embed = JSON.stringify(interaction._calls.editReply.at(-1).embeds[0].toJSON());
+  assert.doesNotMatch(embed, /Roster giờ mang tên/);
 });
 
 test("remove-roster: rejects remove_char without a character argument", async () => {

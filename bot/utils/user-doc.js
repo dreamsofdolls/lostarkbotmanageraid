@@ -20,4 +20,13 @@ function findAccountByName(userDoc, accountName, normalizeName) {
   return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
 }
 
-module.exports = { toPlainUserDoc, findAccountByName };
+/**
+ * Whether a user record holds at least one roster.
+ * @param {object|null|undefined} userDoc Mongoose document, plain record or nothing.
+ * @returns {boolean} True when `accounts` is a non-empty array.
+ */
+function hasRosterAccounts(userDoc) {
+  return Array.isArray(userDoc?.accounts) && userDoc.accounts.length > 0;
+}
+
+module.exports = { toPlainUserDoc, findAccountByName, hasRosterAccounts };

@@ -19,6 +19,7 @@ const {
 } = require("../../../utils/raid/common/shared");
 // tPick, not t: the sync report titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 const {
   getAppliedAutoManageEntries,
   getAutoManageEntries,
@@ -127,10 +128,8 @@ function createSyncUi({
       "accounts.0": { $exists: true },
     }).select("discordId autoManageEnabled localSyncEnabled accounts.accountName accounts.characters.name accounts.characters.charName").lean();
     const pendingChars = [];
-    const userMeta = new Map();
     for (const user of users) {
       if (!user.autoManageEnabled || user.localSyncEnabled) continue;
-      userMeta.set(user.discordId, user);
       for (const account of user.accounts || []) {
         for (const character of account.characters || []) {
           const charName = getCharacterName(character);
@@ -142,7 +141,7 @@ function createSyncUi({
         }
       }
     }
-    return { pendingChars, userMeta };
+    return { pendingChars };
   }
 
   /** Sync-check all: sync every opted-in roster across all raids. */
@@ -159,8 +158,6 @@ function createSyncUi({
 
     const pendingEntryKeysByDiscordId = new Map();
     for (const pendingChar of snapshot.pendingChars) {
-      const meta = snapshot.userMeta.get(pendingChar.discordId);
-      if (!meta?.autoManageEnabled || meta.localSyncEnabled) continue;
       if (!pendingEntryKeysByDiscordId.has(pendingChar.discordId)) {
         pendingEntryKeysByDiscordId.set(pendingChar.discordId, new Set());
       }
@@ -213,7 +210,7 @@ function createSyncUi({
             }
             acquired = true;
             const seedDoc = await User.findOne({ discordId });
-            if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+            if (!hasRosterAccounts(seedDoc)) {
               skippedCount += 1;
               return;
             }

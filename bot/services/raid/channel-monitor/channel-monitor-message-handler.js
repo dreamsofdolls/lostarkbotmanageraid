@@ -203,6 +203,33 @@ function createRaidChannelMessageHandler({
     );
   }
 
+  // Character names as a refusal lists them: each in backticks, comma-separated.
+  const formatNameList = (names) => names.map((name) => `\`${name}\``).join(", ");
+  const noRosterHint = (lang) => t("text-parser.noRoster", lang, { icon: UI.icons.info });
+  // An error line naming the characters it concerns, then the retry note.
+  const errorWithRetry = (key, names, lang) => [
+    t(key, lang, { icon: UI.icons.warn, names: formatNameList(names) }),
+    t("text-parser.errorRetryNote", lang),
+  ].join("\n");
+
+  // Why a parsed message writes nothing, in precedence order. A failed access
+  // lookup cannot tell which names are missing, and with no roster every name
+  // is missing, so the no-roster hint comes before the missing-names list.
+  const WRITE_BATCH_REFUSALS = Object.freeze([
+    {
+      applies: ({ writeBatch }) => writeBatch.lookupFailed,
+      hint: ({ charNames, lang }) => errorWithRetry("text-parser.errorSystem", charNames, lang),
+    },
+    {
+      applies: ({ writeBatch }) => writeBatch.noAccessibleRoster,
+      hint: ({ lang }) => noRosterHint(lang),
+    },
+    {
+      applies: ({ writeBatch }) => writeBatch.missingCharNames.length > 0,
+      hint: ({ writeBatch, lang }) => errorWithRetry("text-parser.errorNotFound", writeBatch.missingCharNames, lang),
+    },
+  ]);
+
   async function handleRaidChannelMessage(message) {
     if (shouldIgnoreMessage(message)) return;
     if (!(await claimMessage(message))) return;
@@ -246,37 +273,10 @@ function createRaidChannelMessageHandler({
       getAccessibleAccounts,
       logger: console,
     });
-    if (writeBatch.lookupFailed) {
-      await postPersistentHint(
-        message,
-        [
-          t("text-parser.errorSystem", authorLang, {
-            icon: UI.icons.warn,
-            names: charNames.map((name) => `\`${name}\``).join(", "),
-          }),
-          t("text-parser.errorRetryNote", authorLang),
-        ].join("\n")
-      );
-      return;
-    }
-    if (writeBatch.noAccessibleRoster) {
-      await postPersistentHint(
-        message,
-        t("text-parser.noRoster", authorLang, { icon: UI.icons.info })
-      );
-      return;
-    }
-    if (writeBatch.missingCharNames.length > 0) {
-      await postPersistentHint(
-        message,
-        [
-          t("text-parser.errorNotFound", authorLang, {
-            icon: UI.icons.warn,
-            names: writeBatch.missingCharNames.map((name) => `\`${name}\``).join(", "),
-          }),
-          t("text-parser.errorRetryNote", authorLang),
-        ].join("\n")
-      );
+    const refusalContext = { writeBatch, charNames, lang: authorLang };
+    const refusal = WRITE_BATCH_REFUSALS.find(({ applies }) => applies(refusalContext));
+    if (refusal) {
+      await postPersistentHint(message, refusal.hint(refusalContext));
       return;
     }
 
@@ -291,10 +291,7 @@ function createRaidChannelMessageHandler({
       resultGroups.flatMap((group) => group.results)
     );
     if (resultSummary.hadNoRoster) {
-      await postPersistentHint(
-        message,
-        t("text-parser.noRoster", authorLang, { icon: UI.icons.info })
-      );
+      await postPersistentHint(message, noRosterHint(authorLang));
       return;
     }
 

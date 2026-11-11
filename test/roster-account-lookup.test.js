@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { findAccountByName } = require("../bot/utils/user-doc");
+const { findAccountByName, hasRosterAccounts } = require("../bot/utils/user-doc");
 const normalize = (value) => String(value || "").trim().toLowerCase();
 
 test("roster lookup returns the first original account under the caller's normalization", () => {
@@ -17,5 +17,20 @@ test("roster lookup rejects missing and blank names without selecting a nameless
   for (const doc of [null, {}, { accounts: {} }, { accounts: [null, {}] }]) {
     assert.equal(findAccountByName(doc, "main", normalize), null);
     assert.equal(findAccountByName(doc, " ", normalize), null);
+  }
+});
+
+test("hasRosterAccounts is true only for a document with at least one roster, and always a boolean", () => {
+  const cases = [
+    [null, false],
+    [undefined, false],
+    [{}, false],
+    [{ accounts: null }, false],
+    [{ accounts: "Main" }, false],
+    [{ accounts: [] }, false],
+    [{ accounts: [{ accountName: "Main" }] }, true],
+  ];
+  for (const [doc, expected] of cases) {
+    assert.strictEqual(hasRosterAccounts(doc), expected, JSON.stringify(doc));
   }
 });

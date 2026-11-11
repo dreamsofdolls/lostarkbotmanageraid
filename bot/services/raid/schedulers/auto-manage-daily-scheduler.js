@@ -21,6 +21,7 @@ const {
 } = require("../../auto-manage/bible/error-kinds");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { normalizeName } = require("../../../utils/raid/common/shared");
+const { hasRosterAccounts } = require("../../../utils/user-doc");
 
 // Calendar settlement limits each user to one completed run per VN day.
 // Short ticks drain due users in small batches through the shared Bible limiter.
@@ -102,7 +103,7 @@ async function settleUnavailableDailyCandidate({
 
   if (bibleAttempted) userDoc.lastAutoManageAttemptAt = nowMs;
   let outcome = null;
-  if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  if (!hasRosterAccounts(userDoc)) {
     outcome = AUTO_MANAGE_DAILY_OUTCOME.noRoster;
   }
   if (!outcome) return { handled: false, transition: null };
@@ -182,7 +183,7 @@ async function persistTransientDailyFailure({
 
 async function loadEligibleDailySeed(User, discordId) {
   const seedDoc = await User.findOne({ discordId });
-  if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+  if (!hasRosterAccounts(seedDoc)) {
     return {
       seedDoc: null,
       transition: { bucket: "skipped", outcome: "missing-roster" },

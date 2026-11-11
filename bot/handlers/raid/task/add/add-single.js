@@ -26,6 +26,7 @@ const {
   formatCharacterLabel,
   getCharacterClass,
 } = require("../../../../utils/raid/common/shared");
+const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
 function readAddSingleRequest(interaction) {
   return {
@@ -62,7 +63,7 @@ function createAddSingleResult() {
 }
 
 function applyAddSingleToUserDoc(userDoc, request, result, deps) {
-  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  if (!hasRosterAccounts(userDoc)) {
     result.outcome = "no-roster";
     return false;
   }
