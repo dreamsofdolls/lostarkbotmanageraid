@@ -14,12 +14,27 @@ const {
   WORLD_EVENT_REMINDER_LEAD_MS,
   WORLD_EVENT_REMINDER_TTL_MS,
 } = require("./world-events");
+const {
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+  getLangTzOffsetMinutes,
+} = require("./artist-clock");
 
 // The world-event reminder text takes its minutes from the scheduler's own
 // constants, so a new lead or TTL cannot leave /raid-announce show describing
 // the old timing.
 const WORLD_EVENT_LEAD_MINUTES = WORLD_EVENT_REMINDER_LEAD_MS / 60000;
 const WORLD_EVENT_TTL_MINUTES = WORLD_EVENT_REMINDER_TTL_MS / 60000;
+
+// Bedtime and wake-up text takes its hours from artist-clock for the same
+// reason. The registry is read in Vietnam time, so each hour also names UTC.
+const BEDTIME_HOUR = ARTIST_QUIET_START_HOUR_VN;
+const WAKEUP_HOUR = ARTIST_QUIET_END_HOUR_VN;
+const VN_OFFSET_HOURS = getLangTzOffsetMinutes("vi") / 60;
+const vnHourInUtc = (hour) => {
+  const utcHour = (hour - VN_OFFSET_HOURS + 24) % 24;
+  return `${utcHour}:00 UTC${hour < VN_OFFSET_HOURS ? " hôm trước" : ""}`;
+};
 
 // ---------------------------------------------------------------------------
 // Announcement registry for all automated channel messages. Adding a new
@@ -105,19 +120,19 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Artist bedtime",
     subdocKey: "artistBedtime",
     channelOverridable: false,
-    trigger: "Mỗi ngày lúc 3:00 VN (= 20:00 UTC hôm trước), tick đầu tiên sau boundary. Artist post embed ngủ nghỉ rồi quiet-hours bắt đầu.",
-    dedup: "1 post/VN calendar day/guild (`lastArtistBedtimeKey = 'YYYY-MM-DD'`). Tick 30 phút trong [2:00, 9:00) bỏ qua cả cleanup sweep lẫn notice.",
+    trigger: `Mỗi ngày lúc ${BEDTIME_HOUR}:00 VN (= ${vnHourInUtc(BEDTIME_HOUR)}), tick đầu tiên sau boundary. Artist post embed ngủ nghỉ rồi quiet-hours bắt đầu.`,
+    dedup: `1 post/VN calendar day/guild (\`lastArtistBedtimeKey = 'YYYY-MM-DD'\`). Tick 30 phút trong [${BEDTIME_HOUR}:00, ${WAKEUP_HOUR}:00) bỏ qua cả cleanup sweep lẫn notice.`,
     messageTtl: "5 phút rồi Artist tự xóa",
     previewContent:
-      "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì đâu. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này Artist cuỗm đi sau 5 phút, chúc cả nhà ngủ ngon~",
+      `Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới ${WAKEUP_HOUR}h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì đâu. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này Artist cuỗm đi sau 5 phút, chúc cả nhà ngủ ngon~`,
   },
   "artist-wakeup": {
     label: "Artist wakeup",
     subdocKey: "artistWakeup",
     channelOverridable: false,
-    trigger: "Mỗi ngày lúc 8:00 VN (= 1:00 UTC), tick đầu tiên sau boundary. Artist post wake-up greeting + sweep catch-up 1 lần cho đống tin đêm qua.",
+    trigger: `Mỗi ngày lúc ${WAKEUP_HOUR}:00 VN (= ${vnHourInUtc(WAKEUP_HOUR)}), tick đầu tiên sau boundary. Artist post wake-up greeting + sweep catch-up 1 lần cho đống tin đêm qua.`,
     dedup: "1 post/VN calendar day/guild (`lastArtistWakeupKey = 'YYYY-MM-DD'`). Sau wake-up, các slot :30/:00 trong ngày quay về hourly-cleanup bình thường.",
-    messageTtl: "10 phút rồi Artist tự xóa (dài hơn cleanup thường để members online 8h sáng kịp thấy)",
+    messageTtl: `10 phút rồi Artist tự xóa (dài hơn cleanup thường để members online ${WAKEUP_HOUR}h sáng kịp thấy)`,
     previewContent:
       "Morning các cậu~ Artist vừa dậy đây nè, vươn vai một cái. Đêm qua tích **N** tin nhắn, Artist dọn luôn 1 thể cho kênh thoáng nha. Giờ Artist làm việc bình thường, biển báo này 10 phút tự cuỗm.",
   },

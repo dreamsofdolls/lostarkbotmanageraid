@@ -57,12 +57,13 @@ function makeService({
   posts = [],
   postResult = { id: "message-1" },
   nowDate = AWAKE_CLOCK,
+  lang = "vi",
 } = {}) {
   return createDailyRosterAnnouncementService({
     User,
     GuildConfig,
     getAnnouncementsConfig: (cfg) => cfg.announcements,
-    getGuildLanguage: async () => "vi",
+    getGuildLanguage: async () => lang,
     postChannelAnnouncement: async (...args) => {
       posts.push(args);
       return postResult;
@@ -453,4 +454,29 @@ test("daily roster report waits for Artist to wake up", async () => {
   assert.equal(morning.notifiedCount, 1);
   assert.equal(claims.length, 1);
   assert.equal(posts.length, 1);
+});
+
+test("daily roster report follows the guild's clock: en sleeps at 04:00 UTC while vi is awake", async () => {
+  const postsFor = async (lang) => {
+    const posts = [];
+    const cfg = {
+      guildId: "guild-1",
+      raidChannelId: "channel-1",
+      lastDailyRosterSyncKey: null,
+      announcements: { dailyRosterSync: { enabled: true, channelId: null } },
+    };
+    const GuildConfig = makeGuildConfigCursor([cfg]);
+    GuildConfig.findOneAndUpdate = async () => ({ ...cfg });
+    await makeService({
+      User: completeUser().model,
+      GuildConfig,
+      posts,
+      lang,
+      nowDate: () => new Date("2026-10-03T04:00:00.000Z"), // 11:00 VN
+    }).notifyDailyRosterSync(makeClient(), { targetDayKey: TARGET_DAY_KEY });
+    return posts.length;
+  };
+
+  assert.equal(await postsFor("en"), 0);
+  assert.equal(await postsFor("vi"), 1);
 });

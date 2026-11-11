@@ -366,3 +366,12 @@ test("a 09:00 spawn is still reminded at 08:45 while Artist wakes up", async () 
   assert.equal(claims.length, 1);
   assert.equal(posts.length, 1);
 });
+
+test("world-event reminder follows each guild's clock: en sleeps at 04:00 UTC while vi is awake", async () => {
+  // Sunday 00:00 ET = 04:00 UTC = 11:00 VN Monday.
+  const now = utc(2026, 4, 27, 3, 45);
+  assert.equal(resolveWorldEventReminderForNow(now)?.spawnAtMs, Date.UTC(2026, 3, 27, 4, 0, 0, 0));
+
+  assert.equal((await runReminderTickAt(now, "en")).posts.length, 0);
+  assert.equal((await runReminderTickAt(now, "vi")).posts.length, 1);
+});

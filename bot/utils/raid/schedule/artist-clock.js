@@ -1,9 +1,10 @@
 /**
  * utils/raid/schedule/artist-clock.js
- * Time-zone helpers for scheduled bedtime and wake-up announcements.
- * The quiet-hours window suppresses cleanup sweeps and 30-minute notices.
- * The *ForLang variants resolve boundaries in the configured locale's time
- * zone (Vietnam by default; Japanese and English guilds may differ).
+ * Artist's sleep window and the time-zone helpers built on it. The quiet
+ * hours suppress cleanup sweeps and 30-minute notices; isDuringArtistSleep
+ * is the check every scheduler asks before posting on its own. The *ForLang
+ * variants resolve boundaries in the configured locale's time zone (Vietnam
+ * by default; Japanese and English guilds may differ).
  */
 
 "use strict";

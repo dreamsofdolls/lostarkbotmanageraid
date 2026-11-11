@@ -136,3 +136,34 @@ test("weekly reset announcement is not posted while Artist sleeps", async () => 
   assert.equal(claims.length, 0);
   assert.equal(sends, 0);
 });
+
+test("weekly reset announcement follows the guild's clock: en sleeps at 04:00 UTC while vi is awake", async () => {
+  const sendsFor = async (lang) => {
+    let sends = 0;
+    const cfg = {
+      guildId: `guild-${lang}`,
+      raidChannelId: "channel-1",
+      lastWeeklyAnnouncementKey: "2026-W34",
+      announcements: { weeklyReset: { enabled: true } },
+    };
+    await postWeeklyResetAnnouncements({}, "2026-W35", {
+      GuildConfigModel: {
+        find: () => ({ lean: async () => [cfg] }),
+        findOneAndUpdate: async () => ({ ...cfg }),
+      },
+      getGuildLanguageFn: async () => lang,
+      resolveGuildChannelFn: async () => ({
+        async send() {
+          sends += 1;
+          return { delete: async () => {} };
+        },
+      }),
+      setTimeoutFn: () => null,
+      nowDate: () => new Date(Date.UTC(2026, 7, 27, 4, 0, 0, 0)), // 11:00 VN
+    });
+    return sends;
+  };
+
+  assert.equal(await sendsFor("en"), 0);
+  assert.equal(await sendsFor("vi"), 1);
+});

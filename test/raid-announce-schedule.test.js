@@ -6,6 +6,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { __test } = require("../bot/commands");
+const { announcementTypeEntry } = require("../bot/utils/raid/schedule/announcements");
+
+test("raid-announce show states Artist's bedtime and wake-up hours from the sleep window", () => {
+  const bedtime = announcementTypeEntry("artist-bedtime");
+  const wakeup = announcementTypeEntry("artist-wakeup");
+  assert.match(bedtime.trigger, /lúc 2:00 VN \(= 19:00 UTC hôm trước\)/);
+  assert.match(bedtime.dedup, /\[2:00, 9:00\)/);
+  assert.match(bedtime.previewContent, /tới 9h sáng/);
+  assert.match(wakeup.trigger, /lúc 9:00 VN \(= 2:00 UTC\)/);
+  assert.match(wakeup.messageTtl, /online 9h sáng/);
+  for (const entry of [bedtime, wakeup]) {
+    assert.doesNotMatch(JSON.stringify(entry), /3:00 VN|8:00 VN|8h sáng|20:00 UTC|1:00 UTC/);
+  }
+});
 
 test("nextIntervalTickMs follows scheduler boot phase instead of wall-clock boundaries", () => {
   const startedAt = Date.UTC(2026, 3, 23, 12, 17, 0, 0);
