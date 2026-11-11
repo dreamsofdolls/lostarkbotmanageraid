@@ -154,6 +154,43 @@ function createHandlerHarness(overrides = {}) {
   return { handlers, session, taskFilters, goldFilters, get reloadCount() { return reloadCount; } };
 }
 
+test("raid-status buttons whose defer fails log it under their own label and do nothing more", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const cases = [
+    [STATUS_COMPONENT_ACTION.localNewLink, "[raid-status] local-new-link"],
+    [STATUS_COMPONENT_ACTION.soloCompanion, "[raid-status] solo-companion"],
+    [STATUS_COMPONENT_ACTION.localRefresh, "[raid-status] local-refresh"],
+    [STATUS_COMPONENT_ACTION.rosterRefresh, "[raid-status] roster-refresh"],
+  ];
+  for (const [action, label] of cases) {
+    warn.mock.resetCalls();
+    const steps = [];
+    const record = (step) => async () => { steps.push(step); };
+    const { handlers } = createHandlerHarness({
+      interaction: { editReply: record("card edit") },
+      reloadViewerAccounts: record("reload"),
+      runManualRosterRefresh: async () => { steps.push("roster refresh"); return {}; },
+      rotateLocalSyncTokenFn: async () => { steps.push("rotate"); return "token"; },
+    });
+    const gone = () => Promise.reject(new Error("Unknown interaction"));
+
+    const result = await handlers[action]({
+      user: { id: "viewer", username: "Player" },
+      deferUpdate: gone,
+      deferReply: gone,
+      followUp: record("follow-up"),
+      editReply: record("reply edit"),
+      reply: record("reply"),
+    });
+
+    assert.deepEqual(
+      { result, steps, warnings: warn.mock.calls.map((call) => call.arguments) },
+      { result: { redraw: false }, steps: [], warnings: [[`${label} defer failed:`, "Unknown interaction"]] },
+      label
+    );
+  }
+});
+
 test("raid-status component handlers move pagination through session state", async () => {
   const { handlers, session } = createHandlerHarness();
 

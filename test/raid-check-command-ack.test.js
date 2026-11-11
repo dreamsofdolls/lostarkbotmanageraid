@@ -323,6 +323,39 @@ test("raid-check auto-sync button follows the flag of a refreshed roster", async
   await handlers.end();
 });
 
+test("raid-check all clicks whose defer fails are logged under their label and go no further", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  let refreshes = 0;
+  const { handlers, edits } = await openAllModeSession({
+    userDoc: {
+      discordId: "roster-user", discordDisplayName: "Roster user",
+      accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+    },
+    runManualRosterRefresh: async () => {
+      refreshes += 1;
+      return { status: "updated" };
+    },
+  });
+  const editsBefore = edits.length;
+  const answers = [];
+  const answered = async () => { answers.push("answer"); };
+  const gone = () => Promise.reject(new Error("Unknown interaction"));
+
+  await handlers.collect({
+    customId: "raid-check-all:roster-refresh", user: { id: "ui-manager" }, deferUpdate: gone, followUp: answered, reply: answered,
+  });
+  await handlers.collect({
+    customId: "raid-check-all:roster-refresh", user: { id: "intruder" }, deferReply: gone, editReply: answered, followUp: answered,
+  });
+
+  assert.deepEqual({ refreshes, newEdits: edits.length - editsBefore, answers }, { refreshes: 0, newEdits: 0, answers: [] });
+  assert.deepEqual(warn.mock.calls.map((call) => call.arguments), [
+    ["[raid-check all] roster-refresh defer failed:", "Unknown interaction"],
+    ["[raid-check all] non-owner defer failed:", "Unknown interaction"],
+  ]);
+  await handlers.end();
+});
+
 const rosterDocFor = discordId => ({
   discordId, discordDisplayName: discordId,
   accounts: [{ accountName: `${discordId}-roster`, characters: [{ name: `${discordId}-char`, itemLevel: 1740 }] }],

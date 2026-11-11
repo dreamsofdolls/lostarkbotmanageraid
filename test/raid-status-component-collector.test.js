@@ -121,6 +121,65 @@ test("a throwing raid-status handler is reported to the clicker instead of rejec
   assert.deepEqual(edits, []);
 });
 
+test("a raid-status click whose defer fails is logged under its label and goes no further", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const listeners = new Map();
+  const steps = [];
+  attachRaidStatusComponentCollector({
+    EmbedBuilder,
+    User: {},
+    interaction: {
+      user: { id: "owner" },
+      editReply: async () => {
+        steps.push("card edit");
+        return {};
+      },
+    },
+    message: {
+      createMessageComponentCollector: () => ({
+        on(event, handler) {
+          listeners.set(event, handler);
+          return this;
+        },
+      }),
+    },
+    lang: "en",
+    sessionMs: 60_000,
+    taskAutoRefreshGraceMs: 1_000,
+    getAccounts: () => [],
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    buildCurrentEmbeds: () => [{}],
+    buildEmbedAndCanvas: async () => ({ embeds: [{}] }),
+    buildComponents: () => [],
+    componentRouteHandlers: {
+      next: async () => {
+        steps.push("handler");
+      },
+    },
+    refreshStateIfStale: async () => {
+      steps.push("refresh");
+    },
+  });
+  const gone = () => Promise.reject(new Error("Unknown interaction"));
+  const answered = async () => {
+    steps.push("answer");
+  };
+
+  await listeners.get("collect")({
+    customId: "status:next", user: { id: "owner" }, deferUpdate: gone, followUp: answered,
+  });
+  await listeners.get("collect")({
+    customId: "status:next", user: { id: "someone-else" }, deferReply: gone, editReply: answered, followUp: answered,
+  });
+
+  assert.deepEqual(steps, []);
+  assert.deepEqual(warn.mock.calls.map((call) => call.arguments), [
+    ["[raid-status component] defer failed:", "Unknown interaction"],
+    ["[raid-status component] non-owner defer failed:", "Unknown interaction"],
+  ]);
+});
+
 // A collector whose card and controls both name the page they were built
 // for. Page 1's background is slow (a first Mongo read), page 2's is fast.
 function attachPagedCollector({ backgroundMs = [0, 60, 5] } = {}) {
