@@ -52,6 +52,7 @@ const {
   startDiscordLogin,
 } = require("./bot/app/discord-startup");
 const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
+const { createDiscordRestAgent } = require("./bot/app/discord-rest-agent");
 const {
   createArtistPingResponder,
 } = require("./bot/services/raid/artist-ping/ping-responder");
@@ -107,7 +108,7 @@ async function startBot() {
     console.log("[bot] TEXT_MONITOR_ENABLED=false - skipping MessageContent intent and MessageCreate listener.");
   }
 
-  const client = new Client({ intents });
+  const client = new Client({ intents, rest: { agent: createDiscordRestAgent() } });
 
   let localSyncWeb = null;
   const terminate = createProcessTerminator({

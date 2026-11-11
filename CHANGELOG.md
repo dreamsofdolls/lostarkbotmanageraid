@@ -16,6 +16,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Fixed
 - `/raid-announce show` states the new bedtime and wake-up hours; the registry now reads them from the sleep window, so they cannot drift again.
 - The scheduler claims no longer raise mongoose 9's deprecation warning: the one query that still passed `new: false` now asks with `returnDocument: "before"`. The README badge shows Node 24.
+- Messages with a file post again on Node 24 (the `/raid-status` card image, `/raid-bg`, `/raid-log` captures). Since the `jsdom` 31 update, every upload failed with `UND_ERR_INVALID_ARG`: jsdom's newer `undici` took over the HTTP dispatcher discord.js falls back to, and it rejects the form data discord.js builds. The Discord client now sends through an agent of discord.js's own `undici` (`bot/app/discord-rest-agent.js`).
 
 ## 2026-11-10
 
