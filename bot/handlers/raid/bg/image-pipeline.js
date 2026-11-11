@@ -197,12 +197,19 @@ function stripPngAncillaryChunks(buffer) {
   return Buffer.concat(parts);
 }
 
+// Formats recognised from the file's own bytes, tried in this order; the first match wins.
+const MIME_SNIFFERS = Object.freeze([
+  { matches: looksLikeSvg, mime: "image/svg+xml" },
+  { matches: isPngBuffer, mime: "image/png" },
+  { matches: isJpegBuffer, mime: "image/jpeg" },
+  { matches: isWebpBuffer, mime: "image/webp" },
+]);
+
+// The bytes decide the type; the type the client declared is only the fallback for bytes no sniffer knows.
 function detectMime(attachment, buffer) {
   const declared = (attachment.contentType || "").toLowerCase().split(";")[0].trim();
-  if (looksLikeSvg(buffer)) return "image/svg+xml";
-  if (isPngBuffer(buffer)) return "image/png";
-  if (isJpegBuffer(buffer)) return "image/jpeg";
-  if (isWebpBuffer(buffer)) return "image/webp";
+  const sniffed = MIME_SNIFFERS.find(({ matches }) => matches(buffer));
+  if (sniffed) return sniffed.mime;
   if (!declared || declared === "application/octet-stream") return "";
   return declared;
 }

@@ -216,3 +216,60 @@ test("an unrecognised job status falls back to the missing sentence", () => {
   assert.equal(card.sentence, "Preview không còn tồn tại.");
   assert.equal(card.showBody, false);
 });
+
+test("each card kind says its own sentence, and kinds without one share the state description", () => {
+  const applied = (rejected) => describeCard({
+    job: makeJob({ status: "applied", result: rejected === null ? null : { rejected: Array.from({ length: rejected }, () => ({})) } }),
+    state: "applied",
+  });
+  const appliedLine = "Artist đã ghi xong các thay đổi bên dưới.";
+
+  assert.equal(
+    describeCard({ activeScope: null }).sentence,
+    "Local Sync chưa được bật. Dùng `/raid-auto-manage action:local-on` để bật Local Sync đầy đủ, hoặc bật Bible Auto-sync để dùng reader Solo."
+  );
+  assert.equal(
+    describeCard({ activeScope: null, lang: "en" }).sentence,
+    "Local Sync is not enabled. Use `/raid-auto-manage action:local-on` for full Local Sync, or enable Bible Auto-sync to use the Solo reader."
+  );
+
+  const empty = (overrides) => describeCard({ job: null, state: "missing", summary: null, ...overrides }).sentence.split("\n");
+  for (const [overrides, openReader] of [
+    [{}, "Bấm **Mở Local Reader**"],
+    [{ activeScope: "solo", hasReaderLink: false }, "Bấm **Solo Local Reader** (link riêng chỉ cậu thấy)"],
+    [{ hasReaderLink: false }, "Mở Local Reader"],
+  ]) {
+    const lines = empty(overrides);
+    assert.equal(lines.length, 8);
+    assert.equal(lines[0], "Chưa có lượt đồng bộ nào đang chờ cậu cả nha~");
+    assert.equal(lines[4], `🌐 **1.** ${openReader}, thả \`encounters.db\` trong \`%localappdata%\\LOA Logs\\\` vào trang`);
+  }
+
+  for (const [failureReason, expected] of [
+    ["sync_busy", "Một lượt sync khác đang chạy. Đợi một chút rồi bấm **Đồng bộ** lại nhé."],
+    ["write_error", "Một phần tiến độ chưa ghi được vào DB. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu."],
+    ["party_write_error", "Phần của cậu đã ghi xong. Còn vài roster trong party chưa nhận tiến độ, bấm **Đồng bộ** để thử lại nhé."],
+    ["apply_failed", "Có lỗi tạm thời khi xử lý. Dữ liệu chưa hoàn tất vẫn được giữ để cậu bấm **Đồng bộ** thử lại."],
+  ]) {
+    assert.equal(describeCard({ job: makeJob({ failureReason }) }).sentence, expected, failureReason);
+  }
+
+  assert.equal(applied(0).sentence, appliedLine);
+  assert.equal(applied(null).sentence, appliedLine);
+  assert.equal(
+    applied(1).sentence,
+    `${appliedLine} Có **1** mục trong log không ghi được vì không khớp với roster hoặc độ khó cậu đang đặt.`
+  );
+  assert.equal(
+    applied(2).sentence,
+    `${appliedLine} Có **2** mục trong log không ghi được vì không khớp với roster hoặc độ khó cậu đang đặt.`
+  );
+
+  assert.equal(describeCard().sentence, "Kiểm tra các thay đổi bên dưới rồi bấm **Đồng bộ** nếu mọi thứ đúng nhé.");
+  assert.equal(
+    describeCard({ summary: NO_CHANGES }).sentence,
+    "Preview này không thêm gì so với tiến độ Artist đang giữ, nên không cần **Đồng bộ** đâu~"
+  );
+  assert.equal(describeCard({ state: "applying" }).sentence, "Artist đang ghi tiến độ raid. Đợi một chút nhé.");
+  assert.equal(describeCard({ state: "cancelled" }).sentence, "Preview đã bị huỷ và không thay đổi tiến độ raid.");
+});

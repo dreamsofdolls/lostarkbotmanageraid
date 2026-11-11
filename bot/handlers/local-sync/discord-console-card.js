@@ -106,27 +106,35 @@ function resolveReaderAccess({ hasReaderLink, activeScope }) {
   return activeScope === COMPANION_SCOPE.solo ? "solo" : "none";
 }
 
-function buildCardSentence({ kind, retryReason, job, readerAccess, lang }) {
-  const describe = (key, vars = null) => t(`local-sync-discord.stateDescriptions.${key}`, lang, vars);
-  if (kind === "disabled") return t("local-sync-discord.disabledDescription", lang);
-  if (kind === "empty") {
-    return t("local-sync-discord.noPreviewDescription", lang, {
-      openReader: t(`local-sync-discord.noPreviewOpen.${readerAccess}`, lang),
-    }).join("\n");
-  }
-  if (kind === "retry") return t(`local-sync-discord.retryReasons.${retryReason}`, lang);
-  if (kind === "applied") {
-    const rejected = job.result?.rejected?.length || 0;
-    return rejected > 0 ? describe("appliedWithRejected", { rejected }) : describe("applied");
-  }
+const describeState = (key, lang, vars = null) => t(`local-sync-discord.stateDescriptions.${key}`, lang, vars);
 
+// The sentence of each kind that has one of its own; every other kind uses buildJobStateSentence.
+const SENTENCE_BY_KIND = Object.freeze({
+  disabled: ({ lang }) => t("local-sync-discord.disabledDescription", lang),
+  empty: ({ readerAccess, lang }) => t("local-sync-discord.noPreviewDescription", lang, {
+    openReader: t(`local-sync-discord.noPreviewOpen.${readerAccess}`, lang),
+  }).join("\n"),
+  retry: ({ retryReason, lang }) => t(`local-sync-discord.retryReasons.${retryReason}`, lang),
+  applied: ({ job, lang }) => {
+    const rejected = job.result?.rejected?.length || 0;
+    return rejected > 0 ? describeState("appliedWithRejected", lang, { rejected }) : describeState("applied", lang);
+  },
+});
+
+// The sentence of a kind that follows its job state: it names the reader control where the next step needs it.
+function buildJobStateSentence({ kind, job, readerAccess, lang }) {
   const reader = t(`local-sync-discord.readerAction.${readerAccess}`, lang);
-  if (kind === "expired") return describe("expired", { reader });
+  if (kind === "expired") return describeState("expired", lang, { reader });
   if (kind === "failed") {
     const reasonKey = FAILED_DESCRIPTION_BY_REASON[job.failureReason];
-    return reasonKey ? describe(reasonKey, { reader }) : describe("failed");
+    return reasonKey ? describeState(reasonKey, lang, { reader }) : describeState("failed", lang);
   }
-  return describe(kind);
+  return describeState(kind, lang);
+}
+
+// The sentence under the tracker line: the builder of the kind, else the job-state tail.
+function buildCardSentence(facts) {
+  return (SENTENCE_BY_KIND[facts.kind] || buildJobStateSentence)(facts);
 }
 
 /**

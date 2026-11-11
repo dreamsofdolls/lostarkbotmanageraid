@@ -123,6 +123,17 @@ function startLocalSyncHttpServer({
   if (!webDir) {
     throw new Error("[local-sync/http-server] webDir is required");
   }
+  // Directories served under /sync from a root of their own, each read relative to its prefix. A mount
+  // without a configured root is skipped, and these are tried before the general /sync mount below.
+  const staticMounts = [
+    // Static class icons used by the web preview. Kept outside webDir so
+    // Discord emoji bootstrap and web companion share one asset source.
+    { prefix: "/sync/class-icons/", root: classIconsDir, cacheControl: "public, max-age=86400" },
+    // Self-host the pinned wa-sqlite package. The Local Reader handles a
+    // user-selected encounters.db file, so executable CDN code must not
+    // share its page context or gain access to the file/token.
+    { prefix: "/sync/vendor/wa-sqlite/", root: waSqliteDir, cacheControl: "public, max-age=31536000, immutable" },
+  ].filter(({ root }) => root);
   const server = http.createServer(async (req, res) => {
     try {
       const pathname = new URL(req.url || "/", "http://localhost").pathname;
@@ -140,21 +151,10 @@ function startLocalSyncHttpServer({
         await apiHandlers[apiKey](req, res);
         return;
       }
-      // Static class icons used by the web preview. Kept outside webDir so
-      // Discord emoji bootstrap and web companion share one asset source.
-      if (req.method === "GET" && classIconsDir && pathname.startsWith("/sync/class-icons/")) {
-        const rel = pathname.replace(/^\/sync\/class-icons\/?/, "");
-        const result = await tryReadFileFromRoot(classIconsDir, rel);
-        sendStaticFileResponse(res, result, "public, max-age=86400");
-        return;
-      }
-      // Self-host the pinned wa-sqlite package. The Local Reader handles a
-      // user-selected encounters.db file, so executable CDN code must not
-      // share its page context or gain access to the file/token.
-      if (req.method === "GET" && waSqliteDir && pathname.startsWith("/sync/vendor/wa-sqlite/")) {
-        const rel = pathname.replace(/^\/sync\/vendor\/wa-sqlite\/?/, "");
-        const result = await tryReadFileFromRoot(waSqliteDir, rel);
-        sendStaticFileResponse(res, result, "public, max-age=31536000, immutable");
+      const mount = staticMounts.find(({ prefix }) => pathname.startsWith(prefix));
+      if (req.method === "GET" && mount) {
+        const result = await tryReadFileFromRoot(mount.root, pathname.slice(mount.prefix.length));
+        sendStaticFileResponse(res, result, mount.cacheControl);
         return;
       }
       // Static path: only serve under /sync/*. Anything else falls through to 404.

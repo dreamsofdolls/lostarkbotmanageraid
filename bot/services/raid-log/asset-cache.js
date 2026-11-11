@@ -32,6 +32,21 @@ function hasExpectedContentType(kind, contentType) {
  * navigations and short browser lifetimes.
  * @returns {{ get: Function, remember: Function, fulfill: Function, clear: Function }} bounded static-asset cache
  */
+// Each rule names one way a static response would be unsafe or stale to
+// replay from the capture cache; any match keeps the response out. The rules
+// only read headers, so their order changes nothing but the work done.
+const ASSET_CACHE_REJECTIONS = Object.freeze([
+  ({ kind, policy }) => kind === "app" && (!/\bpublic\b/i.test(policy) || !/\bimmutable\b/i.test(policy)),
+  ({ kind, policy }) => kind === "class-icon" && /\bs-maxage\s*=/i.test(policy),
+  ({ policy }) => /\b(?:private|no-store|no-cache)\b/i.test(policy),
+  ({ headers }) => Boolean(headers["set-cookie"]),
+  ({ kind, headers }) => !hasExpectedContentType(kind, headers["content-type"] || ""),
+  ({ headers }) => Boolean(headers.vary) && headers.vary.toLowerCase() !== "accept-encoding",
+  ({ headers }) => Number(headers["content-length"]) > MAX_ASSET_BYTES,
+  // No max-age leaves `expires` NaN; such a response is never fresh.
+  ({ expires }) => !(Number.isFinite(expires) && expires > Date.now()),
+]);
+
 function createAssetCache() {
   const cache = createMemoryCache({ maxBytes: 4 * 1024 * 1024, maxEntries: 128, ttlMs: 5 * 60_000,
     sizeOf: asset => asset.body.length });
@@ -58,12 +73,8 @@ function createAssetCache() {
         const policy = headers["cache-control"] || "";
         const maxAge = Number(/(?:^|,)\s*max-age=(\d+)\s*(?:,|$)/i.exec(policy)?.[1]);
         const expires = Date.now() + (maxAge - Number(headers.age || 0)) * 1000;
-        if ((kind === "app" && (!/\bpublic\b/i.test(policy) || !/\bimmutable\b/i.test(policy)))
-          || (kind === "class-icon" && /\bs-maxage\s*=/i.test(policy))
-          || /\b(?:private|no-store|no-cache)\b/i.test(policy) || headers["set-cookie"]
-          || !hasExpectedContentType(kind, headers["content-type"] || "")
-          || (headers.vary && headers.vary.toLowerCase() !== "accept-encoding")
-          || Number(headers["content-length"]) > MAX_ASSET_BYTES || !(expires > Date.now())) return;
+        const context = { kind, headers, policy, expires };
+        if (ASSET_CACHE_REJECTIONS.some((rejects) => rejects(context))) return;
         const body = await response.body();
         if (current !== generation || body.length > MAX_ASSET_BYTES) return;
         const asset = { status: 200, contentType: headers["content-type"], body };

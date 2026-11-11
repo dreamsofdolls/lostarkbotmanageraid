@@ -188,6 +188,59 @@ test("retired stuck-nudge shows no boundary, scheduler check or posting note", (
   }
 });
 
+test("raid-announce show words each Next check state exactly, and the first state that applies wins", () => {
+  const now = new Date(Date.UTC(2026, 3, 24, 12, 10, 0, 0));
+  const withChannel = { enabled: true, channelId: null };
+  const show = (typeKey, { overridable = false, current = withChannel, guildCfg = { raidChannelId: "123" }, schedulerState = {} } = {}) => (
+    __test.buildAnnouncementWhenItFiresText(
+      typeKey,
+      { trigger: "T", dedup: "D", messageTtl: "M", channelOverridable: overridable },
+      current,
+      guildCfg,
+      now,
+      schedulerState
+    )
+  );
+  const framed = (nextCheck) => ["**Trigger:** T", `**Next check:** ${nextCheck}`, "**Dedup:** D", "**Message TTL:** M"].join("\n");
+  const retired = framed("Retired (no notification is sent; saved settings are kept)");
+  const disabled = framed("Disabled (`/raid-announce action:on` to re-enable)");
+  const waitingOverridable = framed("Waiting for a destination channel (`set-channel` here or `/raid-channel config action:set`)");
+  const waitingBound = framed("Waiting for `/raid-channel config action:set` (monitor channel not configured)");
+  const cleanupOff = { raidChannelId: "123", autoCleanupEnabled: false };
+
+  assert.equal(show("stuck-nudge"), retired);
+  assert.equal(show("weekly-reset", { current: { enabled: false, channelId: null } }), disabled);
+  assert.equal(show("weekly-reset", { overridable: true, guildCfg: {} }), waitingOverridable);
+  assert.equal(show("weekly-reset", { overridable: false, guildCfg: {} }), waitingBound);
+  assert.equal(show("weekly-reset", { guildCfg: null, current: null }), waitingBound);
+  assert.equal(
+    show("set-greeting"),
+    framed("On-demand (fires when the trigger condition happens; not on a fixed schedule)")
+  );
+  assert.equal(
+    show("hourly-cleanup", { guildCfg: cleanupOff }),
+    framed("Disabled until `/raid-channel config action:schedule-on` is enabled")
+  );
+  assert.equal(
+    show("daily-roster-sync", { schedulerState: { autoManageDisabled: true } }),
+    framed("Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)")
+  );
+
+  // Two states at once: the earlier one in this order decides.
+  assert.equal(show("stuck-nudge", { current: { enabled: false, channelId: null } }), retired);
+  assert.equal(show("stuck-nudge", { overridable: true, guildCfg: {} }), retired);
+  assert.equal(show("weekly-reset", { overridable: true, current: { enabled: false, channelId: null }, guildCfg: {} }), disabled);
+  assert.equal(show("set-greeting", { current: { enabled: false, channelId: null } }), disabled);
+  assert.equal(show("set-greeting", { guildCfg: {} }), waitingBound);
+  assert.equal(show("hourly-cleanup", { current: { enabled: false, channelId: null }, guildCfg: cleanupOff }), disabled);
+  assert.equal(show("hourly-cleanup", { guildCfg: { autoCleanupEnabled: false } }), waitingBound);
+
+  // A type with no schedule rule is not refused and shows its dynamic lines.
+  const unknown = show("no-such-type");
+  assert.match(unknown, /\*\*Next scheduler check:\*\* After bot startup/);
+  assert.doesNotMatch(unknown, /\*\*Next check:\*\*/);
+});
+
 test("artist schedule rules share the cleanup scheduler phase", () => {
   const now = new Date(Date.UTC(2026, 3, 24, 12, 18, 0, 0));
   const schedulerState = {

@@ -138,6 +138,39 @@ test("raid-bg PNG sanitizer strips unsafe metadata chunks before decode", async 
   assert.equal(decoded.height, 600);
 });
 
+test("raid-bg detectMime trusts the bytes first, then the declared type without its parameters", () => {
+  const { detectMime } = raidBgModule.__test;
+  const svg = makeSvgBuffer();
+  const xmlSvg = Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+  const webp = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBP")]);
+  const unknown = Buffer.from("not an image");
+
+  for (const [buffer, mime] of [
+    [svg, "image/svg+xml"],
+    [xmlSvg, "image/svg+xml"],
+    [makePngBuffer(8, 8), "image/png"],
+    [jpeg, "image/jpeg"],
+    [webp, "image/webp"],
+  ]) {
+    assert.equal(detectMime({ contentType: "image/gif" }, buffer), mime);
+    assert.equal(detectMime({ contentType: null }, buffer), mime);
+  }
+
+  // Sniffing wins over what the client declared.
+  assert.equal(detectMime({ contentType: "image/png" }, svg), "image/svg+xml");
+  assert.equal(detectMime({ contentType: "image/jpeg" }, makePngBuffer(8, 8)), "image/png");
+  assert.equal(detectMime({ contentType: "image/png" }, webp), "image/webp");
+
+  // Unknown bytes fall back to the declared type, lower-cased and without parameters.
+  assert.equal(detectMime({ contentType: "image/gif" }, unknown), "image/gif");
+  assert.equal(detectMime({ contentType: "IMAGE/PNG; charset=x" }, unknown), "image/png");
+  assert.equal(detectMime({ contentType: "application/octet-stream" }, unknown), "");
+  assert.equal(detectMime({ contentType: null }, unknown), "");
+  assert.equal(detectMime({}, unknown), "");
+  assert.equal(detectMime({ contentType: "image/gif" }, Buffer.alloc(0)), "image/gif");
+});
+
 test("raid-bg set normalizes uploads to a wide embed image", async (t) => {
   const png = makePngBuffer(800, 1200);
   const originalFetch = global.fetch;

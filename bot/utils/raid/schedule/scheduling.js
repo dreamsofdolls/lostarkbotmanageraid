@@ -50,6 +50,34 @@ function createAnnouncementsConfigReader({
   };
 }
 
+// What /raid-announce show says after "Next check:" when no schedule can be previewed. The first rule that
+// applies decides, so the order is the precedence: a retired type, then an off switch, then a missing
+// destination, then the per-type on-demand and disabled-by-config states.
+const NEXT_CHECK_NOTICES = Object.freeze([
+  {
+    applies: ({ scheduleRule }) => scheduleRule?.retired,
+    text: () => "Retired (no notification is sent; saved settings are kept)",
+  },
+  {
+    applies: ({ current }) => current?.enabled === false,
+    text: () => "Disabled (`/raid-announce action:on` to re-enable)",
+  },
+  {
+    applies: ({ effectiveDestinationId }) => !effectiveDestinationId,
+    text: ({ entry }) => (entry?.channelOverridable
+      ? "Waiting for a destination channel (`set-channel` here or `/raid-channel config action:set`)"
+      : "Waiting for `/raid-channel config action:set` (monitor channel not configured)"),
+  },
+  {
+    applies: ({ scheduleRule }) => scheduleRule?.onDemand,
+    text: () => "On-demand (fires when the trigger condition happens; not on a fixed schedule)",
+  },
+  {
+    applies: ({ scheduleRule, guildCfg, autoManageDisabled }) => scheduleRule?.disabledWhen?.({ guildCfg, autoManageDisabled }),
+    text: ({ scheduleRule }) => scheduleRule.disabledText,
+  },
+]);
+
 /**
  * Build the scheduling-helpers service from injected scheduler-state
  * getters. All resolve* fns are getters (not values): a scheduler's start
@@ -305,29 +333,9 @@ function createSchedulingHelpers({
     const finish = (...body) => [triggerLine, ...body, dedupLine, ttlLine].join("\n");
 
     const scheduleRule = announcementScheduleRules[typeKey];
-    if (scheduleRule?.retired) {
-      return finish("**Next check:** Retired (no notification is sent; saved settings are kept)");
-    }
-
-    if (current?.enabled === false) {
-      return finish("**Next check:** Disabled (`/raid-announce action:on` to re-enable)");
-    }
-
-    if (!effectiveDestinationId) {
-      return finish(
-        entry?.channelOverridable
-          ? "**Next check:** Waiting for a destination channel (`set-channel` here or `/raid-channel config action:set`)"
-          : "**Next check:** Waiting for `/raid-channel config action:set` (monitor channel not configured)"
-      );
-    }
-
-    if (scheduleRule?.onDemand) {
-      return finish("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
-    }
-
-    if (scheduleRule?.disabledWhen?.({ guildCfg, autoManageDisabled })) {
-      return finish(`**Next check:** ${scheduleRule.disabledText}`);
-    }
+    const context = { scheduleRule, entry, current, effectiveDestinationId, guildCfg, autoManageDisabled };
+    const notice = NEXT_CHECK_NOTICES.find(({ applies }) => applies(context));
+    if (notice) return finish(`**Next check:** ${notice.text(context)}`);
 
     const lines = [];
     const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(

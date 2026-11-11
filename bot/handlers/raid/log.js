@@ -23,6 +23,19 @@ const LOG_ACTION_TYPES = {
 const ACTION_TYPES = { picker: PICKER_ACTION_TYPES, recent: RECENT_ACTION_TYPES, log: LOG_ACTION_TYPES };
 // Errors meaning the character stopped sharing logs: the panel becomes a lock card.
 const REVOKING_CODES = new Set(["logs_private", "no_logs", "character_mismatch"]);
+// Why a click on a panel is refused. The first rule that rejects decides the notice; the missing-session
+// rule comes first because the others read the session, and it takes the clock as `now` to read it only then.
+const PANEL_REJECTIONS = Object.freeze([
+  { code: "expired", rejects: ({ state, now }) => !state || state.expires <= now() },
+  {
+    code: "invalid_selection",
+    rejects: ({ state, interaction }) => state.guildId !== interaction.guildId
+      || state.channelId !== interaction.channelId || state.messageId !== interaction.message?.id,
+  },
+  { code: "owner_only", rejects: ({ state, interaction }) => state.ownerId !== interaction.user.id },
+  { code: "panel_busy", rejects: ({ state }) => state.busy },
+  { code: "stale", rejects: ({ state, revision }) => String(state.revision) !== revision },
+]);
 
 // RaidLogError keeps the underlying failure as its cause; a bare code such as
 // "timeout" says nothing about which capture step or Bible call ran out.
@@ -283,11 +296,8 @@ function createRaidLogCommand({
       embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang: state?.lang || "vi", owner: state && `<@${state.ownerId}>` })],
       flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] },
     });
-    if (!state || state.expires <= now()) return reject("expired");
-    if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message?.id) return reject("invalid_selection");
-    if (state.ownerId !== interaction.user.id) return reject("owner_only");
-    if (state.busy) return reject("panel_busy");
-    if (String(state.revision) !== revision) return reject("stale");
+    const rejection = PANEL_REJECTIONS.find(({ rejects }) => rejects({ state, interaction, revision, now }));
+    if (rejection) return reject(rejection.code);
     const actionTypes = ACTION_TYPES[state.stage];
     const validAction = Object.hasOwn(actionTypes, action) && interaction[actionTypes[action]]?.();
     if (!validAction) return reject("invalid_selection");

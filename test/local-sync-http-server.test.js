@@ -120,6 +120,49 @@ test("local-sync static roots share response handling while keeping separate cac
   }
 });
 
+test("local-sync static mounts read the path after their prefix, answer GET only and skip an unset root", async () => {
+  const classIconsDir = path.join(__dirname, "..", "assets", "class-icons");
+  const waSqliteDir = path.join(__dirname, "..", "node_modules", "@journeyapps", "wa-sqlite");
+  const wasmModule = "/sync/vendor/wa-sqlite/dist/wa-sqlite-async.mjs";
+  const bothRoots = await startTestServer({ classIconsDir, waSqliteDir });
+  try {
+    for (const [route, status, body] of [
+      ["/sync/class-icons/", 404, "not found"],
+      ["/sync/class-icons//bard.png", 403, "forbidden"],
+      ["/sync/vendor/wa-sqlite/", 404, "not found"],
+      ["/sync/vendor/wa-sqlite/dist/missing.mjs", 404, "not found"],
+      ["/sync/class-icons", 404, "not found"],
+    ]) {
+      const response = await fetch(`${bothRoots.baseUrl}${route}`);
+      assert.equal(response.status, status, route);
+      assert.equal(await response.text(), body, route);
+    }
+    for (const route of ["/sync/class-icons/bard.png", wasmModule]) {
+      const response = await fetch(`${bothRoots.baseUrl}${route}`, { method: "POST" });
+      assert.equal(response.status, 404, route);
+      assert.equal(await response.text(), "not found", route);
+    }
+  } finally {
+    await bothRoots.stop();
+  }
+
+  // A mount without its directory is not served; the path falls through to the web root.
+  const iconsOnly = await startTestServer({ classIconsDir });
+  const none = await startTestServer();
+  try {
+    assert.equal((await fetch(`${iconsOnly.baseUrl}/sync/class-icons/bard.png`)).status, 200);
+    assert.equal((await fetch(`${iconsOnly.baseUrl}${wasmModule}`)).status, 404);
+    for (const route of ["/sync/class-icons/bard.png", wasmModule]) {
+      const response = await fetch(`${none.baseUrl}${route}`);
+      assert.equal(response.status, 404, route);
+      assert.equal(await response.text(), "not found", route);
+    }
+  } finally {
+    await iconsOnly.stop();
+    await none.stop();
+  }
+});
+
 test("local-sync HTTP bind failures reject ready without an uncaught server error", async () => {
   const first = startLocalSyncHttpServer({
     port: 0,
