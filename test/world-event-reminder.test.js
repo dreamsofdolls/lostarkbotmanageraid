@@ -23,6 +23,7 @@ const {
 const {
   createWorldEventReminderSchedulerService,
 } = require("../bot/services/raid/schedulers/world-event-reminder-scheduler");
+const { docMatchesQuery } = require("./helpers/mongo-match");
 const { t } = require("../bot/services/i18n");
 
 function utc(year, month, day, hour, minute, second = 0) {
@@ -218,6 +219,34 @@ test("world-event scheduler claims once and posts the combined Sunday message", 
   assert.match(posts[0][1], /^announcements\.world-event-reminder\.both:en:/);
   assert.equal(posts[0][2], WORLD_EVENT_REMINDER_TTL_MS);
   assert.equal(posts[0][3], "world-event reminder");
+});
+
+test("the world-event tick asks Mongo only for opted-in guilds that have not had this reminder", async () => {
+  const now = utc(2026, 4, 26, 14, 57);
+  const { key } = resolveWorldEventReminderForNow(now);
+  let query = null;
+  const service = createWorldEventReminderSchedulerService({
+    GuildConfig: { find: (filter) => { query = filter; return { lean: async () => [] }; } },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => "en",
+    postChannelAnnouncement: async () => ({ id: "message-1" }),
+    t: (messageKey) => messageKey,
+    nowDate: () => now,
+  });
+
+  await service.runWorldEventReminderTick({ guilds: { cache: new Map() } });
+
+  const guild = (fields) => ({ raidChannelId: "raid-1", announcements: { worldEventReminder: { enabled: true } }, ...fields });
+  const cases = [
+    ["opted in", guild({}), true],
+    ["never opted in (off by default)", guild({ announcements: {} }), false],
+    ["switched off", guild({ announcements: { worldEventReminder: { enabled: false } } }), false],
+    ["already reminded of this spawn", guild({ lastWorldEventReminderKey: key }), false],
+    ["reminded of an earlier spawn", guild({ lastWorldEventReminderKey: "world-event:earlier" }), true],
+  ];
+  for (const [name, doc, expected] of cases) {
+    assert.equal(docMatchesQuery(doc, query), expected, name);
+  }
 });
 
 test("world-event scheduler releases its dedup claim when Discord send fails", async () => {

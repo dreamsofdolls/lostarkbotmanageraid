@@ -19,13 +19,22 @@ const {
 const SUBDOC_KEY = "worldEventReminder";
 const DEDUP_FIELD = "lastWorldEventReminderKey";
 
+// What a guild must still be for this reminder: opted in (an explicit true,
+// since the reminder is off by default) and not yet reminded of this spawn.
+// The guild query and the claim share it, so the claim rechecks the query.
+function dueForReminder(reminder) {
+  return {
+    [DEDUP_FIELD]: { $ne: reminder.key },
+    [`announcements.${SUBDOC_KEY}.enabled`]: true,
+  };
+}
+
 async function claimWorldEventReminder({ GuildConfig, cfg, reminder }) {
   return claimGuildState({
     GuildConfig,
     guildId: cfg.guildId,
     guard: {
-      [DEDUP_FIELD]: { $ne: reminder.key },
-      [`announcements.${SUBDOC_KEY}.enabled`]: true,
+      ...dueForReminder(reminder),
       raidChannelId: cfg.raidChannelId ?? null,
       [`announcements.${SUBDOC_KEY}.channelId`]:
         cfg.announcements?.[SUBDOC_KEY]?.channelId ?? null,
@@ -54,17 +63,17 @@ function createWorldEventReminderSchedulerService({
 
     let configs;
     try {
-      configs = await GuildConfig.find(buildWorldEventReminderConfigQuery()).lean();
+      configs = await GuildConfig.find({
+        ...buildWorldEventReminderConfigQuery(),
+        ...dueForReminder(reminder),
+      }).lean();
     } catch (err) {
       console.error("[world-event reminder] config load failed:", err?.message || err);
       return;
     }
-    if (!configs.length) return;
 
     for (const cfg of configs) {
       const conf = getAnnouncementsConfig(cfg)[SUBDOC_KEY];
-      if (!conf?.enabled || cfg[DEDUP_FIELD] === reminder.key) continue;
-
       const channel = await resolveGuildChannel(
         client,
         cfg.guildId,
