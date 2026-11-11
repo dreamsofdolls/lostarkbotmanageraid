@@ -107,7 +107,6 @@ function createAutoManageSyncHandler({
   saveWithRetry,
   ensureFreshWeek,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
   getAutoManageCooldownMs,
   weekResetStartMs,
@@ -186,7 +185,7 @@ function createAutoManageSyncHandler({
         content: null,
       });
     } finally {
-      releaseAutoManageSyncSlot(discordId);
+      guard.release();
     }
   };
 }

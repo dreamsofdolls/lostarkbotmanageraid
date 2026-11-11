@@ -9,6 +9,7 @@ const {
 } = require("../../../../utils/raid/common/shared");
 const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
 const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
+const { NO_SYNC_SLOT } = require("../../../../services/auto-manage/runtime/support/slot");
 
 // A confirm card; the irreversible step is carried by the red Danger button.
 function buildResetConfirmEmbed({ EmbedBuilder, lang }) {
@@ -87,7 +88,6 @@ function createAutoManageResetHandler({
   User,
   saveWithRetry,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
 }) {
   return async function handleReset({
     interaction,
@@ -126,7 +126,7 @@ function createAutoManageResetHandler({
       return;
     }
 
-    let resetGuard = null;
+    let resetGuard = NO_SYNC_SLOT;
     try {
       resetGuard = await acquireAutoManageSyncSlot(discordId, {
         ignoreCooldown: true,
@@ -162,7 +162,7 @@ function createAutoManageResetHandler({
       }).catch(() => {});
       return;
     } finally {
-      if (resetGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+      resetGuard.release();
     }
 
     await editAutoEmbed(

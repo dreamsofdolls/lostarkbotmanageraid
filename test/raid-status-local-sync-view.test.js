@@ -242,8 +242,7 @@ for (const scenario of [
     name: "a busy sync slot",
     localSyncEnabled: true,
     slotDeps: {
-      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
-      releaseAutoManageSyncSlot: () => {},
+      acquireAutoManageSyncSlot: async () => ({ acquired: false, release: () => {} }),
     },
   },
   { name: "a disabled sync mode", localSyncEnabled: false, slotDeps: {} },
@@ -373,8 +372,7 @@ test("an apply refused by a busy sync slot reports nothing applied even when the
       findOneAndUpdate: async (_filter, update) => ({ ...job, ...update.$set }),
     },
     applyRaidSetForDiscordId: async () => assert.fail("a refused apply must not write"),
-    acquireAutoManageSyncSlot: async () => ({ acquired: false }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, release: () => {} }),
   });
 
   assert.equal(outcome.applied, false);

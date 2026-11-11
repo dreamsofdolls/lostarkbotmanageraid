@@ -36,8 +36,7 @@ test("the auto-manage reset seeds an empty assignedRaids entry per catalog raid 
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, UI,
     User: { findOne: async () => userDoc },
     saveWithRetry: (operation) => operation(),
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
   });
   await handler({
     discordId: "owner",

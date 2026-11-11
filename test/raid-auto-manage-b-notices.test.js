@@ -45,8 +45,7 @@ test("auto-manage enable skipped by the cooldown is a partial card with the time
   const handler = createAutoManageEnableHandler({
     EmbedBuilder, UI,
     User: { findOneAndUpdate: async () => ({ autoManageEnabled: true }) },
-    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "cooldown", remainingMs: 60_000 }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "cooldown", remainingMs: 60_000, release: () => {} }),
     formatAutoManageCooldownRemaining: () => "1 phút",
   });
   await handler({
@@ -85,8 +84,7 @@ test("auto-manage enable failure shows the error only in the detail field", asyn
   const handler = createAutoManageEnableHandler({
     EmbedBuilder, UI,
     User: { findOne: async () => { throw new Error("bible probe down"); } },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     weekResetStartMs: () => 123,
     stampAutoManageAttempt: async () => {},
   });
@@ -108,8 +106,7 @@ test("auto-manage sync blocked by local-sync uses the same notice as the action 
   let notice = null;
   const handler = createAutoManageSyncHandler({
     User: { findOne: async () => ({ localSyncEnabled: true, accounts: [{}] }) },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     weekResetStartMs: () => 123,
   });
   await handler({

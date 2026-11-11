@@ -116,8 +116,7 @@ function createMetadataHarness({ seedDoc, freshDoc, collectAccountRefresh, apply
     saveWithRetry: operation => operation(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => assert.fail("metadata-only mode must not gather clear logs"),
     applyAutoManageCollected: () => assert.fail("metadata-only mode must not apply raid progress"),
     collectAccountRefresh,
@@ -141,7 +140,7 @@ for (const gatherFails of [false, true]) {
         updateOne: async (_filter, update) => { Object.assign(doc, update.$set); return { modifiedCount: 1 }; },
       },
       saveWithRetry: operation => operation(), ensureFreshWeek: () => {}, weekResetStartMs: () => 0,
-      acquireAutoManageSyncSlot: async () => ({ acquired: true }), releaseAutoManageSyncSlot: () => { releases += 1; },
+      acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releases += 1; } }),
       gatherAutoManageLogsForUserDoc: async () => {
         resetAutoManageDailyState(doc);
         const next = buildAutoManageDailyClaimUpdate({ targetDayKey: day, attemptCount: 1, nowMs: now.getTime() });
@@ -187,8 +186,7 @@ test("a metadata worker cannot persist after its lease is superseded", async () 
     saveWithRetry: operation => operation(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => { releases += 1; },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releases += 1; } }),
     gatherAutoManageLogsForUserDoc: async () => assert.fail("auto-manage is disabled"),
     applyAutoManageCollected: () => assert.fail("a superseded worker must not apply raid progress"),
     collectAccountRefresh: async () => {
@@ -346,8 +344,7 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
     processEnv: { AUTO_MANAGE_DAILY_DISABLED: "true" },
@@ -368,7 +365,6 @@ test("auto-manage daily scheduler notifies after an empty tick", async () => {
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
     acquireAutoManageSyncSlot: async () => assert.fail("an empty tick has no candidate"),
-    releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => assert.fail("an empty tick cannot gather"),
     applyAutoManageCollected: () => assert.fail("an empty tick cannot apply"),
     notifyDailyRosterSync: async (...args) => calls.push(args),
@@ -424,8 +420,7 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
       saveWithRetry: async (fn) => fn(),
       ensureFreshWeek: () => {},
       weekResetStartMs: () => 777,
-      acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-      releaseAutoManageSyncSlot: (discordId) => releases.push(discordId),
+      acquireAutoManageSyncSlot: async (discordId) => ({ acquired: true, release: () => releases.push(discordId) }),
       gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
       applyAutoManageCollected: () => ({
         perChar: [{ charName: "Qiylyn", applied: ["G1"] }],
@@ -511,8 +506,7 @@ test("Bible progress applies under saved names before metadata canonicalizes the
     saveWithRetry: operation => operation(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     collectAccountRefresh: async () => refresh,
     gatherAutoManageLogsForUserDoc: async () => gathered,
     applyAutoManageCollected: (doc, _weekResetStart, collected) => {
@@ -610,8 +604,7 @@ test("a fresh manual roster refresh wins over metadata collected before Bible ga
     saveWithRetry: operation => operation(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     collectAccountRefresh: async () => { events.push("collect"); return staleRefresh; },
     gatherAutoManageLogsForUserDoc: async () => { events.push("gather"); return gathered; },
     applyAutoManageCollected: (doc, _weekResetStart, collected) => {
@@ -785,8 +778,7 @@ test("auto-manage daily scheduler finishes metadata-only configuration changes a
         saveWithRetry: async (fn) => fn(),
         ensureFreshWeek: () => {},
         weekResetStartMs: () => 777,
-        acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-        releaseAutoManageSyncSlot: () => {},
+        acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
         gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
         applyAutoManageCollected: () => {
           throw new Error("configuration drift must settle before apply");
@@ -827,8 +819,7 @@ test("auto-manage daily scheduler skips a candidate leased or finished after sca
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: (discordId) => releases.push(discordId),
+    acquireAutoManageSyncSlot: async (discordId) => ({ acquired: true, release: () => releases.push(discordId) }),
     gatherAutoManageLogsForUserDoc: async () => {
       gatherCalls += 1;
       return {};
@@ -873,8 +864,7 @@ test("auto-manage daily scheduler retries a partial transient report without sta
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 777,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
     applyAutoManageCollected: () => ({
       perChar: [
@@ -964,8 +954,7 @@ test("auto-manage daily scheduler settles all-private reports silently", async (
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 777,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
     applyAutoManageCollected: () => ({
       perChar: [
@@ -1029,8 +1018,7 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       saveWithRetry: async (fn) => fn(),
       ensureFreshWeek: () => {},
       weekResetStartMs: () => 777,
-      acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-      releaseAutoManageSyncSlot: () => events.push("release"),
+      acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => events.push("release") }),
       gatherAutoManageLogsForUserDoc: async () => {
         throw new Error("upstream unavailable");
       },
@@ -1155,9 +1143,8 @@ test("auto-manage daily scheduler processes candidates sequentially in batches o
       await new Promise(resolve => setImmediate(resolve));
       seen.push(discordId);
       inFlight -= 1;
-      return { acquired: false };
+      return { acquired: false, release: () => {} };
     },
-    releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
     processEnv: {},
@@ -1194,8 +1181,7 @@ function createRosterBatchHarness({ ids, collectAccountRefresh, ...deps }) {
     saveWithRetry: operation => operation(),
     ensureFreshWeek: () => {},
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async (discordId) => { slots.push(discordId); return { acquired: true }; },
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async (discordId) => { slots.push(discordId); return { acquired: true, release: () => {} }; },
     gatherAutoManageLogsForUserDoc: async () => assert.fail("metadata-only users gather no clear logs"),
     applyAutoManageCollected: () => assert.fail("metadata-only users apply no raid progress"),
     collectAccountRefresh,

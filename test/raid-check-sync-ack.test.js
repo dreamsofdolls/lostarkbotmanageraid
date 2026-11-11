@@ -120,10 +120,9 @@ test("raid-check sync commits through the shared retry-safe service", async () =
     stampAutoManageAttempt: async () => {
       throw new Error("fallback stamp must not run");
     },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
       releaseCount += 1;
-    },
+    } }),
     raidCheckSyncLimiter: { run: (operation) => operation() },
     discordUserLimiter: { run: (operation) => operation() },
   });
@@ -192,9 +191,8 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
     acquireAutoManageSyncSlot: async discordId => {
       assert.equal(discordId, "all-target");
       events.push("acquire");
-      return { acquired: true };
+      return { acquired: true, release: () => events.push("release") };
     },
-    releaseAutoManageSyncSlot: () => events.push("release"),
     raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
   });
   let reply;
@@ -242,8 +240,7 @@ test("sync all DMs a member with new gates the report card of the roster as save
     autoManageEntryKey: (accountName, charName) => `${accountName}:${charName}`,
     gatherAutoManageLogsForUserDoc: async () => ({ logs: true }),
     commitAutoManageCollected: async () => ({ status: "synced-with-delta", report, snapshot: savedDoc }),
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
     buildAutoManageSyncReportEmbed: (...args) => { built.push(args); return card; },
   });
@@ -286,9 +283,10 @@ test("sync all isolates per-user failures, rechecks consent, and releases only a
     autoManageEntryKey: (account, char) => `${account}:${char}`,
     acquireAutoManageSyncSlot: async discordId => {
       if (discordId === "lock-error") throw new Error("Lock unavailable");
-      return { acquired: discordId !== "busy" };
+      // A refused acquire hands back a release that does nothing, as slot.js does.
+      const acquired = discordId !== "busy";
+      return { acquired, release: acquired ? () => released.push(discordId) : () => {} };
     },
-    releaseAutoManageSyncSlot: discordId => released.push(discordId),
     gatherAutoManageLogsForUserDoc: async doc => {
       gathered.push(doc.discordId);
       if (doc.discordId === "gather-error") throw new Error("Gather failed");
@@ -331,8 +329,7 @@ test("sync report adds a counter field only when that outcome happened", async (
     },
     ensureFreshWeek: () => {}, weekResetStartMs: () => 1234,
     autoManageEntryKey: (account, char) => `${account}:${char}`,
-    acquireAutoManageSyncSlot: async discordId => ({ acquired: discordId !== "busy" }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async discordId => ({ acquired: discordId !== "busy", release: () => {} }),
     gatherAutoManageLogsForUserDoc: async doc => {
       if (doc.discordId === "gather-error") throw new Error("Gather failed");
       return [];

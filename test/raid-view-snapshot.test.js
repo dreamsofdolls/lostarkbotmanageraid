@@ -17,9 +17,8 @@ function makeService(overrides = {}) {
     applyStaleAccountRefreshes: () => {},
     acquireAutoManageSyncSlot: async () => {
       calls.acquire += 1;
-      return { acquired: false };
+      return { acquired: false, release: () => {} };
     },
-    releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => null,
     applyAutoManageCollected: () => {},
     stampAutoManageAttempt: async () => {},
@@ -85,4 +84,16 @@ test("raid-view-snapshot piggybacks Auto Sync only for an allowed, enabled and s
     assert.strictEqual(calls.acquire, acquires, name);
     assert.strictEqual(snapshot, doc, `${name}: nothing to write returns the seed`);
   }
+});
+
+test("raid-view-snapshot releases a held piggyback slot through its handle, also when the load fails", async () => {
+  let releases = 0;
+  let stamps = 0;
+  const { service } = makeService({
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releases += 1; } }),
+    collectStaleAccountRefreshes: async () => { throw new Error("bible down"); },
+    stampAutoManageAttempt: async () => { stamps += 1; },
+  });
+  await service.loadFreshUserSnapshotForRaidViews(userDoc(STALE_SYNC));
+  assert.deepEqual({ releases, stamps }, { releases: 1, stamps: 1 });
 });

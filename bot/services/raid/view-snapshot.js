@@ -18,6 +18,7 @@ const {
   commitCollectedRaidViewRefresh,
 } = require("./view-refresh-commit");
 const { toPlainUserDoc, hasRosterAccounts } = require("../../utils/user-doc");
+const { NO_SYNC_SLOT } = require("../auto-manage/runtime/support/slot");
 
 // Whether a view load also gathers Auto Sync logs: the caller allows it, the
 // user has Auto Sync on, and the last attempt is stale.
@@ -46,7 +47,6 @@ function createRaidViewSnapshotService({
   hasStaleAccountRefreshes,
   applyStaleAccountRefreshes,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   stampAutoManageAttempt,
@@ -86,7 +86,7 @@ function createRaidViewSnapshotService({
       }
     }
 
-    let autoManageGuard = null;
+    let autoManageGuard = NO_SYNC_SLOT;
     try {
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
@@ -111,7 +111,7 @@ function createRaidViewSnapshotService({
         collectStaleAccountRefreshes(seedDoc),
         autoManagePromise,
       ]);
-      const autoManageBibleHit = autoManageGuard?.acquired === true;
+      const autoManageBibleHit = autoManageGuard.acquired === true;
       const needsFreshWrite =
         didFreshenSeedWeek || refreshCollected.length > 0 || autoManageBibleHit;
 
@@ -132,12 +132,12 @@ function createRaidViewSnapshotService({
       return snapshot;
     } catch (err) {
       log.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
-      if (autoManageGuard?.acquired) {
+      if (autoManageGuard.acquired) {
         await stampAutoManageAttempt(discordId);
       }
       return await User.findOne({ discordId }).lean();
     } finally {
-      if (autoManageGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+      autoManageGuard.release();
     }
   }
 

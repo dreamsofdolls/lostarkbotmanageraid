@@ -57,18 +57,17 @@ function createAutoManageSyncSlotManager({
     }
   }
 
-  function releaseAutoManageSyncSlot(discordId) {
-    inFlightAutoManageSyncs.delete(discordId);
-  }
-
   return {
     AUTO_MANAGE_SYNC_COOLDOWN_MS: defaultCooldownMs,
     acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
     formatAutoManageCooldownRemaining,
   };
 }
 
+// The handle of a sync that never asked for a slot: nothing held, nothing to release.
+const NO_SYNC_SLOT = Object.freeze({ acquired: false, release: () => {} });
+
 module.exports = {
+  NO_SYNC_SLOT,
   createAutoManageSyncSlotManager,
 };

@@ -22,8 +22,7 @@ function createSync(overrides = {}) {
     collectStaleAccountRefreshes: async () => [],
     applyStaleAccountRefreshes: () => false,
     waitWithBudget: async (promise) => ({ timedOut: false, value: await promise }),
-    acquireAutoManageSyncSlot: async () => ({ acquired: false }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => null,
     applyAutoManageCollected: () => ({ perChar: [] }),
     commitAutoManageCollected: async () => ({
@@ -171,10 +170,9 @@ test("raid-status manual sync stamps and saves a successful report", async () =>
   });
   const sync = createSync({
     User,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
       releases += 1;
-    },
+    } }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected,
     commitAutoManageCollected,
@@ -228,7 +226,7 @@ test("raid-status manual sync reports failed when every character failed", async
   });
   const sync = createSync({
     User,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected: ALL_FAILED_REPORT,
     commitAutoManageCollected,
@@ -254,10 +252,9 @@ function createGatherFailureSync({ stampAutoManageAttempt }) {
         return read;
       },
     },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
       counters.releases += 1;
-    },
+    } }),
     gatherAutoManageLogsForUserDoc: async () => {
       throw new Error("bible down");
     },
@@ -313,7 +310,7 @@ test("raid-status card-open sync reports failed when every character failed", as
   const freshDoc = { ...seedDoc, save: async () => {}, toObject: () => ({ ...seedDoc }) };
   const sync = createSync({
     User: { findOne: async () => freshDoc },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected: ALL_FAILED_REPORT,
   });
@@ -332,7 +329,7 @@ test("raid-status card-open sync with no character to read is not a failure", as
   const freshDoc = { ...seedDoc, save: async () => {}, toObject: () => ({ ...seedDoc }) };
   const sync = createSync({
     User: { findOne: async () => freshDoc },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected: () => ({ perChar: [] }),
   });
@@ -351,7 +348,7 @@ test("raid-status card-open sync where every character has private logs is not a
   const freshDoc = { ...seedDoc, save: async () => {}, toObject: () => ({ ...seedDoc }) };
   const sync = createSync({
     User: { findOne: async () => freshDoc },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected: () => ({ perChar: [{ error: "Logs not enabled", applied: [] }] }),
   });

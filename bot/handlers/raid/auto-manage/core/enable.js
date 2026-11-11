@@ -69,7 +69,6 @@ function createAutoManageEnableHandler({
   User,
   ensureFreshWeek,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,
@@ -236,7 +235,7 @@ function createAutoManageEnableHandler({
         components: [],
       }).catch(() => {});
     } finally {
-      if (guard.acquired) releaseAutoManageSyncSlot(discordId);
+      guard.release();
     }
   };
 }

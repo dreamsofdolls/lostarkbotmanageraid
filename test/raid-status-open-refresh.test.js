@@ -66,8 +66,7 @@ function createFixture(t, { localSync = false, slowBible = false, slowRoster = f
     applyStaleAccountRefreshes: () => false,
     getStatusRaidsForCharacter: char => char.raids,
     weekResetStartMs: () => 0,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => { releases += 1; },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releases += 1; } }),
     gatherAutoManageLogsForUserDoc: async () => {
       gathers += 1;
       const collected = slowBible ? await heldBible : {};

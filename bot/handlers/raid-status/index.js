@@ -91,9 +91,7 @@ function createRaidStatusCommand(deps) {
     getStatusRaidsForCharacter,
     buildPaginationRow,
     runManualRosterRefresh,
-    acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
-    getAutoManageCooldownMs,
+    acquireAutoManageSyncSlot,    getAutoManageCooldownMs,
     applyRaidSetForDiscordId = null,
     applyRaidSetBatchForDiscordId = null,
     PreviewModel = null,
@@ -292,9 +290,7 @@ function createRaidStatusCommand(deps) {
         PreviewModel,
         applyRaidSetForDiscordId,
         applyRaidSetBatchForDiscordId,
-        acquireAutoManageSyncSlot,
-        releaseAutoManageSyncSlot,
-      });
+        acquireAutoManageSyncSlot,      });
 
     const localSyncViewDeps = {
       lang,

@@ -30,8 +30,7 @@ test("manual Bible sync stops if Local Sync is enabled during gather", async () 
   doc.save = () => assert.fail("Local mode must not receive a Bible write");
   const handler = createAutoManageSyncHandler({
     User: { findOne: async () => doc }, saveWithRetry: fn => fn(), ensureFreshWeek: () => {},
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => { released = true; }, weekResetStartMs: () => 1234,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { released = true; } }), weekResetStartMs: () => 1234,
     gatherAutoManageLogsForUserDoc: async () => { doc.localSyncEnabled = true; return []; },
     applyAutoManageCollected: () => assert.fail("Must check mode before reconciliation"),
     buildAutoManageSyncReportEmbed: () => assert.fail("Must not show a sync success report"),

@@ -18,6 +18,7 @@ const {
 } = require("../../../services/auto-manage/runtime/support/freshness");
 const { isPublicLogDisabledError } = require("../../../services/auto-manage/bible/error-kinds");
 const { hasRosterAccounts } = require("../../../utils/user-doc");
+const { NO_SYNC_SLOT } = require("../../../services/auto-manage/runtime/support/slot");
 const {
   commitCollectedRaidViewRefresh,
 } = require("../../../services/raid/view-refresh-commit");
@@ -59,7 +60,6 @@ function createRaidStatusSync(deps) {
     applyStaleAccountRefreshes,
     waitWithBudget,
     acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     commitAutoManageCollected,
@@ -127,7 +127,7 @@ function createRaidStatusSync(deps) {
   async function loadStatusUserDoc(discordId, seedDoc) {
     let userDoc;
     let backgroundSyncPromise = null;
-    let autoManageGuard = null;
+    let autoManageGuard = NO_SYNC_SLOT;
     let autoManageReleaseInBackground = false;
     const piggybackOutcome = createOutcome();
 
@@ -164,7 +164,7 @@ function createRaidStatusSync(deps) {
 
       const [refreshCollected, autoManageBudgetResult] = await Promise.all([
         collectStaleAccountRefreshes(seedDoc),
-        autoManageGuard?.acquired
+        autoManageGuard.acquired
           ? waitWithBudget(
               autoManagePromise,
               STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS
@@ -173,11 +173,11 @@ function createRaidStatusSync(deps) {
       ]);
 
       let autoManageCollected = autoManageBudgetResult.value;
-      const autoManageBibleHit = autoManageGuard?.acquired === true;
+      const autoManageBibleHit = autoManageGuard.acquired === true;
       const autoManageTimedOut =
-        autoManageGuard?.acquired && autoManageBudgetResult.timedOut;
+        autoManageGuard.acquired && autoManageBudgetResult.timedOut;
       const autoManageGatherFailed =
-        autoManageGuard?.acquired &&
+        autoManageGuard.acquired &&
         !autoManageBudgetResult.timedOut &&
         autoManageBudgetResult.value === null;
 
@@ -206,7 +206,7 @@ function createRaidStatusSync(deps) {
             );
             await stampAutoManageAttempt(discordId);
           })
-          .finally(() => releaseAutoManageSyncSlot(discordId));
+          .finally(() => autoManageGuard.release());
         // Keep the slot through persistence and expose completion so the
         // open card can reload after work that outlives the initial budget.
       }
@@ -238,14 +238,13 @@ function createRaidStatusSync(deps) {
       }
     } catch (err) {
       console.error("[raid-status] lazy refresh failed:", err?.message || err);
-      if (autoManageGuard?.acquired) {
+      if (autoManageGuard.acquired) {
         await stampAutoManageAttempt(discordId);
       }
       userDoc = await User.findOne({ discordId }).lean();
     } finally {
-      if (autoManageGuard?.acquired && !autoManageReleaseInBackground) {
-        releaseAutoManageSyncSlot(discordId);
-      }
+      // A timed-out piggyback hands its slot to the background continuation.
+      if (!autoManageReleaseInBackground) autoManageGuard.release();
     }
 
     return { userDoc, piggybackOutcome, backgroundSyncPromise };
@@ -253,7 +252,7 @@ function createRaidStatusSync(deps) {
 
   async function runManualStatusSync(discordId, options = {}) {
     const { onAcquired } = options;
-    let manualGuard = null;
+    let manualGuard = NO_SYNC_SLOT;
     let committedSnapshot = null;
     const manualOutcome = createOutcome();
 
@@ -310,7 +309,7 @@ function createRaidStatusSync(deps) {
       manualOutcome.outcome = "failed";
       await stampAutoManageAttempt(discordId).catch(() => {});
     } finally {
-      if (manualGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+      manualGuard.release();
     }
 
     const userDoc = committedSnapshot || await User.findOne({ discordId }).lean();

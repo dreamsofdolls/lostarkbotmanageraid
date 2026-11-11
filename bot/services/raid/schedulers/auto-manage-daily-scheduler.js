@@ -328,7 +328,6 @@ async function syncCandidate({
     saveWithRetry,
     ensureFreshWeek,
     acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     collectAccountRefresh,
@@ -414,7 +413,7 @@ async function syncCandidate({
       bibleAttempted,
     });
   } finally {
-    releaseAutoManageSyncSlot(discordId);
+    guard.release();
   }
 }
 
@@ -435,7 +434,6 @@ function createAutoManageDailySchedulerService({
   ensureFreshWeek,
   weekResetStartMs,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   collectAccountRefresh,
@@ -478,7 +476,6 @@ function createAutoManageDailySchedulerService({
           saveWithRetry,
           ensureFreshWeek,
           acquireAutoManageSyncSlot,
-          releaseAutoManageSyncSlot,
           gatherAutoManageLogsForUserDoc,
           applyAutoManageCollected,
           collectAccountRefresh,

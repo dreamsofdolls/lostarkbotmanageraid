@@ -20,6 +20,7 @@ const {
 // tPick, not t: the sync report titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { hasRosterAccounts } = require("../../../utils/user-doc");
+const { NO_SYNC_SLOT } = require("../../../services/auto-manage/runtime/support/slot");
 const {
   getAppliedAutoManageEntries,
   getAutoManageEntries,
@@ -66,8 +67,7 @@ function syncReportOutcome({ syncedCount, failedCount, skippedCount }) {
  * @param {Function} deps.gatherAutoManageLogsForUserDoc - bible HTTP gather
  * @param {Function} deps.commitAutoManageCollected - retry-safe reconcile + stamp + save
  * @param {Function} deps.stampAutoManageAttempt - touch lastAutoManageAttemptAt
- * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex
- * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
+ * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex; its result carries release()
  * @param {object} deps.raidCheckSyncLimiter - per-user concurrency cap
  * @param {object} deps.discordUserLimiter - Discord REST fan-out limiter
  * @param {Function} deps.buildAutoManageSyncReportEmbed - the Bible sync report card
@@ -89,7 +89,6 @@ function createSyncUi({
   isPublicLogDisabledError,
   stampAutoManageAttempt,
   acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
   raidCheckSyncLimiter,
   discordUserLimiter,
   buildAutoManageSyncReportEmbed,
@@ -200,15 +199,14 @@ function createSyncUi({
     await Promise.all(
       optedInDiscordIds.map((discordId) =>
         raidCheckSyncLimiter.run(async () => {
-          let acquired = false;
+          let guard = NO_SYNC_SLOT;
           let bibleHit = false;
           try {
-            const guard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
+            guard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
             if (!guard.acquired) {
               skippedCount += 1;
               return;
             }
-            acquired = true;
             const seedDoc = await User.findOne({ discordId });
             if (!hasRosterAccounts(seedDoc)) {
               skippedCount += 1;
@@ -260,7 +258,7 @@ function createSyncUi({
             if (bibleHit) await stampAutoManageAttempt(discordId);
             console.warn(`[raid-check sync] user ${discordId} failed:`, err?.message || err);
           } finally {
-            if (acquired) releaseAutoManageSyncSlot(discordId);
+            guard.release();
           }
         })
       )

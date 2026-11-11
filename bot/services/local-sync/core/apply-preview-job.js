@@ -21,6 +21,7 @@ const { propagatePartyDeltas } = require("./party-propagation");
 const { publishLocalSyncApplied } = require("./apply-events");
 const { recordLocalSyncSuccess } = require("./state");
 const { POST_SYNC_TTL_SEC } = require("./tokens");
+const { NO_SYNC_SLOT } = require("../../auto-manage/runtime/support/slot");
 const {
   fingerprintToken,
   resolveJobState,
@@ -134,20 +135,16 @@ async function rejectDisabledCompanionScope({
   return { ok: false, state: "failed", job: failed || job };
 }
 
-function supportsAutoManageSlot(deps) {
-  return typeof deps.acquireAutoManageSyncSlot === "function"
-    && typeof deps.releaseAutoManageSyncSlot === "function";
-}
-
+// The sync slot this apply holds; a caller with no slot manager applies without one.
 async function acquireApplySlot({ jobId, discordId, job, leaseDeps, deps }) {
-  if (!supportsAutoManageSlot(deps)) {
-    return { ownsSlot: false, outcome: null };
+  if (typeof deps.acquireAutoManageSyncSlot !== "function") {
+    return { guard: NO_SYNC_SLOT, outcome: null };
   }
   const guard = await deps.acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
-  if (guard?.acquired) return { ownsSlot: true, outcome: null };
+  if (guard.acquired) return { guard, outcome: null };
   const released = await releasePreviewJob(jobId, discordId, "sync_busy", leaseDeps);
   return {
-    ownsSlot: false,
+    guard,
     outcome: { ok: false, state: "busy", job: released || job },
   };
 }
@@ -361,10 +358,10 @@ async function recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, err
   };
 }
 
-async function releaseApplySlotBestEffort(discordId, ownsSlot, deps) {
-  if (!ownsSlot || typeof deps.releaseAutoManageSyncSlot !== "function") return;
+// A failed release is logged and never replaces the apply outcome.
+async function releaseApplySlotBestEffort(guard) {
   try {
-    await deps.releaseAutoManageSyncSlot(discordId);
+    await guard.release();
   } catch (err) {
     console.warn("[local-sync/preview-job] sync slot release failed:", err?.message || err);
   }
@@ -388,7 +385,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
   const claim = await claimApplyContext(jobId, discordId, modelDeps);
   if (claim.outcome) return claim.outcome;
   const { job, leaseDeps } = claim;
-  let ownsSlot = false;
+  let slotGuard = NO_SYNC_SLOT;
   let summary = null;
 
   try {
@@ -403,7 +400,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     if (disabledOutcome) return disabledOutcome;
 
     const slot = await acquireApplySlot({ jobId, discordId, job, leaseDeps, deps });
-    ownsSlot = slot.ownsSlot;
+    slotGuard = slot.guard;
     if (slot.outcome) return slot.outcome;
 
     const currentWeekStartMs = resolveCurrentWeekStartMs(deps.currentWeekStartMs);
@@ -469,7 +466,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
   } catch (error) {
     return recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error, summary });
   } finally {
-    await releaseApplySlotBestEffort(discordId, ownsSlot, deps);
+    await releaseApplySlotBestEffort(slotGuard);
   }
 }
 

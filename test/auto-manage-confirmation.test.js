@@ -23,8 +23,7 @@ for (const action of ["enable", "reset"]) {
         EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
         UI: { colors: { success: 0x00ff00, muted: 0x777777 }, icons: { done: "done", reset: "reset", warn: "warn" } },
         User, saveWithRetry: operation => operation(),
-        acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-        releaseAutoManageSyncSlot: () => { released += 1; },
+        acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { released += 1; } }),
         ensureFreshWeek: () => {}, weekResetStartMs: () => 123,
         gatherAutoManageLogsForUserDoc: async () => [],
         applyAutoManageCollected: () => ({ perChar: decision === "no hidden logs" ? [] : [{ error: "hidden" }] }),
@@ -86,8 +85,7 @@ for (const [label, doc] of [["missing user", null], ["empty roster", { accounts:
           return { autoManageEnabled: true };
         },
       },
-      acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-      releaseAutoManageSyncSlot: () => { released += 1; },
+      acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { released += 1; } }),
       weekResetStartMs: () => 123,
     });
     await handler({

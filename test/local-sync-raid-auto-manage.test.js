@@ -34,8 +34,7 @@ function makeCommand(User, overrides = {}) {
     User,
     normalizeName,
     saveWithRetry: async (op) => op(),
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     ...overrides,
   });
 }
@@ -236,9 +235,8 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
   const { handleRaidAutoManageCommand } = makeCommand(User, {
     acquireAutoManageSyncSlot: async (discordId, opts) => {
       guardCalls.push({ discordId, opts });
-      return { acquired: true };
+      return { acquired: true, release: () => releases.push(discordId) };
     },
-    releaseAutoManageSyncSlot: (discordId) => releases.push(discordId),
   });
 
   await handleRaidAutoManageCommand({
@@ -297,7 +295,7 @@ test("raid-auto-manage action:reset refuses while a bible sync is in flight", as
   };
   const edits = [];
   const { handleRaidAutoManageCommand } = makeCommand(User, {
-    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "in-flight" }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "in-flight", release: () => {} }),
   });
 
   await handleRaidAutoManageCommand({

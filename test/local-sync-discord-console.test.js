@@ -593,11 +593,10 @@ test("concurrent Full preview jobs share the user sync slot and the busy job can
   let secondWrites = 0;
   const slotDeps = {
     acquireAutoManageSyncSlot: async () => {
-      if (slotHeld) return { acquired: false, reason: "in-flight" };
+      if (slotHeld) return { acquired: false, reason: "in-flight", release: () => {} };
       slotHeld = true;
-      return { acquired: true };
+      return { acquired: true, release: () => { slotHeld = false; } };
     },
-    releaseAutoManageSyncSlot: () => { slotHeld = false; },
   };
   const commonDeps = { UserModel, shrinkSourceToken: false, ...slotDeps };
   const applySecond = () => applyPreviewJob(secondJob.jobId, "u1", {
@@ -949,8 +948,7 @@ for (const scenario of [
     name: "an apply that found the sync slot busy",
     applied: false,
     deps: {
-      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
-      releaseAutoManageSyncSlot: () => {},
+      acquireAutoManageSyncSlot: async () => ({ acquired: false, release: () => {} }),
     },
   },
   {
@@ -984,7 +982,6 @@ for (const scenario of [
       PreviewModel,
       applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
       acquireAutoManageSyncSlot: deps.acquireAutoManageSyncSlot,
-      releaseAutoManageSyncSlot: deps.releaseAutoManageSyncSlot,
     });
 
     assert.equal(result.ok, true);
@@ -1040,8 +1037,7 @@ for (const scenario of [
     name: "a busy sync slot",
     state: "busy",
     deps: {
-      acquireAutoManageSyncSlot: async () => ({ acquired: false }),
-      releaseAutoManageSyncSlot: () => {},
+      acquireAutoManageSyncSlot: async () => ({ acquired: false, release: () => {} }),
     },
   },
   {

@@ -132,8 +132,7 @@ function syncUi(statuses) {
     },
     ensureFreshWeek: () => {}, weekResetStartMs: () => 1234,
     autoManageEntryKey: (account, char) => `${account}:${char}`,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-    releaseAutoManageSyncSlot: () => {},
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {} }),
     stampAutoManageAttempt: async () => {},
     gatherAutoManageLogsForUserDoc: async (doc) => {
       if (statuses[doc.discordId] === "throw") throw new Error("Gather failed");
