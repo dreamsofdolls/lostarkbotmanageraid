@@ -1032,6 +1032,18 @@ test("a repeated apply of an applied job does not refresh the owner again", asyn
   assert.equal(events.length, 1);
 });
 
+test("an apply refused before it takes the sync slot has no slot to release", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const discordId = "owner-refused-before-slot";
+  const { job, deps } = makeOwnerApply(discordId, { userOverrides: { localSyncEnabled: false } });
+
+  const outcome = await applyPreviewJob(job.jobId, discordId, deps);
+
+  assert.equal(outcome.state, "failed");
+  const releaseWarnings = warn.mock.calls.filter(({ arguments: [message] }) => String(message).includes("sync slot release failed"));
+  assert.equal(releaseWarnings.length, 0);
+});
+
 for (const scenario of [
   {
     name: "a busy sync slot",

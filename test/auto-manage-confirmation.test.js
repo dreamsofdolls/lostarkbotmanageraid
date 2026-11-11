@@ -118,3 +118,26 @@ test("reset asks for confirmation on a confirm card", async () => {
   assert.equal(confirm.color, UI.colors.progress);
   assert.ok(confirm.title.startsWith("❔  "));
 });
+
+test("reset reports a failure instead of throwing when taking the sync slot throws", async (ctx) => {
+  ctx.mock.method(console, "error", () => {});
+  const notices = [];
+  const handler = createAutoManageResetHandler({
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, UI,
+    acquireAutoManageSyncSlot: async () => { throw new Error("slot store unavailable"); },
+  });
+  await handler({
+    discordId: "owner", lang: "en",
+    interaction: {
+      fetchReply: async () => ({
+        async awaitMessageComponent() {
+          return { customId: "auto-manage:reset-confirm", deferUpdate: async () => {} };
+        },
+      }),
+    },
+    replyAutoEmbed: async () => {},
+    editAutoEmbed: async () => assert.fail("a failed reset must not report success"),
+    editAutoNotice: async (notice) => { notices.push(notice.title); },
+  });
+  assert.deepEqual(notices, [t("raid-auto-manage.reset.failTitle", "en")]);
+});
