@@ -359,9 +359,9 @@ async function recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, err
 }
 
 // A failed release is logged and never replaces the apply outcome.
-async function releaseApplySlotBestEffort(guard) {
+function releaseApplySlotBestEffort(guard) {
   try {
-    await guard.release();
+    guard.release();
   } catch (err) {
     console.warn("[local-sync/preview-job] sync slot release failed:", err?.message || err);
   }
@@ -466,7 +466,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
   } catch (error) {
     return recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error, summary });
   } finally {
-    await releaseApplySlotBestEffort(slotGuard);
+    releaseApplySlotBestEffort(slotGuard);
   }
 }
 

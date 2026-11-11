@@ -58,7 +58,8 @@ function createAutoManageCoreService({
   } = createBibleClient({ bibleLimiter });
   const {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
-    acquireAutoManageSyncSlot,    formatAutoManageCooldownRemaining,
+    acquireAutoManageSyncSlot,
+    formatAutoManageCooldownRemaining,
   } = createAutoManageSyncSlotManager({
     User,
     getAutoManageCooldownMs,
@@ -180,7 +181,8 @@ function createAutoManageCoreService({
   return {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
-    acquireAutoManageSyncSlot,    formatAutoManageCooldownRemaining,
+    acquireAutoManageSyncSlot,
+    formatAutoManageCooldownRemaining,
     autoManageEntryKey,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,

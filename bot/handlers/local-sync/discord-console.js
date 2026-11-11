@@ -144,7 +144,8 @@ function createLocalSyncDiscordConsole({
   formatGold,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId = null,
-  acquireAutoManageSyncSlot = null,  PreviewModel = null,
+  acquireAutoManageSyncSlot = null,
+  PreviewModel = null,
   openRaidStatusSession,
 }) {
   if (!User) throw new Error("[local-sync/discord] User model required");
@@ -307,7 +308,8 @@ function createLocalSyncDiscordConsole({
         PreviewModel,
         applyRaidSetForDiscordId,
         applyRaidSetBatchForDiscordId,
-        acquireAutoManageSyncSlot,      });
+        acquireAutoManageSyncSlot,
+      });
       nextJob = outcome.job || await getPreviewJob(jobId, jobDeps) || existing;
     } else if (action === "cancel") {
       nextJob = await cancelPreviewJob(jobId, interaction.user.id, jobDeps)

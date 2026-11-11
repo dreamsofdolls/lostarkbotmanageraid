@@ -28,7 +28,8 @@ function createAutoManageSyncSlotManager({
   /**
    * Atomically claim a sync slot for this user. The slot is reserved before
    * any await so two concurrent interactions cannot both enter the sync path.
-   * Every result carries `release()`; callers call it unconditionally.
+   * Every result carries `release()`: the holder calls it once it is done
+   * with the slot, and a refused result's release does nothing.
    * @param {string} discordId - the user whose sync takes the slot
    * @param {{ignoreCooldown?: boolean}} [options] - skip the attempt cooldown
    * @returns {Promise<{acquired: boolean, reason?: string, remainingMs?: number, release: Function}>}

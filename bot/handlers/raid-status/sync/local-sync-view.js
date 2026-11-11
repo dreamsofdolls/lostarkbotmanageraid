@@ -217,7 +217,8 @@ async function runLocalSyncViewAction({
   PreviewModel = null,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId = null,
-  acquireAutoManageSyncSlot = null,}) {
+  acquireAutoManageSyncSlot = null,
+}) {
   const jobDeps = PreviewModel ? { PreviewModel } : {};
   const existing = await getPreviewJob(jobId, jobDeps);
   if (!existing) return { ok: false, reason: "missing", job: null, applied: false };
@@ -236,7 +237,8 @@ async function runLocalSyncViewAction({
       PreviewModel,
       applyRaidSetForDiscordId,
       applyRaidSetBatchForDiscordId,
-      acquireAutoManageSyncSlot,    });
+      acquireAutoManageSyncSlot,
+    });
     const job = outcome?.job || await getPreviewJob(jobId, jobDeps).catch(() => null) || existing;
     // A write error, a write refused for a disabled scope, and a throw after the
     // deltas were applied list the gates written in their result, those an

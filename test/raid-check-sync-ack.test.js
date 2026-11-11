@@ -120,9 +120,7 @@ test("raid-check sync commits through the shared retry-safe service", async () =
     stampAutoManageAttempt: async () => {
       throw new Error("fallback stamp must not run");
     },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
-      releaseCount += 1;
-    } }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releaseCount += 1; } }),
     raidCheckSyncLimiter: { run: (operation) => operation() },
     discordUserLimiter: { run: (operation) => operation() },
   });

@@ -256,7 +256,8 @@ const cacheDiscordIdentityForExistingUser = createDiscordIdentityCache({
 
 const {
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
-  acquireAutoManageSyncSlot,  formatAutoManageCooldownRemaining,
+  acquireAutoManageSyncSlot,
+  formatAutoManageCooldownRemaining,
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
@@ -420,7 +421,8 @@ const {
   collectStaleAccountRefreshes,
   hasStaleAccountRefreshes,
   applyStaleAccountRefreshes,
-  acquireAutoManageSyncSlot,  gatherAutoManageLogsForUserDoc,
+  acquireAutoManageSyncSlot,
+  gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   stampAutoManageAttempt,
   weekResetStartMs,
@@ -490,7 +492,8 @@ const {
   runManualRosterRefresh,
   formatRosterRefreshCooldownRemaining,
   ROSTER_REFRESH_COOLDOWN_MS,
-  acquireAutoManageSyncSlot,  gatherAutoManageLogsForUserDoc,
+  acquireAutoManageSyncSlot,
+  gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   commitAutoManageCollected,
   applyAutoManageCollectedForStatus,
@@ -527,7 +530,8 @@ const {
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
   runManualRosterRefresh,
-  acquireAutoManageSyncSlot,  autoManageEntryKey,
+  acquireAutoManageSyncSlot,
+  autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   commitAutoManageCollected,
   isPublicLogDisabledError,
@@ -557,7 +561,8 @@ const {
   formatGold,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
-  acquireAutoManageSyncSlot,  openRaidStatusSession: handleStatusCommand,
+  acquireAutoManageSyncSlot,
+  openRaidStatusSession: handleStatusCommand,
 });
 
 /**
@@ -573,7 +578,8 @@ function applyLocalSyncPreviewJob(jobId, discordId) {
     UserModel: User,
     applyRaidSetForDiscordId,
     applyRaidSetBatchForDiscordId,
-    acquireAutoManageSyncSlot,    shrinkSourceToken: false,
+    acquireAutoManageSyncSlot,
+    shrinkSourceToken: false,
   });
 }
 
@@ -658,7 +664,8 @@ const {
   getAnnouncementsConfig,
   cleanupAndRefreshRaidChannel,
   weekResetStartMs,
-  acquireAutoManageSyncSlot,  gatherAutoManageLogsForUserDoc,
+  acquireAutoManageSyncSlot,
+  gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   collectAccountRefresh,
   applyStaleAccountRefreshes,
@@ -773,7 +780,8 @@ const {
   saveWithRetry,
   ensureFreshWeek,
   normalizeName,
-  acquireAutoManageSyncSlot,  formatAutoManageCooldownRemaining,
+  acquireAutoManageSyncSlot,
+  formatAutoManageCooldownRemaining,
   getAutoManageCooldownMs,
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,

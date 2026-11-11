@@ -170,9 +170,7 @@ test("raid-status manual sync stamps and saves a successful report", async () =>
   });
   const sync = createSync({
     User,
-    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
-      releases += 1;
-    } }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { releases += 1; } }),
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
     applyAutoManageCollected,
     commitAutoManageCollected,
@@ -252,9 +250,7 @@ function createGatherFailureSync({ stampAutoManageAttempt }) {
         return read;
       },
     },
-    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => {
-      counters.releases += 1;
-    } }),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => { counters.releases += 1; } }),
     gatherAutoManageLogsForUserDoc: async () => {
       throw new Error("bible down");
     },
@@ -299,6 +295,20 @@ test("raid-status manual sync stamps a failed gather once even when the stamp re
 
   assert.equal(result.outcome.outcome, "failed");
   assert.equal(stampCalls, 1);
+});
+
+test("raid-status manual sync answers failed when taking the sync slot throws", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const stamps = [];
+  const sync = createSync({
+    User: { findOne: () => ({ lean: async () => ({ discordId: "user-1" }) }) },
+    acquireAutoManageSyncSlot: async () => { throw new Error("slot lookup failed"); },
+    stampAutoManageAttempt: async (discordId) => { stamps.push(discordId); },
+  });
+
+  const result = await sync.runManualStatusSync("user-1", {});
+
+  assert.deepEqual([result.status, result.outcome.outcome, stamps], ["completed", "failed", ["user-1"]]);
 });
 
 test("raid-status card-open sync reports failed when every character failed", async () => {
