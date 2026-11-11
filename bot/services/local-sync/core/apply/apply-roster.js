@@ -12,6 +12,7 @@ const {
 const { normalizeDifficulty } = require("../catalog");
 const { COMPANION_SCOPE } = require("../scope");
 const { isCurrentWeekCompletion } = require("../../../../utils/raid/schedule/reset-windows");
+const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
 function buildRosterCharacterIndex(userDoc) {
   const index = new Map();
@@ -104,14 +105,6 @@ function hasCurrentWeekProgressInAnotherMode(
   ));
 }
 
-function hasUsableRoster(userDoc) {
-  return Boolean(
-    userDoc
-    && Array.isArray(userDoc.accounts)
-    && userDoc.accounts.length > 0
-  );
-}
-
 function hasRequiredModeConflict(
   character,
   bucket,
@@ -153,7 +146,7 @@ function classifyBucketAgainstRoster(
     rosterIndex = null,
   } = {}
 ) {
-  if (!hasUsableRoster(userDoc)) {
+  if (!hasRosterAccounts(userDoc)) {
     return { action: "reject", reason: "no_roster" };
   }
 

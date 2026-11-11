@@ -512,7 +512,7 @@ function deferEphemeralReply(interaction) {
 /**
  * Await a pending defer and say whether it took. A failed defer (an expired
  * or already acknowledged interaction) is logged under `label`, and the
- * caller stops instead of answering an interaction Discord no longer holds.
+ * caller returns without replying.
  * @param {string} label - log prefix naming the step, e.g. "[raid-status] local-refresh"
  * @param {Promise<unknown>} deferPromise - the pending deferUpdate or deferReply
  * @returns {Promise<boolean>} true when the defer succeeded

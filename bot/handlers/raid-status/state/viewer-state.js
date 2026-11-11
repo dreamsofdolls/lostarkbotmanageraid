@@ -138,9 +138,7 @@ async function loadStatusViewerState({
 
   const prepared = prepareStatusUserDoc(discordId, seedDoc);
   const userDoc = prepared.userDoc;
-  const noRoster =
-    !hasIncomingShare &&
-    !hasRosterAccounts(userDoc);
+  const noRoster = !hasIncomingShare && !hasRosterAccounts(userDoc);
 
   return {
     lang,

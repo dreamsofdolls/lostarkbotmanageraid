@@ -29,10 +29,7 @@ function createAutoManageSyncService(deps) {
       if (doc.localSyncEnabled) {
         return { status: "local-sync-active", report: null, snapshot: toPlainUserDoc(doc) };
       }
-      if (
-        options.requireRoster === true &&
-        !hasRosterAccounts(doc)
-      ) {
+      if (options.requireRoster === true && !hasRosterAccounts(doc)) {
         return { status: "missing-roster", report: null, snapshot: null };
       }
 
