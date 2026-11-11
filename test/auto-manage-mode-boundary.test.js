@@ -17,8 +17,9 @@ for (const [action, createHandler] of [["sync", createAutoManageSyncHandler], ["
       interaction: { deferReply: async () => { throw new Error("Unknown interaction"); } },
       discordId: "ack-user", lang: "en",
     }), /Unknown interaction/);
-    assert.deepEqual(await slots.acquireAutoManageSyncSlot("ack-user"), { acquired: true });
-    slots.releaseAutoManageSyncSlot("ack-user");
+    const next = await slots.acquireAutoManageSyncSlot("ack-user");
+    assert.equal(next.acquired, true);
+    next.release();
   });
 }
 

@@ -13,18 +13,31 @@ function createAutoManageSyncSlotManager({
   getAutoManageCooldownMs,
   defaultCooldownMs,
 }) {
-  const inFlightAutoManageSyncs = new Set();
+  // discordId -> the token of the acquire that holds the slot.
+  const inFlightAutoManageSyncs = new Map();
+
+  // Frees the slot only while `token` still holds it, so a repeated or late
+  // release cannot free the slot of a sync that started after it.
+  function releaseHeld(discordId, token) {
+    if (inFlightAutoManageSyncs.get(discordId) === token) inFlightAutoManageSyncs.delete(discordId);
+  }
+
+  // A refused acquire holds nothing, so its release does nothing.
+  const refused = (fields) => ({ acquired: false, ...fields, release: () => {} });
 
   /**
    * Atomically claim a sync slot for this user. The slot is reserved before
    * any await so two concurrent interactions cannot both enter the sync path.
+   * Every result carries `release()`; callers call it unconditionally.
+   * @param {string} discordId - the user whose sync takes the slot
+   * @param {{ignoreCooldown?: boolean}} [options] - skip the attempt cooldown
+   * @returns {Promise<{acquired: boolean, reason?: string, remainingMs?: number, release: Function}>}
    */
   async function acquireAutoManageSyncSlot(discordId, { ignoreCooldown = false } = {}) {
-    if (inFlightAutoManageSyncs.has(discordId)) {
-      return { acquired: false, reason: "in-flight" };
-    }
+    if (inFlightAutoManageSyncs.has(discordId)) return refused({ reason: "in-flight" });
 
-    inFlightAutoManageSyncs.add(discordId);
+    const token = {};
+    inFlightAutoManageSyncs.set(discordId, token);
     try {
       const user = await User.findOne(
         { discordId },
@@ -34,16 +47,12 @@ function createAutoManageSyncSlotManager({
       const elapsed = Date.now() - lastAttempt;
       const effectiveCooldownMs = getAutoManageCooldownMs(discordId);
       if (!ignoreCooldown && lastAttempt && elapsed < effectiveCooldownMs) {
-        inFlightAutoManageSyncs.delete(discordId);
-        return {
-          acquired: false,
-          reason: "cooldown",
-          remainingMs: effectiveCooldownMs - elapsed,
-        };
+        releaseHeld(discordId, token);
+        return refused({ reason: "cooldown", remainingMs: effectiveCooldownMs - elapsed });
       }
-      return { acquired: true };
+      return { acquired: true, release: () => releaseHeld(discordId, token) };
     } catch (err) {
-      inFlightAutoManageSyncs.delete(discordId);
+      releaseHeld(discordId, token);
       throw err;
     }
   }
