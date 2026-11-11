@@ -36,6 +36,10 @@ const vnHourInUtc = (hour) => {
   return `${utcHour}:00 UTC${hour < VN_OFFSET_HOURS ? " hôm trước" : ""}`;
 };
 
+// The schedulers silence these types while Artist sleeps (isDuringArtistSleep),
+// so their trigger text says so next to the boundary /raid-announce show prints.
+const withSleepNote = (trigger) => `${trigger} Im trong giờ Artist ngủ (${BEDTIME_HOUR}:00 đến ${WAKEUP_HOUR}:00 theo giờ ngôn ngữ server); lịch đúng ${BEDTIME_HOUR}:00 hoặc ${WAKEUP_HOUR}:00 vẫn được báo.`;
+
 // ---------------------------------------------------------------------------
 // Announcement registry for all automated channel messages. Adding a new
 // type requires:
@@ -65,7 +69,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Daily roster sync",
     subdocKey: "dailyRosterSync",
     channelOverridable: true,
-    trigger: "00:00 VN starts the daily roster refresh. Once every registered user reaches a terminal result, the summary rides the next raid-channel cleanup notice (or the wakeup greeting after quiet hours); without channel cleanup, or with its own channel, it posts alone. Bounded retries can delay it.",
+    trigger: withSleepNote("00:00 VN starts the daily roster refresh. Once every registered user reaches a terminal result, the summary rides the next raid-channel cleanup notice (or the wakeup greeting after quiet hours); without channel cleanup, or with its own channel, it posts alone. Bounded retries can delay it."),
     dedup: "Once per completed VN day per guild (`lastDailyRosterSyncKey`); restart catches up without repeating settled roster work.",
     messageTtl: "Leaves with the cleanup notice it rides; a separate post stays until the channel's normal cleanup",
     previewContent: "Daily roster refresh finished: registered users and rosters, successful users, unavailable logs, and exhausted retries.",
@@ -77,7 +81,7 @@ const ANNOUNCEMENT_REGISTRY = {
     // Trigger + lifecycle metadata shown in /raid-announce show. Keeping
     // these as registry data (not hardcoded in the embed builder) means
     // adding a new announcement type only touches the registry.
-    trigger: "Every Wednesday 17:00 VN (= Wed 10:00 UTC), right after the weekly raid progress reset runs.",
+    trigger: withSleepNote("Every Wednesday 17:00 VN (= Wed 10:00 UTC), right after the weekly raid progress reset runs."),
     dedup: "Once per ISO week per guild (`lastWeeklyAnnouncementKey`). Tick 30 phút cadence với 24h post-reset window catches catch-up scenarios.",
     messageTtl: "30 phút rồi Artist tự xóa",
     // Preview shown in /raid-announce show. Firing sites still inline
@@ -150,7 +154,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Maintenance early reminder",
     subdocKey: "maintenanceEarly",
     channelOverridable: true,
-    trigger: "Mỗi tuần T-3h / T-2h / T-1h trước giờ bảo trì thứ 4 0:00 PT (14:00 VN, giờ mùa đông Mỹ 15:00 VN): 11:00 / 12:00 / 13:00 VN, mùa đông 12:00 / 13:00 / 14:00 VN. Tick 1 phút bắt mốc.",
+    trigger: withSleepNote("Mỗi tuần T-3h / T-2h / T-1h trước giờ bảo trì thứ 4 0:00 PT (14:00 VN, giờ mùa đông Mỹ 15:00 VN): 11:00 / 12:00 / 13:00 VN, mùa đông 12:00 / 13:00 / 14:00 VN. Tick 1 phút bắt mốc."),
     dedup: "1 post/slot/guild (`lastMaintenanceEarlyKey = 'YYYY-MM-DD:T-{3h|2h|1h}'`). Mỗi tuần 1 chu kỳ key mới.",
     messageTtl: "30 phút rồi Artist tự xóa",
     previewContent:
@@ -160,7 +164,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Maintenance countdown",
     subdocKey: "maintenanceCountdown",
     channelOverridable: true,
-    trigger: "Mỗi tuần T-15m / T-10m / T-5m / T-1m trước giờ bảo trì: 13:45 / 13:50 / 13:55 / 13:59 VN, giờ mùa đông Mỹ 14:45 / 14:50 / 14:55 / 14:59 VN. Tick 1 phút bắt mốc.",
+    trigger: withSleepNote("Mỗi tuần T-15m / T-10m / T-5m / T-1m trước giờ bảo trì: 13:45 / 13:50 / 13:55 / 13:59 VN, giờ mùa đông Mỹ 14:45 / 14:50 / 14:55 / 14:59 VN. Tick 1 phút bắt mốc."),
     dedup: "1 post/slot/guild (`lastMaintenanceCountdownKey = 'YYYY-MM-DD:T-{15m|10m|5m|1m}'`).",
     messageTtl: "10 phút rồi Artist tự xóa (mốc T-1m TTL ngắn hơn vì server sắp tắt)",
     previewContent:
@@ -175,7 +179,7 @@ const ANNOUNCEMENT_REGISTRY = {
     // enabling it for every legacy guild would be an unexpectedly noisy
     // migration.
     defaultEnabled: false,
-    trigger: `${WORLD_EVENT_LEAD_MINUTES} phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch ET (giờ miền Đông Mỹ, có đổi giờ mùa đông). Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.`,
+    trigger: withSleepNote(`${WORLD_EVENT_LEAD_MINUTES} phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch ET (giờ miền Đông Mỹ, có đổi giờ mùa đông). Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.`),
     dedup: `1 post/spawn/guild (\`lastWorldEventReminderKey\`). Tick 1 phút và chỉ claim trong cửa sổ T-${WORLD_EVENT_LEAD_MINUTES}m → T-0 để restart trễ vẫn catch-up mà không post lặp.`,
     messageTtl: `${WORLD_EVENT_TTL_MINUTES} phút rồi Artist tự xóa`,
     previewContent:

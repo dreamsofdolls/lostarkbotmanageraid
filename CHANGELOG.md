@@ -11,6 +11,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - While she sleeps she posts nothing on her own: Chaos Gate / Field Boss and maintenance reminders, the weekly-reset post and the daily roster report stay quiet. Something due at 02:00 or 09:00 still gets its post.
 - The daily roster report held overnight goes out at 09:00; a weekly-reset post that would land inside her sleep (only after a restart) is skipped.
 - English servers keep Artist's UTC clock, so their maintenance reminders (07:00-08:00 UTC) now stay quiet.
+- `/raid-announce show` says, for each type Artist silences, that it stays quiet while she sleeps.
 
 ### Fixed
 - `/raid-announce show` states the new bedtime and wake-up hours; the registry now reads them from the sleep window, so they cannot drift again.

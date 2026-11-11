@@ -36,3 +36,15 @@ test("cleanup quiet hours run from 02:00 to 08:59", () => {
   assert.equal(isInArtistQuietHoursForLang(vnAt(8, 59), "vi"), true);
   assert.equal(isInArtistQuietHoursForLang(vnAt(9, 0), "vi"), false);
 });
+
+const { announcementTypeEntry } = require("../bot/utils/raid/schedule/announcements");
+
+test("raid-announce show says which scheduled posts stay quiet while Artist sleeps", () => {
+  const quiet = /Im trong giờ Artist ngủ \(2:00 đến 9:00 theo giờ ngôn ngữ server\)/;
+  for (const type of ["world-event-reminder", "maintenance-early", "maintenance-countdown", "weekly-reset", "daily-roster-sync"]) {
+    assert.match(announcementTypeEntry(type).trigger, quiet, type);
+  }
+  for (const type of ["artist-bedtime", "artist-wakeup", "whisper-ack", "set-greeting"]) {
+    assert.doesNotMatch(announcementTypeEntry(type).trigger, quiet, type);
+  }
+});
