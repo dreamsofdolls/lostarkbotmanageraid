@@ -160,8 +160,9 @@ async function startBot() {
     // `lastWeeklyAnnouncementKey` so a bot restart inside the same ISO
     // week won't re-announce.
     startWeeklyResetJob(readyClient);
-    // Daily backfill for every /raid-auto-manage opted-in user. The 30-min
-    // worker drains a fair 6-user batch and retries transient Bible failures
+    // Daily backfill for every /raid-auto-manage opted-in user. Each tick the
+    // worker drains a fair batch (AUTO_MANAGE_DAILY_TICK_MS and
+    // AUTO_MANAGE_DAILY_BATCH_SIZE) and retries transient Bible failures
     // behind a short DB lease; /raid-status activity is telemetry, not a
     // completion gate.
     // Killswitch: AUTO_MANAGE_DAILY_DISABLED=true env var skips every tick
@@ -169,8 +170,9 @@ async function startBot() {
     // a redeploy. Accepts client ref so the tick can post channel
     // announcements when it detects a stuck private-log user.
     startAutoManageDailyScheduler(readyClient);
-    // Maintenance reminder scheduler. 1-min tick, hard-coded fire schedule
-    // for LA VN Wednesday 14:00 maintenance boundary - 7 fire points total
+    // Maintenance reminder scheduler. 1-min tick, fixed fire schedule before
+    // the weekly maintenance start, which follows Pacific time
+    // (MAINTENANCE_TIME_ZONE in utils/raid/schedule/maintenance.js) - 7 fire points total
     // (T-3h/2h/1h early reminders + T-15m/10m/5m/1m countdown). Per-guild
     // gating via /raid-announce type:maintenance-early|countdown action:on/off.
     // Non-Wednesday ticks exit before any database query, keeping the
