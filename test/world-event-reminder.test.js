@@ -254,7 +254,8 @@ test("world-event scheduler releases its dedup claim when Discord send fails", a
   const cfg = {
     guildId: "guild-1",
     raidChannelId: null,
-    lastWorldEventReminderKey: null,
+    // A key from an earlier spawn, so the rollback must restore it rather than clear it.
+    lastWorldEventReminderKey: "previous-spawn",
     announcements: {
       worldEventReminder: { enabled: true, channelId: "override-1" },
     },
@@ -287,7 +288,7 @@ test("world-event scheduler releases its dedup claim when Discord send fails", a
   const reminderKey = mutations[0].update.$set.lastWorldEventReminderKey;
   assert.deepEqual(mutations[1], {
     filter: { guildId: "guild-1", lastWorldEventReminderKey: reminderKey },
-    update: { $set: { lastWorldEventReminderKey: null } },
+    update: { $set: { lastWorldEventReminderKey: "previous-spawn" } },
     options: { returnDocument: "after" },
   });
 });

@@ -8,6 +8,7 @@ const {
 const {
   claimGuildState,
   releaseGuildClaim,
+  sendClaimedPost,
 } = require("./guild-state-claim");
 
 const ANNOUNCEMENT_SUBDOC_KEY = "dailyRosterSync";
@@ -221,41 +222,12 @@ function createDailyRosterAnnouncementService({
     }
     if (!claimPrevious) return false;
 
-    let sent = null;
-    let postError = null;
-    try {
-      sent = await postChannelAnnouncement(
-        channel,
-        content,
-        0,
-        "daily roster sync"
-      );
-    } catch (err) {
-      postError = err;
-    }
-
-    if (sent) {
-      console.log(
-        `[daily-roster-sync] posted guild=${cfg.guildId} target=${targetDayKey}`
-      );
-      return true;
-    }
-
-    const claimReleased = await releaseGuildClaim({
-      GuildConfig,
-      guildId: cfg.guildId,
-      claimedState: { [DEDUP_FIELD]: targetDayKey },
-      previousState: claimPrevious,
-    }, (rollbackError) => console.error(
-      `[daily-roster-sync] guild=${cfg.guildId} claim rollback failed:`,
-      rollbackError?.message || rollbackError
-    ));
-
-    console.warn(
-      `[daily-roster-sync] send failed; claim ${claimReleased ? "released" : "not released"} guild=${cfg.guildId} target=${targetDayKey}:`,
-      postError?.message || postError || "no message returned"
-    );
-    return false;
+    return sendClaimedPost({
+      send: () => postChannelAnnouncement(channel, content, 0, "daily roster sync"),
+      claim: { GuildConfig, guildId: cfg.guildId, claimedState: { [DEDUP_FIELD]: targetDayKey }, previousState: claimPrevious },
+      label: "[daily-roster-sync]",
+      detail: `target=${targetDayKey}`,
+    });
   }
 
   async function notifyDailyRosterSync(client, dailyContext) {

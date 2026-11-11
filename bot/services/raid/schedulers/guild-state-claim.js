@@ -55,7 +55,53 @@ async function releaseGuildClaim(options, onError) {
   }
 }
 
+/**
+ * Send the post a guild claim was taken for. When no attempt posts, release
+ * the claim so a later tick can try again. Logs the outcome under `label`.
+ * @param {object} options - the post, its claim and its log wording
+ * @param {() => Promise<unknown>} options.send - posts once; a falsy result means nothing was posted
+ * @param {object} options.claim - releaseGuildClaim options: GuildConfig, guildId, claimedState, previousState
+ * @param {string} options.label - log prefix, such as "[maintenance]"
+ * @param {string} options.detail - what was posted, for the logs, such as "slot=T-3h key=..."
+ * @param {number} [options.attempts=1] - sends tried before the claim is released
+ * @param {() => Promise<void>} [options.waitBeforeRetry] - runs between attempts; a failure stops retrying
+ * @returns {Promise<boolean>} true when the post went out
+ */
+async function sendClaimedPost({ send, claim, label, detail, attempts = 1, waitBeforeRetry }) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (attempt > 1) {
+      try {
+        await waitBeforeRetry();
+      } catch (err) {
+        lastError = err;
+        break;
+      }
+    }
+    try {
+      if (await send()) {
+        console.log(`${label} posted guild=${claim.guildId} ${detail} attempt=${attempt}`);
+        return true;
+      }
+      lastError = null;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  const released = await releaseGuildClaim(claim, (rollbackError) => console.error(
+    `${label} guild=${claim.guildId} ${detail} claim rollback failed:`,
+    rollbackError?.message || rollbackError
+  ));
+  console.warn(
+    `${label} send failed; claim ${released ? "released" : "not released"} guild=${claim.guildId} ${detail}:`,
+    lastError?.message || lastError || "no message returned"
+  );
+  return false;
+}
+
 module.exports = {
   claimGuildState,
   releaseGuildClaim,
+  sendClaimedPost,
 };
