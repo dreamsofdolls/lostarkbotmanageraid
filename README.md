@@ -32,7 +32,7 @@ Beyond progress tracking, Artist ships a **zero-upload Local Reader** that reads
 - Per-character + per-account weekly gold-earned tracker with bound/unbound breakdown, plus `/raid-gold-earner` picker to mark which 6 chars/account earn gold (per Lost Ark's cap)
 - Auction bid calculator (`/raid-auction`): given an item's AH listing price (5% sell fee auto-deducted), computes the recommended bid for BOTH 4- and 8-player parties in one embed plus each member's cut and the winner's estimated profit
 - Weekly reset Wed 17:00 VN (catch-up safe) with per-guild announcement
-- Monitor-channel auto-cleanup every 30 minutes, with Artist quiet hours 03:00-08:00 VN (bedtime + morning catch-up sweep)
+- Monitor-channel auto-cleanup every 30 minutes, with Artist quiet hours 02:00-09:00 VN (bedtime + morning catch-up sweep); while she sleeps, her scheduled posts (Chaos Gate / Field Boss and maintenance reminders, the weekly reset, the daily roster report) stay quiet, and something due at 02:00 or 09:00 still gets its post
 - Raid Manager tier: shorter sync cooldown, `👑` roster header icon
 - Manager-only roster sharing (`/raid-share grant target:@user`): grantee sees and edits the manager's rosters across `/raid-status`, `/raid-set`, `/raid-task`, and the text parser; revocable any time
 - Per-user display language (`/raid-language`): switch Artist's voice between Tiếng Việt (default) and 日本語 (cuter Senko-flavored Artist); persistent across sessions

@@ -197,9 +197,9 @@ test("artist schedule rules share the cleanup scheduler phase", () => {
 test("raid-announce show places Artist bedtime and wake-up in the guild language's time zone", () => {
   const now = new Date(Date.UTC(2026, 3, 24, 12, 10, 0, 0));
   const cases = [
-    { lang: "vi", bedtimeUtcHour: 20, wakeupUtcHour: 1 },
-    { lang: "jp", bedtimeUtcHour: 18, wakeupUtcHour: 23 },
-    { lang: "en", bedtimeUtcHour: 3, wakeupUtcHour: 8 },
+    { lang: "vi", bedtimeUtcHour: 19, wakeupUtcHour: 2 },
+    { lang: "jp", bedtimeUtcHour: 17, wakeupUtcHour: 0 },
+    { lang: "en", bedtimeUtcHour: 2, wakeupUtcHour: 9 },
   ];
   const boundaryAt = (utcHour) => {
     const day = utcHour > 12 ? 24 : 25;

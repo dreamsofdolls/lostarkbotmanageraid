@@ -91,8 +91,9 @@ function isClaimedByRaidParser({ parsed, inRaidChannel = false } = {}) {
 
 /**
  * Whether Artist is asleep at this Vietnam hour in a guild of this language.
- * Her bedtime and wake-up posts fire at 03:00 and 08:00 on the clock of the
- * guild's language (artist-clock), so the hour is moved onto that clock
+ * Her bedtime and wake-up posts fire at ARTIST_QUIET_START_HOUR_VN and
+ * ARTIST_QUIET_END_HOUR_VN on the clock of the guild's language
+ * (artist-clock), so the hour is moved onto that clock
  * before the quiet window is checked. Every offset there is whole hours.
  * @param {number} vietnamHour - 0-23
  * @param {string} guildLang
@@ -118,7 +119,8 @@ function isArtistAsleep(vietnamHour, guildLang) {
  *   inside the cooldown window
  * @param {number} [input.vietnamHour] - 0-23 local Vietnam hour
  * @param {string} [input.guildLang='vi'] - the guild's language; Artist sleeps
- *   03:00-07:59 in its time zone, matching her bedtime and wake-up posts there
+ *   from bedtime to the minute before wake-up in its time zone, matching her
+ *   bedtime and wake-up posts there
  * @returns {string|null} a bucket from PING_BUCKETS, or null to stay silent
  */
 function classifyArtistPing({

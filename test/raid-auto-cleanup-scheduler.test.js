@@ -100,7 +100,7 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
 });
 
 test("auto-cleanup scheduler runs wakeup cleanup and stamps both dedup keys", async () => {
-  const now = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0));
+  const now = new Date(Date.UTC(2026, 3, 24, 2, 0, 0, 0)); // 09:00 VN wake-up
   const dayKey = getTargetDayKeyForLang(now, "vi");
   const updates = [];
   const posts = [];
@@ -155,7 +155,7 @@ test("auto-cleanup scheduler runs wakeup cleanup and stamps both dedup keys", as
       update: {
         $set: {
           lastArtistWakeupKey: dayKey,
-          lastAutoCleanupKey: "2026-04-24T08:00",
+          lastAutoCleanupKey: "2026-04-24T09:00",
         },
       },
     },

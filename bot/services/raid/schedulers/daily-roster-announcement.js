@@ -1,6 +1,7 @@
 "use strict";
 
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
+const { isDuringArtistSleep } = require("../../../utils/raid/schedule/artist-clock");
 const {
   getAutoManageDailyContext,
 } = require("../../auto-manage/runtime/support/daily-backfill");
@@ -138,7 +139,8 @@ function buildDailyRosterAnnouncementContent({ t, lang, targetDayKey, summary })
 }
 
 /**
- * @param {object} deps persistence, Discord delivery and localization helpers.
+ * @param {object} deps persistence, Discord delivery and localization helpers,
+ *   and a `nowDate` clock for Artist's sleep window.
  * @returns {{notifyDailyRosterSync: Function}} Daily aggregate announcer.
  */
 function createDailyRosterAnnouncementService({
@@ -149,6 +151,7 @@ function createDailyRosterAnnouncementService({
   postChannelAnnouncement,
   t,
   resolveGuildChannelFn = resolveGuildChannel,
+  nowDate = () => new Date(),
 }) {
   async function resolveGuildDelivery(client, cfg) {
     const conf = getAnnouncementsConfig(cfg)?.[ANNOUNCEMENT_SUBDOC_KEY];
@@ -197,6 +200,9 @@ function createDailyRosterAnnouncementService({
       );
       return false;
     }
+    // The report waits unclaimed while Artist sleeps on the guild's clock;
+    // every daily tick retries it, so it posts from her wake-up hour.
+    if (isDuringArtistSleep(nowDate(), lang)) return false;
 
     let claimPrevious;
     try {

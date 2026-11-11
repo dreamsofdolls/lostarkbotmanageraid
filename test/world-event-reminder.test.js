@@ -310,3 +310,59 @@ test("/raid-announce show describes the reminder with its real lead and clear-up
   assert.match(entry.messageTtl, /^21 phút /);
   assert.match(entry.previewContent, /sau 20 phút/);
 });
+
+async function runReminderTickAt(now, lang) {
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: null,
+    lastWorldEventReminderKey: null,
+    announcements: {
+      worldEventReminder: { enabled: true, channelId: "override-1" },
+    },
+  };
+  const claims = [];
+  const posts = [];
+  const service = createWorldEventReminderSchedulerService({
+    GuildConfig: {
+      find: () => ({ lean: async () => [cfg] }),
+      findOneAndUpdate: async (filter, update) => {
+        claims.push({ filter, update });
+        return { ...cfg };
+      },
+    },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => lang,
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return { id: "message-1" };
+    },
+    t,
+    nowDate: () => now,
+  });
+  await service.runWorldEventReminderTick({
+    guilds: { cache: new Map([["guild-1", makeGuild({ id: "override-1" })]]) },
+  });
+  return { claims, posts };
+}
+
+test("world-event reminder stays silent for a spawn inside Artist's sleep", async () => {
+  // Sunday 17:00 ET = 21:00 UTC = 04:00 VN Monday.
+  const now = utc(2026, 4, 26, 20, 45);
+  assert.equal(resolveWorldEventReminderForNow(now)?.spawnAtMs, Date.UTC(2026, 3, 26, 21, 0, 0, 0));
+
+  const { claims, posts } = await runReminderTickAt(now, "vi");
+
+  assert.equal(claims.length, 0);
+  assert.equal(posts.length, 0);
+});
+
+test("a 09:00 spawn is still reminded at 08:45 while Artist wakes up", async () => {
+  // Sunday 22:00 ET = 02:00 UTC = 09:00 VN Monday; the tick runs at 08:45 VN.
+  const now = utc(2026, 4, 27, 1, 45);
+  assert.equal(resolveWorldEventReminderForNow(now)?.spawnAtMs, Date.UTC(2026, 3, 27, 2, 0, 0, 0));
+
+  const { claims, posts } = await runReminderTickAt(now, "vi");
+
+  assert.equal(claims.length, 1);
+  assert.equal(posts.length, 1);
+});

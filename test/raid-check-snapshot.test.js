@@ -70,32 +70,32 @@ test("Artist quiet hours: VN hour computation crosses the UTC+7 boundary correct
   const at0059UtcApr24 = new Date(Date.UTC(2026, 3, 24, 0, 59, 0, 0));
   assert.equal(__test.getCurrentVNHour(at0059UtcApr24), 7);
 
-  // 01:00 UTC Apr 24 = 08:00 VN Apr 24 (wake-up hour, NOT quiet).
+  // 01:00 UTC Apr 24 = 08:00 VN Apr 24 (still quiet; wake-up is at 09:00).
   const at01UtcApr24 = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0));
   assert.equal(__test.getCurrentVNHour(at01UtcApr24), 8);
   assert.equal(__test.getTargetVNDayKey(at01UtcApr24), "2026-04-24");
 });
 
-test("Artist quiet hours: isInArtistQuietHours covers [3, 8) and nothing else", () => {
-  const quietStartExact = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0)); // 03:00 VN
+test("Artist quiet hours: isInArtistQuietHours covers [2, 9) and nothing else", () => {
+  const quietStartExact = new Date(Date.UTC(2026, 3, 23, 19, 0, 0, 0)); // 02:00 VN
   const quietMid = new Date(Date.UTC(2026, 3, 24, 0, 30, 0, 0)); // 07:30 VN
-  const quietLastBefore8 = new Date(Date.UTC(2026, 3, 24, 0, 59, 59, 0)); // 07:59 VN
-  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0)); // 08:00 VN
-  const lateNight = new Date(Date.UTC(2026, 3, 23, 19, 59, 0, 0)); // 02:59 VN
+  const quietLastBefore9 = new Date(Date.UTC(2026, 3, 24, 1, 59, 59, 0)); // 08:59 VN
+  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 2, 0, 0, 0)); // 09:00 VN
+  const lateNight = new Date(Date.UTC(2026, 3, 23, 18, 59, 0, 0)); // 01:59 VN
   const afternoon = new Date(Date.UTC(2026, 3, 24, 8, 0, 0, 0)); // 15:00 VN
 
   assert.equal(__test.isInArtistQuietHours(quietStartExact), true);
   assert.equal(__test.isInArtistQuietHours(quietMid), true);
-  assert.equal(__test.isInArtistQuietHours(quietLastBefore8), true);
-  assert.equal(__test.isInArtistQuietHours(wakeupBoundary), false); // 08:00 NOT quiet - it's wake-up
-  assert.equal(__test.isInArtistQuietHours(lateNight), false); // 02:59 NOT quiet yet
+  assert.equal(__test.isInArtistQuietHours(quietLastBefore9), true);
+  assert.equal(__test.isInArtistQuietHours(wakeupBoundary), false); // 09:00 NOT quiet - it's wake-up
+  assert.equal(__test.isInArtistQuietHours(lateNight), false); // 01:59 NOT quiet yet
   assert.equal(__test.isInArtistQuietHours(afternoon), false);
 });
 
-test("Artist quiet hours: wake-up boundary only opens at 08:00 VN, not midnight-to-02:59", () => {
+test("Artist quiet hours: wake-up boundary only opens at 09:00 VN, not between midnight and bedtime", () => {
   const beforeMidnightWake = new Date(Date.UTC(2026, 3, 23, 17, 30, 0, 0)); // 00:30 VN
-  const beforeQuietStarts = new Date(Date.UTC(2026, 3, 23, 19, 30, 0, 0)); // 02:30 VN
-  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0)); // 08:00 VN
+  const beforeQuietStarts = new Date(Date.UTC(2026, 3, 23, 18, 30, 0, 0)); // 01:30 VN
+  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 2, 0, 0, 0)); // 09:00 VN
   const afterWakeup = new Date(Date.UTC(2026, 3, 24, 2, 30, 0, 0)); // 09:30 VN
 
   assert.equal(__test.hasReachedArtistWakeupBoundary(beforeMidnightWake), false);
@@ -161,28 +161,28 @@ test("Artist quiet hours: wake-up pool is disjoint from the hourly-cleanup pool"
   );
 });
 
-test("nextAnnouncementEligibleBoundaryMs: artist-bedtime lands on next 20:00 UTC (= 03:00 VN)", () => {
-  // Thu Apr 23 2026 19:00 UTC (02:00 VN Apr 24) → next bedtime = 20:00 UTC same day.
-  const before = new Date(Date.UTC(2026, 3, 23, 19, 0, 0, 0));
+test("nextAnnouncementEligibleBoundaryMs: artist-bedtime lands on next 19:00 UTC (= 02:00 VN)", () => {
+  // Thu Apr 23 2026 18:00 UTC (01:00 VN Apr 24) → next bedtime = 19:00 UTC same day.
+  const before = new Date(Date.UTC(2026, 3, 23, 18, 0, 0, 0));
   const fire = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", before);
-  assert.equal(fire, Date.UTC(2026, 3, 23, 20, 0, 0, 0));
+  assert.equal(fire, Date.UTC(2026, 3, 23, 19, 0, 0, 0));
 
-  // Exactly at 20:00 UTC advances to the next day because the boundary is inclusive.
-  const atBoundary = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0));
+  // Exactly at 19:00 UTC advances to the next day because the boundary is inclusive.
+  const atBoundary = new Date(Date.UTC(2026, 3, 23, 19, 0, 0, 0));
   const fireNext = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", atBoundary);
-  assert.equal(fireNext, Date.UTC(2026, 3, 24, 20, 0, 0, 0));
+  assert.equal(fireNext, Date.UTC(2026, 3, 24, 19, 0, 0, 0));
 });
 
-test("nextAnnouncementEligibleBoundaryMs: artist-wakeup lands on next 01:00 UTC (= 08:00 VN)", () => {
-  // 00:30 UTC Apr 24 (07:30 VN) → next wake-up = 01:00 UTC same day (08:00 VN).
-  const before = new Date(Date.UTC(2026, 3, 24, 0, 30, 0, 0));
+test("nextAnnouncementEligibleBoundaryMs: artist-wakeup lands on next 02:00 UTC (= 09:00 VN)", () => {
+  // 01:30 UTC Apr 24 (08:30 VN) → next wake-up = 02:00 UTC same day (09:00 VN).
+  const before = new Date(Date.UTC(2026, 3, 24, 1, 30, 0, 0));
   const fire = __test.nextAnnouncementEligibleBoundaryMs("artist-wakeup", before);
-  assert.equal(fire, Date.UTC(2026, 3, 24, 1, 0, 0, 0));
+  assert.equal(fire, Date.UTC(2026, 3, 24, 2, 0, 0, 0));
 
-  // At 01:30 UTC (08:30 VN) already past → advance to the next day.
-  const after = new Date(Date.UTC(2026, 3, 24, 1, 30, 0, 0));
+  // At 02:30 UTC (09:30 VN) already past → advance to the next day.
+  const after = new Date(Date.UTC(2026, 3, 24, 2, 30, 0, 0));
   const fireNext = __test.nextAnnouncementEligibleBoundaryMs("artist-wakeup", after);
-  assert.equal(fireNext, Date.UTC(2026, 3, 25, 1, 0, 0, 0));
+  assert.equal(fireNext, Date.UTC(2026, 3, 25, 2, 0, 0, 0));
 });
 
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {

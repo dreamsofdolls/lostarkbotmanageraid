@@ -13,7 +13,7 @@ const {
   releaseGuildClaim,
 } = require("./guild-state-claim");
 const { sleep } = require("../../../utils/async");
-const { toLocalClock } = require("../../../utils/raid/schedule/artist-clock");
+const { isDuringArtistSleep, toLocalClock } = require("../../../utils/raid/schedule/artist-clock");
 
 const MAINTENANCE_POST_RETRY_DELAY_MS = 1_000;
 
@@ -119,7 +119,7 @@ function createMaintenanceSchedulerService({
     const match = getMaintenanceSlotForNow(now);
     if (!match) return;
 
-    const { slot, group } = match;
+    const { slot, group, startMs } = match;
     const groupConfig = MAINTENANCE_GROUPS[group];
     if (!groupConfig) return;
 
@@ -143,6 +143,9 @@ function createMaintenanceSchedulerService({
       if (!channel) continue;
 
       const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
+      // The maintenance start decides: Artist posts nothing on her own while
+      // she sleeps on the guild's clock.
+      if (isDuringArtistSleep(startMs, guildLang)) continue;
       const content = pickMaintenanceVariant(slot.key, guildLang);
       if (!content) continue;
 

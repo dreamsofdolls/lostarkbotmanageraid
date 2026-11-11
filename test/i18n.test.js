@@ -228,15 +228,16 @@ test("Local Sync copy matches the signed-token lifecycle in every language", () 
 
 test("jp/en raid-channel schedule copy matches per-language quiet hours", () => {
   const enText = flattenStrings(TRANSLATIONS.en).join("\n");
-  assert.match(enText, /03:00-08:00 UTC/);
-  assert.match(enText, /03:00 UTC bedtime/);
-  assert.match(enText, /08:00 UTC wakeup/);
+  assert.match(enText, /02:00-09:00 UTC/);
+  assert.match(enText, /02:00 UTC bedtime/);
+  assert.match(enText, /09:00 UTC wakeup/);
+  assert.doesNotMatch(enText, /03:00-08:00 UTC|03:00 UTC bedtime|08:00 UTC wakeup/);
   assert.doesNotMatch(enText, /01:00-20:00|20:00-01:00|20:00 UTC bedtime|01:00 UTC wakeup/);
 
   const jpText = flattenStrings(TRANSLATIONS.jp).join("\n");
-  assert.match(jpText, /朝3時/);
-  assert.match(jpText, /朝8時/);
-  assert.doesNotMatch(jpText, /朝5時|朝10時|翌5時/);
+  assert.match(jpText, /朝2時/);
+  assert.match(jpText, /朝9時/);
+  assert.doesNotMatch(jpText, /朝3時|朝8時|朝5時|朝10時|翌5時/);
 });
 
 test("/raid-language names every supported language in each description", () => {

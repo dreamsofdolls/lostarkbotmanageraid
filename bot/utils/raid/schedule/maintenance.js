@@ -73,11 +73,12 @@ function nextMaintenanceStartMs(after = new Date()) {
 
 /**
  * Resolve which maintenance reminder slot (if any) matches the current
- * minute. Returns the matching slot + group ("early" or "countdown") or null
- * when off-cycle. Slot match is exact-minute by design (seconds are ignored);
- * the scheduler ticks every minute.
+ * minute. Returns the matching slot + group ("early" or "countdown") and the
+ * maintenance start it counts down to, or null when off-cycle. Slot match is
+ * exact-minute by design (seconds are ignored); the scheduler ticks every
+ * minute.
  * @param {Date} [now=new Date()] - test clock
- * @returns {{slot: object, group: "early"|"countdown"}|null}
+ * @returns {{slot: object, group: "early"|"countdown", startMs: number}|null}
  */
 function getMaintenanceSlotForNow(now = new Date()) {
   const nowMinuteMs = Math.floor(now.getTime() / MINUTE_MS) * MINUTE_MS;
@@ -88,14 +89,14 @@ function getMaintenanceSlotForNow(now = new Date()) {
     (slot) => slot.minutesBefore === minutesUntil
   );
   if (earlyMatch) {
-    return { slot: earlyMatch, group: "early" };
+    return { slot: earlyMatch, group: "early", startMs };
   }
 
   const countdownMatch = MAINTENANCE_COUNTDOWN_SLOTS.find(
     (slot) => slot.minutesBefore === minutesUntil
   );
   if (countdownMatch) {
-    return { slot: countdownMatch, group: "countdown" };
+    return { slot: countdownMatch, group: "countdown", startMs };
   }
 
   return null;

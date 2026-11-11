@@ -8,6 +8,7 @@ const {
   resolveWorldEventReminderForNow,
   worldEventReminderMessageKey,
 } = require("../../../utils/raid/schedule/world-events");
+const { isDuringArtistSleep } = require("../../../utils/raid/schedule/artist-clock");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const {
@@ -74,6 +75,9 @@ function createWorldEventReminderSchedulerService({
       const lang = await getGuildLanguage(cfg.guildId, {
         GuildConfigModel: GuildConfig,
       });
+      // The spawn decides, not the post time: a spawn at Artist's wake-up
+      // hour is still announced, one inside her sleep is not.
+      if (isDuringArtistSleep(reminder.spawnAtMs, lang)) continue;
       const content = buildWorldEventReminderContent({ reminder, lang, t });
 
       let claimed;

@@ -21,6 +21,7 @@ const {
   toPlainAssignedRaid,
 } = require("../../../utils/raid/common/character/assigned-raids");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
+const { isDuringArtistSleep } = require("../../../utils/raid/schedule/artist-clock");
 const {
   createNonOverlappingIntervalRunner,
 } = require("./scheduler-runner");
@@ -198,13 +199,21 @@ function isWithinWeeklyResetWindow(now = new Date()) {
  * WEEKLY_ANNOUNCEMENT_TTL_MS. Dedup per guild via
  * `GuildConfig.lastWeeklyAnnouncementKey` so a catch-up tick in the same
  * ISO week doesn't re-announce. Silent failure path - bot without
- * Send Messages perm or deleted channel just skips without throwing.
+ * Send Messages perm or deleted channel just skips without throwing. A guild
+ * where Artist is asleep on its clock is skipped unclaimed; only the tick that
+ * resets users calls this, so that post is dropped, like one missed in an
+ * outage.
+ * @param {object} client - Discord client
+ * @param {string} targetKey - reset key the announcement belongs to
+ * @param {object} [deps] - test seams, `nowDate` included
+ * @returns {Promise<void>}
  */
 async function postWeeklyResetAnnouncements(client, targetKey, {
   GuildConfigModel = GuildConfig,
   getGuildLanguageFn = getGuildLanguage,
   resolveGuildChannelFn = resolveGuildChannel,
   setTimeoutFn = setTimeout,
+  nowDate = () => new Date(),
 } = {}) {
   if (!client || !targetKey) return;
   let configs;
@@ -246,6 +255,14 @@ async function postWeeklyResetAnnouncements(client, targetKey, {
     let claimPrevious = null;
     let sentSuccessfully = false;
     try {
+      // Per-guild broadcast language - resolved once per guild per tick. JP/
+      // EN guilds opt their weekly-reset announcement into their voice via
+      // /raid-channel config action:set-language; legacy guilds without the
+      // field land on default "vi" through getGuildLanguage's fallback. It is
+      // read before the claim because Artist's sleep follows that clock.
+      const guildLang = await getGuildLanguageFn(cfg.guildId, { GuildConfigModel });
+      if (isDuringArtistSleep(nowDate(), guildLang)) continue;
+
       claimPrevious = await claimGuildState({
         GuildConfig: GuildConfigModel,
         guildId: cfg.guildId,
@@ -259,11 +276,6 @@ async function postWeeklyResetAnnouncements(client, targetKey, {
       });
       if (!claimPrevious) continue;
 
-      // Per-guild broadcast language - resolved once per guild per tick. JP/
-      // EN guilds opt their weekly-reset announcement into their voice via
-      // /raid-channel config action:set-language; legacy guilds without the
-      // field land on default "vi" through getGuildLanguage's fallback.
-      const guildLang = await getGuildLanguageFn(cfg.guildId, { GuildConfigModel });
       const sent = await channel.send({
         content: t("announcements.weekly-reset.body", guildLang),
       });

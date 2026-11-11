@@ -66,7 +66,7 @@ const guildConfigSchema = new mongoose.Schema(
     // ISO week produces a new key and the next tick posts again.
     lastWeeklyAnnouncementKey: { type: String, default: null },
     // Per-guild dedup key for the daily bedtime announcement. Uses
-    // `YYYY-MM-DD` in the VN calendar. Once the 03:00 greeting is posted,
+    // `YYYY-MM-DD` in the VN calendar. Once the bedtime greeting is posted,
     // subsequent quiet-hours ticks skip both the announcement and cleanup.
     lastArtistBedtimeKey: { type: String, default: null },
     // Per-guild dedup key for the daily wake-up announcement and morning
@@ -106,11 +106,11 @@ const guildConfigSchema = new mongoose.Schema(
           stuckPrivateLogNudge: createAnnouncementSetting({ channelOverridable: true }),
           setGreeting: createAnnouncementSetting(),
           hourlyCleanupNotice: createAnnouncementSetting(),
-          // The 03:00 VN bedtime greeting is channel-bound because it refers
+          // The bedtime greeting is channel-bound because it refers
           // to the monitor channel entering quiet hours. Disabling the
           // greeting does not disable quiet-hours cleanup suppression.
           artistBedtime: createAnnouncementSetting(),
-          // The 08:00 VN wake-up notice is channel-bound because it refers to
+          // The wake-up notice is channel-bound because it refers to
           // the monitor channel. Disabling the greeting does not disable the
           // morning catch-up cleanup.
           artistWakeup: createAnnouncementSetting(),

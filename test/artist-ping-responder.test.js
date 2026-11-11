@@ -119,12 +119,12 @@ test("the sleep window follows the guild's clock, not Vietnam's", () => {
       guildLang,
     });
 
-  // 18:30 UTC: 01:30 in Vietnam, 03:30 in Japan, the hour after jp bedtime.
+  // 18:30 UTC: 01:30 in Vietnam, before vi bedtime; 03:30 in Japan, after jp bedtime.
   const jpBedtime = Date.UTC(2026, 3, 23, 18, 30);
   assert.equal(replyAt(jpBedtime, "jp"), "artistPing.sleeping");
   assert.equal(replyAt(jpBedtime, "vi"), "artistPing.greeting");
-  // 23:30 UTC: 06:30 in Vietnam, 08:30 in Japan, after jp wake-up.
-  const jpMorning = Date.UTC(2026, 3, 23, 23, 30);
+  // 00:30 UTC: 07:30 in Vietnam, 09:30 in Japan, after jp wake-up.
+  const jpMorning = Date.UTC(2026, 3, 24, 0, 30);
   assert.equal(replyAt(jpMorning, "jp"), "artistPing.greeting");
   assert.equal(replyAt(jpMorning, "vi"), "artistPing.sleeping");
   assert.equal(replyAt(jpMorning, "en"), "artistPing.greeting");

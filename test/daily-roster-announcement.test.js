@@ -10,6 +10,8 @@ const {
 } = require("../bot/services/raid/schedulers/daily-roster-announcement");
 
 const TARGET_DAY_KEY = "2026-10-02";
+// 10:00 VN: a daytime clock, so Artist's sleep never decides these tests.
+const AWAKE_CLOCK = () => new Date("2026-10-03T03:00:00.000Z");
 
 function makeGuildConfigCursor(configs, findQueries = [], lifecycle = null) {
   return {
@@ -54,6 +56,7 @@ function makeService({
   GuildConfig,
   posts = [],
   postResult = { id: "message-1" },
+  nowDate = AWAKE_CLOCK,
 } = {}) {
   return createDailyRosterAnnouncementService({
     User,
@@ -65,6 +68,7 @@ function makeService({
       return postResult;
     },
     t: (key, lang, vars) => `${key}:${lang}:${JSON.stringify(vars)}`,
+    nowDate,
   });
 }
 
@@ -231,6 +235,7 @@ test("overlapping replicas claim once and post one aggregate completion", async 
       return { id: `message-${sends}` };
     },
     t: (key) => key,
+    nowDate: AWAKE_CLOCK,
   });
 
   await Promise.all([
@@ -413,4 +418,39 @@ test("the cleanup notice carries no report before every roster settles, after it
   assert.equal(await done.claimCleanupDigest({
     cfg: cleanupRider({ announcements: ownChannel }), lang: "vi", now: AFTER_TARGET_DAY,
   }), null);
+});
+
+test("daily roster report waits for Artist to wake up", async () => {
+  const userFixture = completeUser();
+  const claims = [];
+  const posts = [];
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: "channel-1",
+    lastDailyRosterSyncKey: null,
+    announcements: {
+      dailyRosterSync: { enabled: true, channelId: null },
+    },
+  };
+  const GuildConfig = makeGuildConfigCursor([cfg]);
+  GuildConfig.findOneAndUpdate = async (filter, update) => {
+    claims.push(update);
+    return { ...cfg };
+  };
+  const run = (iso) => makeService({
+    User: userFixture.model,
+    GuildConfig,
+    posts,
+    nowDate: () => new Date(iso),
+  }).notifyDailyRosterSync(makeClient(), { targetDayKey: TARGET_DAY_KEY });
+
+  const night = await run("2026-10-02T20:00:00.000Z"); // 03:00 VN
+  assert.equal(night.notifiedCount, 0);
+  assert.equal(claims.length, 0);
+  assert.equal(posts.length, 0);
+
+  const morning = await run("2026-10-03T02:00:00.000Z"); // 09:00 VN
+  assert.equal(morning.notifiedCount, 1);
+  assert.equal(claims.length, 1);
+  assert.equal(posts.length, 1);
 });

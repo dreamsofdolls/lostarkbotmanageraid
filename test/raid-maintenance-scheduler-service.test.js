@@ -116,3 +116,49 @@ test("maintenance scheduler retries once then releases a failed announcement cla
     options: { returnDocument: "after" },
   });
 });
+
+async function runMaintenanceTickFor(lang, now) {
+  const claims = [];
+  const posts = [];
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: null,
+    announcements: {
+      maintenanceEarly: { enabled: true, channelId: "override-1" },
+      maintenanceCountdown: { enabled: true, channelId: null },
+    },
+  };
+  const service = createMaintenanceSchedulerService({
+    GuildConfig: {
+      find: () => ({ lean: async () => [cfg] }),
+      findOneAndUpdate: async (filter, update) => {
+        claims.push({ filter, update });
+        return { ...cfg };
+      },
+    },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => lang,
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return { id: "message-1" };
+    },
+    nowDate: () => now,
+  });
+  await service.runMaintenanceTick({
+    guilds: { cache: new Map([["guild-1", makeGuild({})]]) },
+  });
+  return { claims, posts };
+}
+
+test("maintenance reminders skip an en guild whose maintenance start falls in Artist's sleep", async () => {
+  // Maintenance starts Wed 07:00 UTC (00:00 PDT): 07:00 on an en guild's clock, 14:00 VN.
+  const now = new Date(Date.UTC(2026, 3, 22, 4, 0, 0, 0)); // T-3h
+
+  const en = await runMaintenanceTickFor("en", now);
+  assert.equal(en.claims.length, 0);
+  assert.equal(en.posts.length, 0);
+
+  const vi = await runMaintenanceTickFor("vi", now);
+  assert.equal(vi.claims.length, 1);
+  assert.equal(vi.posts.length, 1);
+});

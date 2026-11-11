@@ -106,7 +106,7 @@ const ANNOUNCEMENT_REGISTRY = {
     subdocKey: "artistBedtime",
     channelOverridable: false,
     trigger: "Mỗi ngày lúc 3:00 VN (= 20:00 UTC hôm trước), tick đầu tiên sau boundary. Artist post embed ngủ nghỉ rồi quiet-hours bắt đầu.",
-    dedup: "1 post/VN calendar day/guild (`lastArtistBedtimeKey = 'YYYY-MM-DD'`). Tick 30 phút trong [3:00, 8:00) bỏ qua cả cleanup sweep lẫn notice.",
+    dedup: "1 post/VN calendar day/guild (`lastArtistBedtimeKey = 'YYYY-MM-DD'`). Tick 30 phút trong [2:00, 9:00) bỏ qua cả cleanup sweep lẫn notice.",
     messageTtl: "5 phút rồi Artist tự xóa",
     previewContent:
       "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì đâu. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này Artist cuỗm đi sau 5 phút, chúc cả nhà ngủ ngon~",

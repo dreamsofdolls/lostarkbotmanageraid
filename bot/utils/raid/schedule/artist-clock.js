@@ -8,11 +8,12 @@
 
 "use strict";
 
-const ARTIST_QUIET_START_HOUR_VN = 3;
-const ARTIST_QUIET_END_HOUR_VN = 8;
+const ARTIST_QUIET_START_HOUR_VN = 2;
+const ARTIST_QUIET_END_HOUR_VN = 9;
 
 // Per-locale offset from UTC, in minutes, for bedtime and wake-up schedulers.
-// Bedtime fires at 03:00 local time and wake-up fires at 08:00 local time.
+// Bedtime fires at ARTIST_QUIET_START_HOUR_VN and wake-up at
+// ARTIST_QUIET_END_HOUR_VN, both on the locale's clock.
 const LANG_TZ_OFFSET_MINUTES = {
   vi: 7 * 60,
   jp: 9 * 60,
@@ -70,7 +71,8 @@ function isInArtistQuietHours(now = new Date()) {
 /**
  * Whether `now` falls inside the configured quiet-hours window in the viewer's
  * local time. Quiet-hours suppress cleanup sweeps + 30-min notices so
- * the channel stays silent overnight (3am-8am local).
+ * the channel stays silent overnight, from the bedtime hour through the
+ * minute before the wake-up hour.
  * @param {Date} [now=new Date()] - test clock
  * @param {string} lang - viewer language (drives tz offset)
  * @returns {boolean}
@@ -78,6 +80,22 @@ function isInArtistQuietHours(now = new Date()) {
 function isInArtistQuietHoursForLang(now = new Date(), lang) {
   const hour = getCurrentHourForLang(now, lang);
   return hour >= ARTIST_QUIET_START_HOUR_VN && hour < ARTIST_QUIET_END_HOUR_VN;
+}
+
+/**
+ * Whether Artist is asleep at this moment on the guild language's clock, for
+ * posts she would make on her own. The bedtime and wake-up minutes count as
+ * awake, so an item at bedtime is her last post and one at wake-up her first.
+ * @param {Date|number} instant - the moment the post is about: a spawn, a
+ *   maintenance start, or the post itself
+ * @param {string} lang - guild language (drives the tz offset)
+ * @returns {boolean} true strictly between bedtime and wake-up
+ */
+function isDuringArtistSleep(instant, lang) {
+  const local = toLocalClock(new Date(instant), lang);
+  const minuteOfDay = local.getUTCHours() * 60 + local.getUTCMinutes();
+  return minuteOfDay > ARTIST_QUIET_START_HOUR_VN * 60
+    && minuteOfDay < ARTIST_QUIET_END_HOUR_VN * 60;
 }
 
 /**
@@ -115,6 +133,7 @@ module.exports = {
   formatStartShortForLang,
   isInArtistQuietHours,
   isInArtistQuietHoursForLang,
+  isDuringArtistSleep,
   hasReachedArtistWakeupBoundary,
   hasReachedArtistWakeupBoundaryForLang,
 };
