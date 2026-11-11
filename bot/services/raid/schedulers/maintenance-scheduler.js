@@ -120,8 +120,8 @@ function createMaintenanceSchedulerService({
     if (!match) return;
 
     const { slot, group, startMs } = match;
+    // getMaintenanceSlotForNow names only the groups keyed here.
     const groupConfig = MAINTENANCE_GROUPS[group];
-    if (!groupConfig) return;
 
     const tickKey = maintenanceTickKey(now, slot);
     let configs;
@@ -131,7 +131,6 @@ function createMaintenanceSchedulerService({
       console.error("[maintenance] config load failed:", err?.message || err);
       return;
     }
-    if (!configs.length) return;
 
     for (const cfg of configs) {
       const announcements = getAnnouncementsConfig(cfg);

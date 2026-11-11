@@ -19,6 +19,12 @@ const {
 } = require("./view-refresh-commit");
 const { toPlainUserDoc, hasRosterAccounts } = require("../../utils/user-doc");
 
+// Whether a view load also gathers Auto Sync logs: the caller allows it, the
+// user has Auto Sync on, and the last attempt is stale.
+function wantsAutoManagePiggyback(seedDoc, allowAutoManage) {
+  return Boolean(allowAutoManage && seedDoc.autoManageEnabled && isAutoManageAttemptStale(seedDoc));
+}
+
 /**
  * Build the view-snapshot service.
  * @param {object} deps - injected dependencies
@@ -48,9 +54,10 @@ function createRaidViewSnapshotService({
   log = console,
 }) {
   if (!User) throw new Error("[raid-view-snapshot] User model required");
-  if (typeof saveWithRetry !== "function") throw new Error("[raid-view-snapshot] saveWithRetry required");
-  if (typeof ensureFreshWeek !== "function") throw new Error("[raid-view-snapshot] ensureFreshWeek required");
-  if (typeof getTargetResetKey !== "function") throw new Error("[raid-view-snapshot] getTargetResetKey required");
+  // The function dependencies are checked in this order; the first missing one is named.
+  for (const [name, dependency] of Object.entries({ saveWithRetry, ensureFreshWeek, getTargetResetKey })) {
+    if (typeof dependency !== "function") throw new Error(`[raid-view-snapshot] ${name} required`);
+  }
 
   async function loadFreshUserSnapshotForRaidViews(
     seedDoc,
@@ -83,11 +90,7 @@ function createRaidViewSnapshotService({
     try {
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
-      if (
-        allowAutoManage &&
-        seedDoc.autoManageEnabled &&
-        isAutoManageAttemptStale(seedDoc)
-      ) {
+      if (wantsAutoManagePiggyback(seedDoc, allowAutoManage)) {
         autoManageGuard = await acquireAutoManageSyncSlot(discordId);
         if (autoManageGuard.acquired) {
           autoManageWeekResetStart = weekResetStartMs();
@@ -138,25 +141,17 @@ function createRaidViewSnapshotService({
     }
   }
 
+  // Ordered checks where the first that applies decides. Each reads a different
+  // fact and the answers alternate, so they stay plain returns, not a rules table.
   function shouldLoadFreshUserSnapshotForRaidViews(
     seedDoc,
     { allowAutoManage = true } = {}
   ) {
     if (!seedDoc?.discordId) return false;
     if (seedDoc.weeklyResetKey !== getTargetResetKey()) return true;
-    const hasRoster = hasRosterAccounts(seedDoc);
-    if (!hasRoster) return false;
-    if (
-      typeof hasStaleAccountRefreshes === "function" &&
-      hasStaleAccountRefreshes(seedDoc)
-    ) {
-      return true;
-    }
-    return Boolean(
-      allowAutoManage &&
-        seedDoc.autoManageEnabled &&
-        isAutoManageAttemptStale(seedDoc)
-    );
+    if (!hasRosterAccounts(seedDoc)) return false;
+    if (typeof hasStaleAccountRefreshes === "function" && hasStaleAccountRefreshes(seedDoc)) return true;
+    return wantsAutoManagePiggyback(seedDoc, allowAutoManage);
   }
 
   return {

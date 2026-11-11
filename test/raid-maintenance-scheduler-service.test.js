@@ -66,6 +66,42 @@ test("maintenance scheduler claims the matching group and posts to override chan
   assert.equal(posts[0][3], "maintenance T-3h");
 });
 
+test("maintenance scheduler claims and posts a countdown slot under the countdown keys", async () => {
+  const now = new Date(Date.UTC(2026, 3, 22, 6, 45, 0, 0)); // Wed 13:45 VN = T-15m
+  const claims = [];
+  const posts = [];
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: null,
+    announcements: {
+      maintenanceEarly: { enabled: true, channelId: null },
+      maintenanceCountdown: { enabled: true, channelId: "override-1" },
+    },
+  };
+  const service = createMaintenanceSchedulerService({
+    GuildConfig: {
+      find: () => ({ lean: async () => [cfg] }),
+      findOneAndUpdate: async (filter, update) => {
+        claims.push({ filter, update });
+        return { ...cfg };
+      },
+    },
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => "vi",
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return { id: "message-1" };
+    },
+    nowDate: () => now,
+  });
+
+  await service.runMaintenanceTick({ guilds: { cache: new Map([["guild-1", makeGuild({})]]) } });
+
+  assert.deepEqual(claims.map((claim) => claim.update.$set), [{ lastMaintenanceCountdownKey: "2026-04-22:T-15m" }]);
+  assert.deepEqual(claims[0].filter["announcements.maintenanceCountdown.enabled"], { $ne: false });
+  assert.deepEqual(posts.map((args) => args[3]), ["maintenance T-15m"]);
+});
+
 test("maintenance scheduler retries once then releases a failed announcement claim", async () => {
   const now = new Date(Date.UTC(2026, 3, 22, 4, 0, 0, 0));
   const mutations = [];
