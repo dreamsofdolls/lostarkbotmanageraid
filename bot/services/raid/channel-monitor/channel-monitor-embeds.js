@@ -82,6 +82,22 @@ function collectReceiptOutcomes(resultGroups) {
   return { byCharacter, counts, writtenCharacterCount, notFoundNames: uniqueNames(notFoundNames) };
 }
 
+// Locale keys of the receipt, by whether the post reset raids or recorded clears.
+const RECEIPT_COPY = Object.freeze({
+  reset: Object.freeze({
+    title: "text-parser.raidResetTitle",
+    written: "text-parser.raidResetDescription",
+    tailAlready: "text-parser.tailAlreadyReset",
+    nothingNew: "text-parser.raidResetNothing",
+  }),
+  update: Object.freeze({
+    title: "text-parser.raidUpdateTitle",
+    written: "text-parser.raidUpdateDescription",
+    tailAlready: "text-parser.tailAlready",
+    nothingNew: "text-parser.raidUpdateNothingNew",
+  }),
+});
+
 function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
   function resolveReceiptStyle(counts, notFoundCount, isReset) {
     if (counts.ineligible + counts.errored + notFoundCount > 0) {
@@ -92,21 +108,21 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
     return { icon: UI.icons.info, color: UI.colors.neutral };
   }
 
-  function buildReceiptDescription({ text, counts, writtenCharacterCount, notFoundNames, isReset, lang }) {
+  function buildReceiptDescription({ text, counts, writtenCharacterCount, notFoundNames, copy, lang }) {
     const lines = [t("text-parser.receiptLine", lang, { text: formatReceiptText(text) })];
     if (counts.updated > 0) {
-      lines.push(tPick(isReset ? "text-parser.raidResetDescription" : "text-parser.raidUpdateDescription", lang, {
+      lines.push(tPick(copy.written, lang, {
         raids: counts.updated,
         count: writtenCharacterCount,
       }));
       if (counts.already > 0) {
-        lines.push(t(isReset ? "text-parser.tailAlreadyReset" : "text-parser.tailAlready", lang, {
+        lines.push(t(copy.tailAlready, lang, {
           icon: UI.icons.info,
           n: counts.already,
         }));
       }
     } else if (counts.already > 0) {
-      lines.push(tPick(isReset ? "text-parser.raidResetNothing" : "text-parser.raidUpdateNothingNew", lang));
+      lines.push(tPick(copy.nothingNew, lang));
     }
     if (counts.ineligible > 0) lines.push(t("text-parser.tailIneligible", lang, { icon: UI.icons.warn, n: counts.ineligible }));
     if (counts.errored > 0) lines.push(t("text-parser.tailErrored", lang, { icon: UI.icons.warn, n: counts.errored }));
@@ -201,10 +217,11 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
     const isReset = resultGroups[0].statusType === "reset";
     const { byCharacter, counts, writtenCharacterCount, notFoundNames } = collectReceiptOutcomes(resultGroups);
     const style = resolveReceiptStyle(counts, notFoundNames.length, isReset);
+    const copy = isReset ? RECEIPT_COPY.reset : RECEIPT_COPY.update;
     const embed = new EmbedBuilder()
       .setColor(style.color)
-      .setTitle(`${style.icon} ${t(isReset ? "text-parser.raidResetTitle" : "text-parser.raidUpdateTitle", lang)}`)
-      .setDescription(buildReceiptDescription({ text, counts, writtenCharacterCount, notFoundNames, isReset, lang }))
+      .setTitle(`${style.icon} ${t(copy.title, lang)}`)
+      .setDescription(buildReceiptDescription({ text, counts, writtenCharacterCount, notFoundNames, copy, lang }))
       .setTimestamp();
     const fields = buildReceiptFields(accounts, byCharacter, { afterWrite, isReset, lang });
     if (fields.length > 0) embed.addFields(fields);

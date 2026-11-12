@@ -340,3 +340,32 @@ test("a done post's rows use the mode the writer found for each character", () =
   assert.equal(card("Qiaoli"), `${UI.icons.done} Kazeros Normal`);
   assert.equal(card("Bori"), `${UI.icons.warn} Kazeros Hard · _cần 1730+_`);
 });
+
+// Every line a locale entry can render with these values (one line, or each of its variants).
+function pooledLines(key, values) {
+  const entry = TRANSLATIONS.vi["text-parser"][key];
+  return (entry.variants || [entry]).map((line) => Object.entries(values)
+    .reduce((text, [name, value]) => text.replaceAll(`{${name}}`, String(value)), line));
+}
+
+test("the written and already lines follow whether the post reset or recorded", () => {
+  const sercaHard = (name, className) => character(name, className, 1742, { serca: { modeKey: "hard" } });
+  const reset = receipt({
+    text: "serca reset Qiaoli Melody",
+    resultGroups: [group(RESET_SERCA, [
+      written("Qiaoli"),
+      { charName: "melody", displayName: "Melody", matched: true, alreadyReset: true },
+    ], "reset")],
+    accounts: [account("Qiaoli", [sercaHard("Qiaoli", "Aeromancer"), sercaHard("Melody", "Bard")])],
+  }).description.split("\n");
+  const update = receipt({
+    text: "act4, final solo Qiaoli",
+    resultGroups: [group(SOLO[0], [written("Qiaoli")]), group(SOLO[1], [already("Qiaoli")])],
+    accounts: [account("Qiaoli", [soloQiaoli()])],
+  }).description.split("\n");
+
+  assert.ok(pooledLines("raidResetDescription", { raids: 1, count: 1 }).includes(reset[1]), reset[1]);
+  assert.deepEqual([reset[2]], pooledLines("tailAlreadyReset", { icon: UI.icons.info, n: 1 }));
+  assert.ok(pooledLines("raidUpdateDescription", { raids: 1, count: 1 }).includes(update[1]), update[1]);
+  assert.deepEqual([update[2]], pooledLines("tailAlready", { icon: UI.icons.info, n: 1 }));
+});
