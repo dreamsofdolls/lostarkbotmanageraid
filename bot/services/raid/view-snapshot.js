@@ -61,6 +61,16 @@ function createRaidViewSnapshotService({
     if (typeof dependency !== "function") throw new Error(`[raid-view-snapshot] ${name} required`);
   }
 
+  // A user without a roster has nothing to refresh; only the new week is saved.
+  function saveFreshWeek(discordId) {
+    return saveWithRetry(async () => {
+      const doc = await User.findOne({ discordId });
+      if (!doc) return null;
+      if (ensureFreshWeek(doc)) await doc.save();
+      return doc.toObject();
+    });
+  }
+
   async function loadFreshUserSnapshotForRaidViews(
     seedDoc,
     { allowAutoManage = true, logLabel = "[raid-status]" } = {}
@@ -71,25 +81,13 @@ function createRaidViewSnapshotService({
 
     const hasRoster = hasRosterAccounts(seedDoc);
     const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
-
-    if (!hasRoster) {
-      if (!didFreshenSeedWeek) return toPlainUserDoc(seedDoc);
-      try {
-        return await saveWithRetry(async () => {
-          const doc = await User.findOne({ discordId });
-          if (!doc) return null;
-          const didFreshenWeek = ensureFreshWeek(doc);
-          if (didFreshenWeek) await doc.save();
-          return doc.toObject();
-        });
-      } catch (err) {
-        log.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
-        return await User.findOne({ discordId }).lean();
-      }
-    }
+    if (!hasRoster && !didFreshenSeedWeek) return toPlainUserDoc(seedDoc);
 
     let autoManageGuard = NO_SYNC_SLOT;
     try {
+      // Awaited so a failed save falls back like a failed refresh below.
+      if (!hasRoster) return await saveFreshWeek(discordId);
+
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
       if (wantsAutoManagePiggyback(seedDoc, allowAutoManage)) {

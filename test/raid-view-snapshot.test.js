@@ -98,3 +98,62 @@ test("raid-view-snapshot releases a held piggyback slot through its handle, also
   await service.loadFreshUserSnapshotForRaidViews(userDoc(STALE_SYNC));
   assert.deepEqual({ releases, stamps }, { releases: 1, stamps: 1 });
 });
+
+// The stored copy a failed load falls back to, and the errors it logged.
+function failingStore() {
+  const stored = { discordId: "user-1", stored: true };
+  const errors = [];
+  return {
+    stored,
+    errors,
+    deps: {
+      User: { findOne: () => ({ lean: async () => stored }) },
+      log: { error: (...args) => errors.push(args), warn() {} },
+    },
+  };
+}
+
+test("raid-view-snapshot saves a new week for a user without a roster and answers with the saved copy", async () => {
+  let saves = 0;
+  const freshDoc = { save: async () => { saves += 1; }, toObject: () => ({ saved: true }) };
+  const { service } = makeService({
+    ensureFreshWeek: () => true,
+    User: { findOne: async () => freshDoc },
+  });
+
+  const snapshot = await service.loadFreshUserSnapshotForRaidViews(userDoc({ accounts: [] }));
+
+  assert.deepEqual(snapshot, { saved: true });
+  assert.equal(saves, 1);
+});
+
+test("raid-view-snapshot answers with the stored copy and logs when a load fails, with or without a roster", async () => {
+  const cases = [
+    ["no roster, the week save fails", userDoc({ accounts: [] }), { ensureFreshWeek: () => true, saveWithRetry: async () => { throw new Error("db busy"); } }, "db busy"],
+    ["a roster refresh fails", userDoc(), { collectStaleAccountRefreshes: async () => { throw new Error("bible down"); } }, "bible down"],
+  ];
+  for (const [name, doc, deps, message] of cases) {
+    const store = failingStore();
+    const { service } = makeService({ ...store.deps, ...deps });
+
+    const snapshot = await service.loadFreshUserSnapshotForRaidViews(doc);
+
+    assert.strictEqual(snapshot, store.stored, name);
+    assert.deepEqual(store.errors, [["[raid-status] refresh failed for user-1:", message]], name);
+  }
+});
+
+test("raid-view-snapshot stamps the attempt of a held slot before reading the stored copy, then releases", async () => {
+  const events = [];
+  const { service } = makeService({
+    User: { findOne: () => ({ lean: async () => { events.push("read"); return {}; } }) },
+    log: { error: () => events.push("log"), warn() {} },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true, release: () => events.push("release") }),
+    collectStaleAccountRefreshes: async () => { throw new Error("bible down"); },
+    stampAutoManageAttempt: async () => { events.push("stamp"); },
+  });
+
+  await service.loadFreshUserSnapshotForRaidViews(userDoc(STALE_SYNC));
+
+  assert.deepEqual(events, ["log", "stamp", "read", "release"]);
+});

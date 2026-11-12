@@ -18,24 +18,31 @@ function addPendingRole(tally, isSupport) {
   }
 }
 
+/**
+ * The value a Map or WeakMap holds under `key`, made and stored on first use.
+ * @param {Map|WeakMap} map
+ * @param {*} key
+ * @param {Function} create - () => the value to store
+ * @returns {*} the stored value
+ */
+function getOrCreate(map, key, create) {
+  if (!map.has(key)) map.set(key, create());
+  return map.get(key);
+}
+
 function getRaidEntry({ perRaidPending, raid, lang }) {
   const key = `${raid.raidKey}:${raid.modeKey}`;
-  let entry = perRaidPending.get(key);
-  if (!entry) {
-    entry = {
-      key,
-      label: getRaidModeLabel(raid.raidKey, raid.modeKey, lang),
-      // raidKey/modeKey kept so the raid dropdown can sort by canonical
-      // progression order (compareRaidModeOrder) instead of pending count.
-      raidKey: raid.raidKey,
-      modeKey: raid.modeKey,
-      pending: 0,
-      supports: 0,
-      dps: 0,
-    };
-    perRaidPending.set(key, entry);
-  }
-  return entry;
+  return getOrCreate(perRaidPending, key, () => ({
+    key,
+    label: getRaidModeLabel(raid.raidKey, raid.modeKey, lang),
+    // raidKey/modeKey kept so the raid dropdown can sort by canonical
+    // progression order (compareRaidModeOrder) instead of pending count.
+    raidKey: raid.raidKey,
+    modeKey: raid.modeKey,
+    pending: 0,
+    supports: 0,
+    dps: 0,
+  }));
 }
 
 /**
@@ -54,14 +61,8 @@ function createAllModePendingAggregateCache({
   let characterRaidsCache = new WeakMap();
   let pendingIndex = null;
 
-  const getCachedRaidsForCharacter = (character) => {
-    if (characterRaidsCache.has(character)) {
-      return characterRaidsCache.get(character);
-    }
-    const raids = getStatusRaidsForCharacter(character);
-    characterRaidsCache.set(character, raids);
-    return raids;
-  };
+  const getCachedRaidsForCharacter = (character) =>
+    getOrCreate(characterRaidsCache, character, () => getStatusRaidsForCharacter(character));
 
   const buildPendingIndex = () => {
     if (pendingIndex) return pendingIndex;
@@ -76,11 +77,7 @@ function createAllModePendingAggregateCache({
       const discordId = page?.userDoc?.discordId;
       if (!discordId) continue;
 
-      let userRaidKeys = raidKeysByUser.get(discordId);
-      if (!userRaidKeys) {
-        userRaidKeys = new Set();
-        raidKeysByUser.set(discordId, userRaidKeys);
-      }
+      const userRaidKeys = getOrCreate(raidKeysByUser, discordId, () => new Set());
 
       const chars = Array.isArray(page?.account?.characters)
         ? page.account.characters
@@ -96,24 +93,9 @@ function createAllModePendingAggregateCache({
           userRaidKeys.add(raidEntry.key);
           if (raid.isCompleted) continue;
 
-          let userEntry = perUserPending.get(discordId);
-          if (!userEntry) {
-            userEntry = createRoleTally();
-            perUserPending.set(discordId, userEntry);
-          }
-          addPendingRole(userEntry, charIsSupport);
-
-          let userRaidMap = pendingByUserRaid.get(discordId);
-          if (!userRaidMap) {
-            userRaidMap = new Map();
-            pendingByUserRaid.set(discordId, userRaidMap);
-          }
-          let userRaidEntry = userRaidMap.get(raidEntry.key);
-          if (!userRaidEntry) {
-            userRaidEntry = createRoleTally();
-            userRaidMap.set(raidEntry.key, userRaidEntry);
-          }
-          addPendingRole(userRaidEntry, charIsSupport);
+          addPendingRole(getOrCreate(perUserPending, discordId, createRoleTally), charIsSupport);
+          const userRaidMap = getOrCreate(pendingByUserRaid, discordId, () => new Map());
+          addPendingRole(getOrCreate(userRaidMap, raidEntry.key, createRoleTally), charIsSupport);
 
           raidEntry.pending += 1;
           if (charIsSupport) raidEntry.supports += 1;
@@ -197,14 +179,11 @@ function createAllModePendingAggregateCache({
     return { perUserPending, perRaidPending, totalPending };
   };
 
-  const compute = ({ raidFilter = null, userFilter = null } = {}) => {
-    const cacheKey = JSON.stringify([raidFilter, userFilter]);
-    if (aggregateCache.has(cacheKey)) return aggregateCache.get(cacheKey);
-
-    const aggregate = computeFromIndex({ raidFilter, userFilter });
-    aggregateCache.set(cacheKey, aggregate);
-    return aggregate;
-  };
+  const compute = ({ raidFilter = null, userFilter = null } = {}) => getOrCreate(
+    aggregateCache,
+    JSON.stringify([raidFilter, userFilter]),
+    () => computeFromIndex({ raidFilter, userFilter })
+  );
 
   const clear = (discordId = null) => {
     aggregateCache.clear();

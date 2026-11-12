@@ -227,6 +227,22 @@ test("raid-check all-mode aggregate scopes raid dropdown counts by active user f
   assert.equal(aggregate.perRaidPending.has("serca:hard"), false);
 });
 
+test("raid-check all-mode aggregate user filter keeps the raids of every roster the user has", () => {
+  // Each roster of a user is its own page.
+  const aggregate = computePendingAggregate({
+    pagesData: [
+      createPage("user-a", [{ class: "Slayer", itemLevel: 1730, raids: [raid("act4", "normal")] }]),
+      createPage("user-a", [{ class: "Bard", itemLevel: 1730, raids: [raid("serca", "hard")] }]),
+    ],
+    userFilter: "user-a",
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+
+  assert.deepEqual([...aggregate.perRaidPending.keys()].sort(), ["act4:normal", "serca:hard"]);
+  assert.equal(aggregate.totalPending, 2);
+});
+
 test("raid-check all-mode aggregate excludes raids that do not receive gold", () => {
   const aggregate = computePendingAggregate({
     pagesData: [
