@@ -99,20 +99,6 @@ function isDuringArtistSleep(instant, lang) {
     && minuteOfDay < ARTIST_QUIET_END_HOUR_VN * 60;
 }
 
-/**
- * Plain-text "DD/MM HH:mm" of an instant in the viewer's language tz. For
- * select-option descriptions, where Discord does not render `<t:..>` markup.
- * Uses the same fixed local format that parseStartTime accepts as input.
- * @param {Date|number|string} date - the instant (UTC)
- * @param {string} lang - viewer language (drives the tz offset)
- * @returns {string} e.g. "03/06 21:00"
- */
-function formatStartShortForLang(date, lang) {
-  const local = toLocalClock(new Date(date), lang);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
-}
-
 function hasReachedArtistWakeupBoundary(now = new Date()) {
   return hasReachedArtistWakeupBoundaryForLang(now, "vi");
 }
@@ -130,8 +116,6 @@ module.exports = {
   getTargetVNDayKey,
   getTargetDayKeyForLang,
   getCurrentVNHour,
-  getCurrentHourForLang,
-  formatStartShortForLang,
   isInArtistQuietHours,
   isInArtistQuietHoursForLang,
   isDuringArtistSleep,

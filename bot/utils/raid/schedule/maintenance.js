@@ -166,7 +166,6 @@ module.exports = {
   MAINTENANCE_HOUR,
   MAINTENANCE_MINUTE,
   MAINTENANCE_TICK_MS,
-  nextMaintenanceStartMs,
   getMaintenanceSlotForNow,
   pickMaintenanceVariant,
   buildMaintenancePreview,

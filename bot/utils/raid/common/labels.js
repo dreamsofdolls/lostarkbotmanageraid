@@ -59,7 +59,6 @@ function getRaidModeLabel(raidKey, modeKey, lang) {
 
 module.exports = {
   getRaidLabel,
-  getModeLabel,
   getRaidModeLabel,
   getRaidSpecificModeLabel,
 };
