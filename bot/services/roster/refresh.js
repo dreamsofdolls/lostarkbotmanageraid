@@ -58,6 +58,43 @@ function getErrorMessage(err) {
  *   applyStaleAccountRefreshes: Function,
  * }}
  */
+/**
+ * Logs why the seeds of one roster gave no refresh: seeds whose roster shared
+ * no saved character, an abort on a Bible 429, and the first seed failures.
+ * @param {object} outcome
+ * @param {string} outcome.accountName - roster name; may be empty
+ * @param {number} outcome.zeroOverlapCount - seeds whose roster shared no saved character
+ * @param {Array<{seed: string, message: string}>} outcome.seedFailures
+ * @param {boolean} outcome.rateLimitedAbort - the seed loop stopped on a 429
+ * @param {boolean} outcome.rateLimitedAbortSuppressed - the 429 was a backoff
+ *   rejection the Bible limiter already logged
+ * @returns {void}
+ */
+function warnRefreshSeedOutcome({
+  accountName,
+  zeroOverlapCount,
+  seedFailures,
+  rateLimitedAbort,
+  rateLimitedAbortSuppressed,
+}) {
+  const roster = `account "${accountName || "(unnamed roster)"}"`;
+  if (zeroOverlapCount > 0) {
+    console.warn(`[refresh] ${roster} skipped ${zeroOverlapCount} seed(s) with zero overlap - refresh not applied.`);
+  }
+  if (rateLimitedAbort && !rateLimitedAbortSuppressed) {
+    console.warn(`[refresh] ${roster} aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`);
+  }
+  const otherFailures = seedFailures.filter((entry) => !isBibleRateLimitError(entry.message));
+  for (const entry of otherFailures.slice(0, REFRESH_SEED_FAILURE_DETAIL_LIMIT)) {
+    console.warn(`[refresh] seed "${entry.seed}" failed: ${entry.message}`);
+  }
+  if (otherFailures.length > REFRESH_SEED_FAILURE_DETAIL_LIMIT) {
+    console.warn(
+      `[refresh] ${roster} ${otherFailures.length - REFRESH_SEED_FAILURE_DETAIL_LIMIT} additional seed failure(s) suppressed.`
+    );
+  }
+}
+
 function createRosterRefreshService(deps) {
   const {
     normalizeName,
@@ -246,28 +283,13 @@ function createRosterRefreshService(deps) {
       }
     }
 
-    if (zeroOverlapCount > 0) {
-      console.warn(
-        `[refresh] account "${originalName || "(unnamed roster)"}" skipped ${zeroOverlapCount} seed(s) with zero overlap - refresh not applied.`
-      );
-    }
-    if (seedFailures.length > 0) {
-      const otherFailures = seedFailures.filter((entry) => !isBibleRateLimitError(entry.message));
-      // A backoff rejection was already logged once by the Bible limiter.
-      if (rateLimitedAbort && !rateLimitedAbortSuppressed) {
-        console.warn(
-          `[refresh] account "${originalName || "(unnamed roster)"}" aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`
-        );
-      }
-      for (const entry of otherFailures.slice(0, REFRESH_SEED_FAILURE_DETAIL_LIMIT)) {
-        console.warn(`[refresh] seed "${entry.seed}" failed: ${entry.message}`);
-      }
-      if (otherFailures.length > REFRESH_SEED_FAILURE_DETAIL_LIMIT) {
-        console.warn(
-          `[refresh] account "${originalName || "(unnamed roster)"}" ${otherFailures.length - REFRESH_SEED_FAILURE_DETAIL_LIMIT} additional seed failure(s) suppressed.`
-        );
-      }
-    }
+    warnRefreshSeedOutcome({
+      accountName: originalName,
+      zeroOverlapCount,
+      seedFailures,
+      rateLimitedAbort,
+      rateLimitedAbortSuppressed,
+    });
 
     // Bible answers an unknown character with an empty roster page, so every
     // seed coming back empty without an error means the roster is gone.
@@ -377,6 +399,85 @@ function createRosterRefreshService(deps) {
     if (match.className) character.class = match.className;
   }
 
+  /**
+   * Pairs each saved character with its fetched copy by name and updates it.
+   * @param {object} account - saved account, changed in place
+   * @param {object} fetchedIndexes - from buildFetchedRosterIndexes
+   * @returns {{claimed: Set<object>, unmatched: object[]}} fetched characters
+   *   now paired, and saved characters left without a pair
+   */
+  function pairSavedCharacters(account, fetchedIndexes) {
+    // A rename found by character id never takes a claimed character, so a
+    // renamed character the user re-added by hand is not renamed over.
+    const claimed = new Set();
+    const unmatched = [];
+    for (const character of account.characters || []) {
+      const matchInfo = findFetchedRosterMatchForCharacter(character, fetchedIndexes);
+      if (!matchInfo || foldedMatchContradictsCid(matchInfo, character)) {
+        unmatched.push(character);
+        continue;
+      }
+
+      const match = matchInfo.match;
+      claimed.add(match);
+      const currentName = getCharacterName(character);
+      if (match.charName && currentName !== match.charName) {
+        character.name = match.charName;
+        character.bibleSerial = null;
+        character.bibleCid = null;
+        character.bibleRid = null;
+      }
+      // A differing saved id is kept: the name match stays authoritative,
+      // and Auto Sync re-resolves ids that no longer fit.
+      if (match.cid && !character.bibleCid) character.bibleCid = match.cid;
+      applyFetchedDisplayFields(character, match);
+    }
+    return { claimed, unmatched };
+  }
+
+  /**
+   * Renames saved characters whose name left the roster: lostark.bible keeps
+   * a character's id through a rename, so each follows its id to the new
+   * name. Bible ids, raids, tasks and settings stay as they are.
+   * @param {object} account - saved account, changed in place
+   * @param {object[]} unmatched - saved characters with no name match
+   * @param {object} fetchedIndexes - from buildFetchedRosterIndexes
+   * @param {Set<object>} claimed - fetched characters already paired; grows
+   * @param {number} now - rename time
+   * @returns {void}
+   */
+  function followRenamesById(account, unmatched, fetchedIndexes, claimed, now) {
+    for (const character of unmatched) {
+      const match = fetchedIndexes.byCid.get(character.bibleCid);
+      if (!match || claimed.has(match)) continue;
+      claimed.add(match);
+      console.log(
+        `[refresh] account "${account.accountName}": "${getCharacterName(character)}" is now "${match.charName}" on lostark.bible (same character id), renamed in place.`
+      );
+      character.renamedFrom = getCharacterName(character);
+      character.renamedAt = now;
+      character.name = match.charName;
+      applyFetchedDisplayFields(character, match);
+    }
+  }
+
+  /**
+   * Renames the roster to the seed that found it, unless another roster of
+   * the user already has that name.
+   * @param {object} account - saved account, changed in place
+   * @param {?string} resolvedSeed - seed name from the collect step
+   * @param {Map<string, number>} accountNameCounts - kept in step with renames
+   * @returns {void}
+   */
+  function adoptResolvedSeedName(account, resolvedSeed, accountNameCounts) {
+    if (!resolvedSeed || account.accountName === resolvedSeed) return;
+    const normalizedSeed = normalizeName(resolvedSeed);
+    if (hasOtherAccountWithName(accountNameCounts, account, normalizedSeed)) return;
+    const previousName = normalizeName(account.accountName);
+    account.accountName = resolvedSeed;
+    moveAccountNameCount(accountNameCounts, previousName, normalizedSeed);
+  }
+
   function applyStaleAccountRefreshes(userDoc, collected) {
     if (!hasRosterAccounts(userDoc)) {
       return false;
@@ -406,48 +507,8 @@ function createRosterRefreshService(deps) {
       if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
       const fetchedIndexes = buildFetchedRosterIndexes(fetched);
-      // Fetched characters already paired with a saved one. A rename found by
-      // character id never takes one of these, so a renamed character the
-      // user re-added by hand is not renamed over.
-      const claimed = new Set();
-      const unmatched = [];
-      for (const character of account.characters || []) {
-        const matchInfo = findFetchedRosterMatchForCharacter(character, fetchedIndexes);
-        if (!matchInfo || foldedMatchContradictsCid(matchInfo, character)) {
-          unmatched.push(character);
-          continue;
-        }
-
-        const match = matchInfo.match;
-        claimed.add(match);
-        const currentName = getCharacterName(character);
-        if (match.charName && currentName !== match.charName) {
-          character.name = match.charName;
-          character.bibleSerial = null;
-          character.bibleCid = null;
-          character.bibleRid = null;
-        }
-        // A differing saved id is kept: the name match stays authoritative,
-        // and Auto Sync re-resolves ids that no longer fit.
-        if (match.cid && !character.bibleCid) character.bibleCid = match.cid;
-        applyFetchedDisplayFields(character, match);
-      }
-
-      // lostark.bible keeps a character's id through a rename, so a saved
-      // character whose name left the roster follows its id to the new name.
-      // Its Bible ids, raids, tasks and settings stay as they are.
-      for (const character of unmatched) {
-        const match = fetchedIndexes.byCid.get(character.bibleCid);
-        if (!match || claimed.has(match)) continue;
-        claimed.add(match);
-        console.log(
-          `[refresh] account "${account.accountName}": "${getCharacterName(character)}" is now "${match.charName}" on lostark.bible (same character id), renamed in place.`
-        );
-        character.renamedFrom = getCharacterName(character);
-        character.renamedAt = now;
-        character.name = match.charName;
-        applyFetchedDisplayFields(character, match);
-      }
+      const { claimed, unmatched } = pairSavedCharacters(account, fetchedIndexes);
+      followRenamesById(account, unmatched, fetchedIndexes, claimed, now);
       if (claimed.size === 0) {
         console.warn(
           `[refresh] account "${account.accountName}" fetched ${fetched.length} chars but zero overlap with saved roster - skipping success stamp.`
@@ -456,21 +517,7 @@ function createRosterRefreshService(deps) {
       }
 
       trackNewRosterCharacters(account, fetched, claimed, now);
-
-      if (entry.resolvedSeed && account.accountName !== entry.resolvedSeed) {
-        const normalizedSeed = normalizeName(entry.resolvedSeed);
-        const freshCollides = hasOtherAccountWithName(
-          accountNameCounts,
-          account,
-          normalizedSeed
-        );
-        if (!freshCollides) {
-          const previousName = normalizeName(account.accountName);
-          account.accountName = entry.resolvedSeed;
-          moveAccountNameCount(accountNameCounts, previousName, normalizedSeed);
-        }
-      }
-
+      adoptResolvedSeedName(account, entry.resolvedSeed, accountNameCounts);
       account.lastRefreshedAt = now;
     }
 

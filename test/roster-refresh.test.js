@@ -676,3 +676,80 @@ test("an accent-only name match with the same bible character id still renames",
   assert.equal(account.characters[1].name, "Zoë");
   assert.equal(account.characters[1].bibleCid, 11);
 });
+
+// Runs one collect for a roster and returns the warnings it logged.
+async function collectWarnings(fetchRosterCharacters, account) {
+  const user = { discordId: "user-1", accounts: [{ lastRefreshedAt: 0, ...account }] };
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    await makeService(fetchRosterCharacters).collectStaleAccountRefreshes(user);
+  } finally {
+    console.warn = originalWarn;
+  }
+  return warnings;
+}
+
+const bards = (...names) => names.map((name) => ({ name, class: "Bard", itemLevel: 1700 }));
+
+test("a failed refresh details three seeds and counts the rest", async () => {
+  const warnings = await collectWarnings(async () => { throw new Error("boom"); }, {
+    accountName: "Alpha", characters: bards("Alpha", "Beta", "Gamma", "Delta", "Epsilon"),
+  });
+
+  assert.deepEqual(warnings, [
+    '[refresh] seed "Alpha" failed: boom',
+    '[refresh] seed "Beta" failed: boom',
+    '[refresh] seed "Gamma" failed: boom',
+    '[refresh] account "Alpha" 2 additional seed failure(s) suppressed.',
+  ]);
+});
+
+test("a refresh whose rosters share no saved character says so", async () => {
+  const warnings = await collectWarnings(async () => [{ charName: "Stranger" }], {
+    accountName: "Alpha", characters: bards("Alpha"),
+  });
+
+  assert.deepEqual(warnings, [
+    '[refresh] account "Alpha" skipped 1 seed(s) with zero overlap - refresh not applied.',
+  ]);
+});
+
+test("refresh warnings name a roster without a name as unnamed", async () => {
+  let calls = 0;
+  const strangerThenBoom = async () => {
+    calls += 1;
+    if (calls === 1) return [{ charName: "Stranger" }];
+    throw new Error("boom");
+  };
+  const unnamed = { accountName: "", characters: bards("Alpha", "Beta", "Gamma", "Delta", "Epsilon") };
+  const failures = await collectWarnings(strangerThenBoom, unnamed);
+  const aborted = await collectWarnings(async () => { throw new Error("LostArk Bible HTTP 429"); }, unnamed);
+
+  assert.equal(failures[0], '[refresh] account "(unnamed roster)" skipped 1 seed(s) with zero overlap - refresh not applied.');
+  assert.equal(failures.at(-1), '[refresh] account "(unnamed roster)" 1 additional seed failure(s) suppressed.');
+  assert.match(aborted[0], /^\[refresh\] account "\(unnamed roster\)" aborted on first LostArk Bible HTTP 429/);
+});
+
+test("only an attempted refresh stamps the attempt time", () => {
+  const service = makeService(async () => []);
+  const before = Date.now();
+  const user = {
+    discordId: "user-1",
+    accounts: [
+      { accountName: "Tried", lastRefreshedAt: 0, characters: bards("Tried") },
+      { accountName: "Skipped", lastRefreshedAt: 0, characters: bards("Skipped") },
+    ],
+  };
+
+  const didUpdate = service.applyStaleAccountRefreshes(user, [
+    { accountName: "Tried", attempted: true, fetchedChars: null },
+    { accountName: "Skipped", attempted: false, fetchedChars: null },
+  ]);
+
+  assert.equal(didUpdate, true);
+  assert.ok(user.accounts[0].lastRefreshAttemptAt >= before);
+  assert.equal(user.accounts[1].lastRefreshAttemptAt, undefined);
+  assert.equal(user.accounts[0].lastRefreshedAt, 0, "no roster came back, so no success stamp");
+});
