@@ -64,6 +64,7 @@ const { createRaidChannelCommand } = require("./handlers/raid/channel");
 const { createRaidHelpCommand } = require("./handlers/meta/help");
 const { createRaidShareCommand } = require("./handlers/raid/share");
 const { createRaidLanguageCommand } = require("./handlers/meta/language");
+const { createRaidServerCommand } = require("./handlers/meta/server");
 const { createRaidBgCommand } = require("./handlers/raid/bg");
 const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createRaidTaskCommand } = require("./handlers/raid/task");
@@ -724,6 +725,20 @@ const {
   UI,
 });
 
+const {
+  handleRaidServerCommand,
+  handleRaidServerAutocomplete,
+} = createRaidServerCommand({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+  UI,
+  User,
+  homeGuildId: process.env.GUILD_ID,
+});
+
 const { handleRaidBgCommand } = createRaidBgCommand({
   User,
   getAccessibleAccounts,
@@ -853,6 +868,7 @@ const RAID_COMMAND_HANDLERS = Object.freeze({
   "raid-task": handleRaidTaskCommand,
   "raid-auction": handleRaidAuctionCommand,
   "raid-log": handleRaidLogCommand,
+  "raid-server": handleRaidServerCommand,
 });
 
 function getRaidCommandDispatchNames() {
@@ -878,6 +894,7 @@ module.exports = {
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
+  handleRaidServerAutocomplete,
   handleRaidTaskAutocomplete,
   handleRaidTaskButton,
   handleRaidChannelMessage,

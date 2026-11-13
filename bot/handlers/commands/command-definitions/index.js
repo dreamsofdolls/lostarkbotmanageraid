@@ -21,6 +21,7 @@ const {
   createRaidChannelCommandDefinition,
   createRaidAutoManageCommandDefinition,
   createRaidAnnounceCommandDefinition,
+  createRaidServerCommandDefinition,
 } = require("./admin");
 const { createRaidTaskCommandDefinition } = require("./task");
 const { createRaidBgCommandDefinition } = require("./background");
@@ -51,6 +52,7 @@ function createRaidCommandDefinitions({
     createRaidBgCommandDefinition(),
     createRaidAuctionCommandDefinition(),
     createRaidLogCommandDefinition(),
+    createRaidServerCommandDefinition(),
   ];
 }
 

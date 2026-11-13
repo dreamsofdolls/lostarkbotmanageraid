@@ -44,6 +44,7 @@ const RICH_CARD_FILES = new Set([
   "bot/handlers/local-sync/discord-console-ui.js",
   "bot/handlers/meta/help.js",
   "bot/handlers/meta/language.js",
+  "bot/handlers/meta/server.js",
   "bot/handlers/raid/announce/show.js",
   "bot/handlers/raid/auction.js",
   "bot/handlers/raid/auto-manage/basic-actions.js",

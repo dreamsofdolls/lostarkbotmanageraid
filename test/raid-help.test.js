@@ -122,14 +122,18 @@ test("dropdown contains every help section + bakes default lang into customId", 
   assert.deepEqual(optionValues, [...EXPECTED_SECTION_KEYS].sort());
 });
 
-test("every routed slash command except /raid-help has a help section", async () => {
+// /raid-help itself, and /raid-server, which only the application owner can
+// run, so members get no help section for it.
+const COMMANDS_WITHOUT_HELP = new Set(["raid-help", "raid-server"]);
+
+test("every routed slash command except /raid-help and /raid-server has a help section", async () => {
   const factory = makeFactory();
   const interaction = makeReplyInteraction();
   await factory.handleRaidHelpCommand(interaction);
 
   const options = interaction._calls.reply[0].components[0].toJSON().components[0].options;
   const sectionKeys = new Set(options.map((o) => o.value));
-  const missing = RAID_COMMAND_NAMES.filter((name) => name !== "raid-help" && !sectionKeys.has(name));
+  const missing = RAID_COMMAND_NAMES.filter((name) => !COMMANDS_WITHOUT_HELP.has(name) && !sectionKeys.has(name));
   assert.deepEqual(missing, []);
 });
 

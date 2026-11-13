@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-13
+
+### Added
+- `/raid-server` for the bot owner: `list` shows every server Artist is in (home server first, with member count and join date), `leave` takes her out of one picked by name from suggestions, after a private Leave / Cancel card that lasts 60 seconds.
+- Only the owner of the Discord application can run it, and server admins are the only members who see it in the command list. The home server (`GUILD_ID`) is never left, and nothing saved about a server is deleted, so inviting Artist back restores its settings.
+
 ## 2026-11-11
 
 ### Changed

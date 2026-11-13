@@ -31,6 +31,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-bg",
   "raid-auction",
   "raid-log",
+  "raid-server",
 ]);
 
 /**
@@ -65,6 +66,7 @@ function createRaidInteractionRouter({
       "raid-auto-manage": handlers.handleRaidAutoManageAutocomplete,
       "raid-task": handlers.handleRaidTaskAutocomplete,
       "raid-gold-earner": handlers.handleRaidGoldEarnerAutocomplete,
+      "raid-server": handlers.handleRaidServerAutocomplete,
     },
     modalRoutes: [
       { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },

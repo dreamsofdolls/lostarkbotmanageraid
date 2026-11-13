@@ -150,8 +150,52 @@ function createRaidAnnounceCommandDefinition({ announcementTypeKeys, announcemen
   return raidAnnounceCommand;
 }
 
+// Administrator as the default permission keeps it out of members' command
+// list; the handler still allows only the application owner.
+function createRaidServerCommandDefinition() {
+  return new SlashCommandBuilder()
+    .setName("raid-server")
+    .setDescription("Bot owner: list the servers Artist is in, or remove her from one")
+    .setDescriptionLocalizations({
+      vi: "Chủ bot: xem các server Artist đang ở, hoặc rút Artist khỏi một server",
+      ja: "Bot owner: Artist がいるサーバーの一覧、またはサーバーから退出",
+    })
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("list")
+        .setDescription("List the servers Artist is in")
+        .setDescriptionLocalizations({
+          vi: "Xem các server Artist đang ở",
+          ja: "Artist がいるサーバーの一覧",
+        })
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("leave")
+        .setDescription("Remove Artist from a server after a confirmation")
+        .setDescriptionLocalizations({
+          vi: "Rút Artist khỏi một server sau khi xác nhận",
+          ja: "確認のあとサーバーから Artist を退出",
+        })
+        .addStringOption((opt) =>
+          opt
+            .setName("server")
+            .setDescription("Server to leave; type to search by name")
+            .setDescriptionLocalizations({
+              vi: "Server cần rời; gõ để tìm theo tên",
+              ja: "退出するサーバー。名前で検索できます",
+            })
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    );
+}
+
 module.exports = {
   createRaidChannelCommandDefinition,
   createRaidAutoManageCommandDefinition,
   createRaidAnnounceCommandDefinition,
+  createRaidServerCommandDefinition,
 };
