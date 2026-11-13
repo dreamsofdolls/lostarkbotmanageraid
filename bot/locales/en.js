@@ -161,7 +161,7 @@ module.exports = {
     failedDescription: "Leaving {guild} failed and I'm still there. The bot log has the reason.",
     list: {
       title: "🛰️ Servers I'm in ({count})",
-      line: "{home}**{name}** · `{id}` · {members} members · joined {joined}",
+      line: "{icon} **{name}** · `{id}` · {members} members · joined {joined}",
       more: "+{count} more servers not shown",
     },
     confirm: {

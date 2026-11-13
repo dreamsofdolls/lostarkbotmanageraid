@@ -118,8 +118,8 @@ test("list puts home first and sorts the rest", async () => {
   await handleRaidServerCommand(interaction);
   const lines = embedOf(lastEdit(interaction)).description.split("\n");
   assert.deepEqual(lines.map((line) => ["Home", "Alpha", "Beta"].find((name) => line.includes(name))), ["Home", "Alpha", "Beta"]);
-  assert.ok(lines[0].includes("🏠"));
-  assert.ok(!lines[1].includes("🏠"));
+  assert.ok(lines[0].startsWith("👑 "));
+  assert.ok(lines[1].startsWith("🏠 ") && lines[2].startsWith("🏠 "));
   assert.ok(lines[1].includes("g-a") && lines[1].includes("14") && lines[1].includes(`<t:${Math.floor(JOINED / 1000)}:D>`));
 });
 
@@ -147,7 +147,7 @@ test("suggestions hide the home guild", async () => {
   const { handleRaidServerAutocomplete } = makeHandlers();
   const interaction = makeAutocomplete(makeClient([makeGuild(HOME, "Home"), makeGuild("g-a", "Alpha")]));
   await handleRaidServerAutocomplete(interaction);
-  assert.deepEqual(interaction.responded, [{ name: "Alpha · g-a", value: "g-a" }]);
+  assert.deepEqual(interaction.responded, [{ name: "🏠 Alpha", value: "g-a" }]);
 });
 
 test("suggestions match name or id without case", async () => {
@@ -164,7 +164,7 @@ test("suggestions cap at 25 and cut labels", async () => {
   const capped = makeAutocomplete(makeClient(many));
   await handleRaidServerAutocomplete(capped);
   assert.equal(capped.responded.length, 25);
-  assert.equal(capped.responded[0].name, "Server 00 · g-29");
+  assert.equal(capped.responded[0].name, "🏠 Server 00");
 
   const long = makeAutocomplete(makeClient([makeGuild("g-long", "x".repeat(120))]));
   await handleRaidServerAutocomplete(long);
@@ -290,8 +290,8 @@ test("list and suggestions keep working when a guild is unavailable", async () =
   const suggestions = makeAutocomplete(client);
   await handleRaidServerAutocomplete(suggestions);
   assert.deepEqual(suggestions.responded, [
-    { name: "Alpha · g-a", value: "g-a" },
-    { name: "g-x", value: "g-x" },
+    { name: "🏠 Alpha", value: "g-a" },
+    { name: "🏠 g-x", value: "g-x" },
   ]);
 });
 
@@ -314,9 +314,10 @@ test("leave refuses the home guild when GUILD_ID carries quotes or spaces", asyn
 
 test("suggestion labels never end in half an emoji", async () => {
   const { handleRaidServerAutocomplete } = makeHandlers();
-  const interaction = makeAutocomplete(makeClient([makeGuild("g-1", `${"x".repeat(99)}😀`)]));
+  // "🏠 " takes 3 UTF-16 units, so the emoji straddles the 100-unit cut.
+  const interaction = makeAutocomplete(makeClient([makeGuild("g-1", `${"x".repeat(96)}😀`)]));
   await handleRaidServerAutocomplete(interaction);
-  assert.equal(interaction.responded[0].name, "x".repeat(99));
+  assert.equal(interaction.responded[0].name, `🏠 ${"x".repeat(96)}`);
 });
 
 test("a stranger-set server name is escaped in the list and on the cards", async (t) => {

@@ -175,7 +175,7 @@ module.exports = {
     failedDescription: "Rời {guild} bị lỗi, tớ vẫn còn ở đó. Log của bot có ghi lý do.",
     list: {
       title: "🛰️ Các server tớ đang ở ({count})",
-      line: "{home}**{name}** · `{id}` · {members} thành viên · vào {joined}",
+      line: "{icon} **{name}** · `{id}` · {members} thành viên · vào {joined}",
       more: "+{count} server nữa không hiện hết",
     },
     confirm: {

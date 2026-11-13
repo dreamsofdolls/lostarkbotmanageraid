@@ -163,7 +163,7 @@ module.exports = {
     failedDescription: "{guild} からの退出に失敗して、まだそこにいますわ。ボットのログに理由がありますの。",
     list: {
       title: "🛰️ わたしがいるサーバー ({count})",
-      line: "{home}**{name}** · `{id}` · メンバー {members} 人 · 参加 {joined}",
+      line: "{icon} **{name}** · `{id}` · メンバー {members} 人 · 参加 {joined}",
       more: "ほか {count} サーバーは省略しましたわ",
     },
     confirm: {

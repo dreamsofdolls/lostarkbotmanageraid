@@ -90,7 +90,7 @@ function buildListDescription(guilds, homeGuildId, lang) {
   let length = 0;
   for (const guild of ordered) {
     const line = t("raid-server.list.line", lang, {
-      home: guild.id === homeGuildId ? "🏠 " : "",
+      icon: guild.id === homeGuildId ? "👑" : "🏠",
       name: shownName(guild),
       id: guild.id,
       members: guild.memberCount ?? "?",
@@ -241,10 +241,8 @@ function createRaidServerCommand(deps) {
         .filter((guild) => guildName(guild).toLowerCase().includes(query) || guild.id.includes(query))
         .sort((a, b) => guildName(a).localeCompare(guildName(b)))
         .slice(0, SUGGESTION_LIMIT)
-        .map((guild) => ({
-          name: cutChoiceText(guild.name ? `${guild.name} · ${guild.id}` : guild.id),
-          value: guild.id,
-        }));
+        // Icon and name only: the id stays the value, and the card shows it.
+        .map((guild) => ({ name: cutChoiceText(`🏠 ${guildName(guild)}`), value: guild.id }));
       await interaction.respond(choices);
     } catch (err) {
       console.warn("[raid-server] Server suggestions failed:", err?.message || err);
