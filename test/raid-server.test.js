@@ -271,3 +271,43 @@ test("the registered definition hides the command from members", () => {
   assert.equal(server.autocomplete, true);
   assert.ok(json.options.some(({ name }) => name === "list"));
 });
+
+// An unavailable guild (a Discord outage at ready) carries only its id.
+function makeUnavailableGuild(id) {
+  const guild = { id, available: false, leaveCalls: 0, async leave() { guild.leaveCalls += 1; } };
+  return guild;
+}
+
+test("list and suggestions keep working when a guild is unavailable", async () => {
+  const { handleRaidServerCommand, handleRaidServerAutocomplete } = makeHandlers();
+  const client = makeClient([makeGuild("g-a", "Alpha"), makeUnavailableGuild("g-x")]);
+  const { interaction } = makeCommand(client);
+  await handleRaidServerCommand(interaction);
+  const { description } = embedOf(lastEdit(interaction));
+  assert.ok(description.includes("g-x"));
+  assert.ok(!description.includes("NaN") && !description.includes("undefined"));
+
+  const suggestions = makeAutocomplete(client);
+  await handleRaidServerAutocomplete(suggestions);
+  assert.deepEqual(suggestions.responded, [
+    { name: "Alpha · g-a", value: "g-a" },
+    { name: "g-x", value: "g-x" },
+  ]);
+});
+
+test("leave refuses the home guild when GUILD_ID carries quotes or spaces", async () => {
+  const { handleRaidServerCommand, handleRaidServerAutocomplete } = createRaidServerCommand({
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, UI,
+    User: FakeUser, homeGuildId: ` "${HOME}" `, isOwner: async () => true,
+  });
+  const home = makeGuild(HOME, "Home");
+  const client = makeClient([home, makeGuild("g-a", "Alpha")]);
+  const { interaction } = makeCommand(client, { subcommand: "leave", server: HOME });
+  await handleRaidServerCommand(interaction);
+  assert.ok(embedOf(lastEdit(interaction)).title.includes(titleOf("protected")));
+  assert.equal(home.leaveCalls, 0);
+
+  const suggestions = makeAutocomplete(client);
+  await handleRaidServerAutocomplete(suggestions);
+  assert.deepEqual(suggestions.responded.map(({ value }) => value), ["g-a"]);
+});

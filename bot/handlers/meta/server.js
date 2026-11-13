@@ -45,12 +45,25 @@ function serverNotice(stem, lang, vars) {
   };
 }
 
+// GUILD_ID may arrive padded or quoted (scripts/deploy-commands.js strips the
+// same); a raw compare would leave the home guild unprotected.
+function normalizeGuildId(value) {
+  return String(value ?? "").trim().replace(/^['"]|['"]$/g, "");
+}
+
+// An unavailable guild (a Discord outage at ready) carries only its id, with
+// no name and no join date, so every label falls back to the id.
+function guildName(guild) {
+  return guild.name ?? guild.id;
+}
+
 function joinedLabel(guild) {
-  return `<t:${Math.floor(guild.joinedTimestamp / 1000)}:D>`;
+  return Number.isFinite(guild.joinedTimestamp) ? `<t:${Math.floor(guild.joinedTimestamp / 1000)}:D>` : "?";
 }
 
 function byHomeThenName(homeGuildId) {
-  return (a, b) => Number(b.id === homeGuildId) - Number(a.id === homeGuildId) || a.name.localeCompare(b.name);
+  return (a, b) => Number(b.id === homeGuildId) - Number(a.id === homeGuildId)
+    || guildName(a).localeCompare(guildName(b));
 }
 
 // Lines past the description limit are dropped for one "+N more" line,
@@ -63,7 +76,7 @@ function buildListDescription(guilds, homeGuildId, lang) {
   for (const guild of ordered) {
     const line = t("raid-server.list.line", lang, {
       home: guild.id === homeGuildId ? "🏠 " : "",
-      name: guild.name,
+      name: guildName(guild),
       id: guild.id,
       members: guild.memberCount ?? "?",
       joined: joinedLabel(guild),
@@ -96,30 +109,35 @@ function createRaidServerCommand(deps) {
     homeGuildId,
     isOwner = isApplicationOwner,
   } = deps;
+  const homeId = normalizeGuildId(homeGuildId);
 
+  // Checked before the card and again on the click, since the guild list can
+  // change while the card waits.
   async function findLeaveRefusal(interaction, guildId) {
     if (!(await isOwner(interaction.client, interaction.user.id))) return "notOwner";
     if (!interaction.client.guilds.cache.has(guildId)) return "notFound";
-    if (guildId === homeGuildId) return "protected";
+    if (guildId === homeId) return "protected";
     return null;
   }
 
+  // `list`: every guild in the cache, home first.
   async function showList(interaction, lang) {
     const guilds = [...interaction.client.guilds.cache.values()];
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
       .setTitle(t("raid-server.list.title", lang, { count: guilds.length }))
-      .setDescription(buildListDescription(guilds, homeGuildId, lang));
+      .setDescription(buildListDescription(guilds, homeId, lang));
     await interaction.editReply({ embeds: [embed] });
   }
 
+  // The private card asking the owner to confirm, with Leave and Cancel.
   function buildConfirmCard(guild, lang) {
     const embed = buildNoticeEmbed(EmbedBuilder, {
       kind: NoticeKind.CONFIRM,
       title: t("raid-server.confirm.title", lang),
-      description: t("raid-server.confirm.description", lang, { guild: guild.name }),
+      description: t("raid-server.confirm.description", lang, { guild: guildName(guild) }),
       fields: [
-        { name: t("raid-server.confirm.fields.server", lang), value: `**${guild.name}**\n\`${guild.id}\``, inline: true },
+        { name: t("raid-server.confirm.fields.server", lang), value: `**${guildName(guild)}**\n\`${guild.id}\``, inline: true },
         { name: t("raid-server.confirm.fields.members", lang), value: String(guild.memberCount ?? "?"), inline: true },
         { name: t("raid-server.confirm.fields.joined", lang), value: joinedLabel(guild), inline: true },
       ],
@@ -131,6 +149,7 @@ function createRaidServerCommand(deps) {
     return { embeds: [embed], components: [buttons] };
   }
 
+  // The confirmed click: re-check, then the one guild.leave() call, logged.
   async function finishLeave(interaction, guildId, lang) {
     const refusal = await findLeaveRefusal(interaction, guildId);
     if (refusal) {
@@ -138,7 +157,7 @@ function createRaidServerCommand(deps) {
       return;
     }
     const guild = interaction.client.guilds.cache.get(guildId);
-    const label = `${guild.name} (${guild.id})`;
+    const label = `${guildName(guild)} (${guild.id})`;
     try {
       await guild.leave();
     } catch (err) {
@@ -150,6 +169,7 @@ function createRaidServerCommand(deps) {
     await editNotice(interaction, EmbedBuilder, serverNotice("done", lang, { guild: label }), { components: [] });
   }
 
+  // `leave`: refuse early, show the card, and leave only on a confirm click.
   async function confirmLeave(interaction, lang) {
     const guildId = interaction.options.getString("server", true).trim();
     const refusal = await findLeaveRefusal(interaction, guildId);
@@ -175,6 +195,7 @@ function createRaidServerCommand(deps) {
 
   const SUBCOMMANDS = Object.freeze({ list: showList, leave: confirmLeave });
 
+  // Both subcommands are owner-only; the check runs before either.
   async function handleRaidServerCommand(interaction) {
     await deferEphemeralReply(interaction);
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
@@ -185,6 +206,7 @@ function createRaidServerCommand(deps) {
     await SUBCOMMANDS[interaction.options.getSubcommand()]?.(interaction, lang);
   }
 
+  // Server suggestions for `leave server:`, for the owner only, home hidden.
   async function handleRaidServerAutocomplete(interaction) {
     try {
       const focused = interaction.options.getFocused(true);
@@ -194,11 +216,14 @@ function createRaidServerCommand(deps) {
       }
       const query = String(focused.value || "").trim().toLowerCase();
       const choices = [...interaction.client.guilds.cache.values()]
-        .filter((guild) => guild.id !== homeGuildId)
-        .filter((guild) => guild.name.toLowerCase().includes(query) || guild.id.includes(query))
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .filter((guild) => guild.id !== homeId)
+        .filter((guild) => guildName(guild).toLowerCase().includes(query) || guild.id.includes(query))
+        .sort((a, b) => guildName(a).localeCompare(guildName(b)))
         .slice(0, SUGGESTION_LIMIT)
-        .map((guild) => ({ name: `${guild.name} · ${guild.id}`.slice(0, CHOICE_TEXT_MAX), value: guild.id }));
+        .map((guild) => ({
+          name: (guild.name ? `${guild.name} · ${guild.id}` : guild.id).slice(0, CHOICE_TEXT_MAX),
+          value: guild.id,
+        }));
       await interaction.respond(choices);
     } catch (err) {
       console.warn("[raid-server] Server suggestions failed:", err?.message || err);
