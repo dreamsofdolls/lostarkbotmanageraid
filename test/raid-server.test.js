@@ -311,3 +311,32 @@ test("leave refuses the home guild when GUILD_ID carries quotes or spaces", asyn
   await handleRaidServerAutocomplete(suggestions);
   assert.deepEqual(suggestions.responded.map(({ value }) => value), ["g-a"]);
 });
+
+test("suggestion labels never end in half an emoji", async () => {
+  const { handleRaidServerAutocomplete } = makeHandlers();
+  const interaction = makeAutocomplete(makeClient([makeGuild("g-1", `${"x".repeat(99)}😀`)]));
+  await handleRaidServerAutocomplete(interaction);
+  assert.equal(interaction.responded[0].name, "x".repeat(99));
+});
+
+test("a stranger-set server name is escaped in the list and on the cards", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const { handleRaidServerCommand } = makeHandlers();
+  const client = makeClient([makeGuild("g-a", "[x](https://evil.test) **b**")]);
+  const escaped = String.raw`\[x\](https://evil.test) \*\*b\*\*`;
+
+  const listed = makeCommand(client);
+  await handleRaidServerCommand(listed.interaction);
+  const shownList = embedOf(lastEdit(listed.interaction)).description;
+  assert.ok(shownList.includes(escaped) && !shownList.includes("[x](https://evil.test)"), shownList);
+
+  const left = makeCommand(client, {
+    subcommand: "leave", server: "g-a", click: async () => makeButton("raid-server:leave:confirm"),
+  });
+  await handleRaidServerCommand(left.interaction);
+  for (const payload of [left.interaction.edits[0], lastEdit(left.interaction)]) {
+    const card = embedOf(payload);
+    const shown = [card.description, ...(card.fields || []).map(({ value }) => value)].join("\n");
+    assert.ok(shown.includes(escaped) && !shown.includes("[x](https://evil.test)"), shown);
+  }
+});

@@ -184,3 +184,23 @@ test("the generic error reply reads the user's language through the passed UserM
   assert.match(replies[0].embeds[0].toJSON().title, new RegExp(`${translate("common.notice.commandFailedTitle", "en")}$`));
   clearUserLanguageCache();
 });
+
+test("/raid-server autocomplete routes to its handler", async () => {
+  let served = 0;
+  const noop = async () => {};
+  const handlers = new Proxy(
+    { handleRaidServerAutocomplete: async () => { served += 1; } },
+    { get: (target, key) => target[key] ?? noop },
+  );
+  const router = createRaidInteractionRouter({ MessageFlags: { Ephemeral: 64 }, handlers });
+  await router.handle({
+    id: "raid-server-autocomplete",
+    isChatInputCommand: () => false,
+    isAutocomplete: () => true,
+    isStringSelectMenu: () => false,
+    isButton: () => false,
+    commandName: "raid-server",
+    respond: noop,
+  });
+  assert.equal(served, 1);
+});

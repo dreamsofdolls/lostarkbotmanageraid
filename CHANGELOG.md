@@ -8,7 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Added
 - `/raid-server` for the bot owner: `list` shows every server Artist is in (home server first, with member count and join date), `leave` takes her out of one picked by name from suggestions, after a private Leave / Cancel card that lasts 60 seconds.
-- Only the owner of the Discord application can run it, and server admins are the only members who see it in the command list. The home server (`GUILD_ID`) is never left, and nothing saved about a server is deleted, so inviting Artist back restores its settings. A server Discord reports as unavailable is listed by its ID, and a padded or quoted `GUILD_ID` still protects the home server.
+- Only the owner of the Discord application can run it, and server admins are the only members who see it in the command list. The home server (`GUILD_ID`) is never left, and nothing saved about a server is deleted, so inviting Artist back restores its settings. A server Discord reports as unavailable is listed by its ID, and a padded or quoted `GUILD_ID` still protects the home server. Server names show as typed in the list and on the cards (their markdown is not rendered), and a suggestion cut at 100 characters never ends in half an emoji.
 
 ## 2026-11-11
 
