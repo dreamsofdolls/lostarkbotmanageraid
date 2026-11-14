@@ -16,11 +16,12 @@ const CHILD_PATH = path.join(__dirname, "svg-render-child.js");
 // Filter primitives can run for minutes (feTurbulence scales with
 // numOctaves), image and links load local files, use and pattern repeat
 // content, foreignObject and script carry non-SVG content, and DTD entities
-// expand text. A namespace prefix (`svg:filter`) is matched too.
+// expand text. A namespace prefix is matched too, in any script (`svg:filter`,
+// `é:filter`), since XML names are not limited to ASCII.
 const UNSAFE_SVG_RULES = Object.freeze([
   { pattern: /<!(?:DOCTYPE|ENTITY)/i, reason: "a DTD or entity declaration" },
   {
-    pattern: /<\s*(?:[\w.-]+:)?(?:filter|fe[a-z]+|image|use|pattern|foreignobject|script)\b/i,
+    pattern: /<\s*(?:[^\s<>/:!?="']+:)?(?:filter|fe[a-z]+|image|use|pattern|foreignobject|script)\b/i,
     reason: "a filter, image, use, pattern, foreignObject or script element",
   },
   { pattern: /\bhref\s*=\s*["']\s*(?!#)/i, reason: "a link to something other than an #id in the file" },

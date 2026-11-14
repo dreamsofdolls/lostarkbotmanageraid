@@ -11,6 +11,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Raid-channel hints no longer parse mentions. A hint quotes the member's own text, so a post like ``a`@everyone hard Aki`` made Artist ping the whole channel.
 - Names another user chose now show as plain text in embeds: the owner's name on shared-roster badges and refusal notices, side-task names and player names on `/raid-log` highlights. A nickname or task name like `[Claim reward](https://...)` had rendered as a clickable link. `/raid-server` uses the same escape.
 - A roster a Raid Manager registered for someone with `/raid-add-roster target:` stays writable by that Manager only while they are still in `RAID_MANAGER_ID`, as a share already stops when its owner leaves the list. A former Manager could still mark or reset that roster's progress.
+- The `/raid-bg` SVG check also refuses those elements under a namespace prefix in any script (`é:filter`, not only `svg:filter`); such a filter had passed the check and held the upload slot for the full 5 seconds.
 - `/raid-bg` gives up on an attachment download after 15 seconds and reports it as a failed download. Uploads run one at a time, so one stalled download had held every later upload.
 
 ## 2026-11-13

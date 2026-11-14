@@ -21,6 +21,8 @@ const TURBULENCE = svg(
 for (const [label, text] of [
   ["a filter", svg('<filter id="f"/>')],
   ["a prefixed filter", `<svg:svg xmlns:svg="http://www.w3.org/2000/svg"><svg:filter id="f"/></svg:svg>`],
+  ["a filter under a non-ASCII prefix", svg('<é:filter xmlns:é="http://www.w3.org/2000/svg" id="f"><é:feTurbulence numOctaves="1000"/></é:filter>')],
+  ["a use element under a non-ASCII prefix", svg('<名:use xmlns:名="http://www.w3.org/2000/svg" href="#g"/>')],
   ["a filter primitive", svg("<feTurbulence/>")],
   ["an embedded local image", svg('<image xlink:href="/etc/x.png" width="10" height="10"/>')],
   ["a data link", svg('<a href="data:text/html,x"><rect width="1" height="1"/></a>')],
@@ -37,6 +39,7 @@ for (const [label, text] of [
 test("assertSafeSvg accepts shapes, gradients and #id references", () => {
   assert.doesNotThrow(() => assertSafeSvg(PLAIN));
   assert.doesNotThrow(() => assertSafeSvg(svg('<rect fill="url(#g)" width="1" height="1"/>')));
+  assert.doesNotThrow(() => assertSafeSvg(svg('<linearGradient id="b" xlink:href="#a"/><linearGradient id="c" href="#b"/>')));
 });
 
 test("renderSvgInChild renders a plain SVG to a PNG at its source size", async () => {
