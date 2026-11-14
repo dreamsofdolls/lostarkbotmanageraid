@@ -62,6 +62,7 @@ const {
   getAccessibleAccounts,
   isShareStillListed,
 } = require("../../../services/access/access-control");
+const { escapeEmbedText } = require("../../../utils/discord/embed-text");
 
 function noRedraw() {
   return { redraw: false };
@@ -215,7 +216,7 @@ function createStatusComponentRouteHandlers(ctx) {
       kind: NoticeKind.GUARD,
       title: t(keys.title, lang),
       description: t(SHARE_REFUSAL_DESCRIPTIONS[kind][state], lang, {
-        owner: sharedFrom?.ownerLabel || "(unknown)",
+        owner: escapeEmbedText(sharedFrom?.ownerLabel || "(unknown)"),
       }),
       tip: t(keys.tip, lang),
     };

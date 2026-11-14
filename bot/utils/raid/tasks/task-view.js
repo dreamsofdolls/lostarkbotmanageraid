@@ -11,6 +11,7 @@
 const { pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
 const { t } = require("../../../services/i18n");
 const { isTaskDone } = require("./task-cycle");
+const { escapeEmbedText } = require("../../discord/embed-text");
 
 const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 
@@ -127,7 +128,7 @@ function buildAccountTaskFields(account, helpers) {
       );
       for (const task of dailyTasks) {
         const icon = isDone(task) ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name}`);
+        lines.push(`${icon} ${escapeEmbedText(task.name)}`);
       }
     }
     if (weeklyTasks.length > 0) {
@@ -138,7 +139,7 @@ function buildAccountTaskFields(account, helpers) {
       );
       for (const task of weeklyTasks) {
         const icon = isDone(task) ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name}`);
+        lines.push(`${icon} ${escapeEmbedText(task.name)}`);
       }
     }
     return {

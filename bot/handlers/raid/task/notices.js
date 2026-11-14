@@ -2,6 +2,7 @@
 
 const { t } = require("../../../services/i18n");
 const { isShareStillListed } = require("../../../services/access/access-control");
+const { escapeEmbedText } = require("../../../utils/discord/embed-text");
 const {
   NoticeKind,
   editNotice,
@@ -28,7 +29,7 @@ function buildShareRefusalNotice(refusal, target, lang) {
     kind: NoticeKind.GUARD,
     title: t(`${stem}.title`, lang),
     description: t(`${stem}.description`, lang, {
-      owner: target.ownerLabel || "(unknown)",
+      owner: escapeEmbedText(target.ownerLabel || "(unknown)"),
     }),
     tip: t(`${stem}.tip`, lang),
   };

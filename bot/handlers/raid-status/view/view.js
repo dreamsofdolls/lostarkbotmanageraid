@@ -16,6 +16,7 @@ const {
 } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
 const { ROSTER_NOTE_WINDOW_MS } = require("../../../services/roster/refresh");
+const { escapeEmbedText } = require("../../../utils/discord/embed-text");
 const {
   countedGoldEarners,
   summarizeCharacterGold,
@@ -245,7 +246,7 @@ function createRaidStatusView(deps) {
   function buildSharedRosterBadge(sharedFrom, lang) {
     if (!sharedFrom) return "";
     return t("raid-status.embed.sharedBySuffix", lang, {
-      owner: sharedFrom.ownerLabel || "(unknown)",
+      owner: escapeEmbedText(sharedFrom.ownerLabel || "(unknown)"),
       level: t(
         `share.accessLevel.${sharedFrom.accessLevel || "edit"}`,
         lang,

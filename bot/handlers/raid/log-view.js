@@ -16,6 +16,7 @@ const { formatCompact, percentOf, formatPercent, formatShare, formatClock, forma
 const { parseCustomEmoji } = require("../../utils/discord/emoji");
 const { truncateSelectText } = require("../../utils/discord/select-options");
 const { normalizeCharacterName } = require("../../services/raid-log/source");
+const { escapeEmbedText } = require("../../utils/discord/embed-text");
 
 // ─── Card ───
 
@@ -62,7 +63,7 @@ const HIGHLIGHT_FIELDS = [
 // card wide, and one long span wraps wherever it runs out of room, stranding its unit.
 function highlightFields(players, bracketed, lang) {
   const picks = pickHighlights(players, bracketed);
-  const person = (pick, lines) => [[getClassEmoji(pick.player.className), `**${splitLabel(pick.player.label).name}**`]
+  const person = (pick, lines) => [[getClassEmoji(pick.player.className), `**${escapeEmbedText(splitLabel(pick.player.label).name)}**`]
     .filter(Boolean).join(" "), ...lines.map(line => `\`${line}\``)].join("\n");
   return HIGHLIGHT_FIELDS.map(({ emoji, key, pick: pickKey, figure, empty, chips }) => {
     const pick = picks[pickKey];

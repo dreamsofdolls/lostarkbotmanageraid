@@ -8,7 +8,7 @@
 
 "use strict";
 
-const { escapeMarkdown } = require("discord.js");
+const { escapeEmbedText } = require("../../utils/discord/embed-text");
 
 const { t, getUserLanguage } = require("../../services/i18n");
 const { isApplicationOwner } = require("../../services/access/application-owner");
@@ -60,10 +60,9 @@ function guildName(guild) {
   return guild.name ?? guild.id;
 }
 
-// Server names are chosen by strangers: escape the markdown marks, plus the
-// brackets of a masked link, which escapeMarkdown leaves alone.
+// Server names are chosen by strangers, so they show as plain text.
 function shownName(guild) {
-  return escapeMarkdown(guildName(guild)).replace(/[[\]]/g, "\\$&");
+  return escapeEmbedText(guildName(guild));
 }
 
 // Discord's 100-character choice limit, without leaving half an emoji.

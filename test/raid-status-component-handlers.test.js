@@ -885,6 +885,29 @@ test("raid-status gold set shows the view-only notice and warns once when the sh
   assert.match(warn.mock.calls[0].arguments.join(" "), /share lookup failed.*share lookup down/);
 });
 
+test("raid-status gold refusal shows the owner's name as text, not a link", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  let noticePayload = null;
+  const session = staleEditShareSession();
+  session.accounts[1]._sharedFrom.ownerLabel = "[Claim](https://x.example)";
+  const harness = createHandlerHarness({
+    session,
+    canEditAccountFn: async () => false,
+    async getAccessibleAccountsFn() {
+      throw new Error("share lookup down");
+    },
+  });
+
+  await harness.handlers[STATUS_COMPONENT_ACTION.goldReceive]({
+    values: ["armoche"],
+    async followUp(payload) {
+      noticePayload = payload;
+    },
+  });
+
+  assert.ok(noticePayload.embeds[0].description.includes("\\[Claim\\](https://x.example)"));
+});
+
 // The real share lookup: the share document stays when the owner leaves the
 // manager list, but the lookup no longer returns an entry for that owner.
 test("raid-status gold set says the share was removed when its owner is no longer a manager", async () => {
