@@ -161,3 +161,37 @@ test("raid-bg refuses an attachment Discord reports as oversized before download
   );
   assert.equal(downloads, 0);
 });
+
+test("raid-bg gives the attachment download a deadline", async (t) => {
+  const originalFetch = global.fetch;
+  let signal = null;
+  global.fetch = async (_url, options = {}) => {
+    signal = options.signal;
+    return { ok: false, status: 504 };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  await assert.rejects(
+    processBgAttachment({ url: "https://cdn.example/slow.png", name: "slow.png", size: 10, contentType: "image/png" }),
+    (err) => err.key === "raidBg.errors.downloadFailed"
+  );
+  assert.ok(signal instanceof AbortSignal, "fetch received an AbortSignal");
+  assert.equal(signal.aborted, false);
+});
+
+test("raid-bg reports a download that ran past its deadline as a failed download", async (t) => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  await assert.rejects(
+    processBgAttachment({ url: "https://cdn.example/slow.png", name: "slow.png", size: 10, contentType: "image/png" }),
+    (err) => err.key === "raidBg.errors.downloadFailed" && err.params.status === "timeout"
+  );
+});

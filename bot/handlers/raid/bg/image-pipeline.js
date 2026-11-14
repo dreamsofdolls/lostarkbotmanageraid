@@ -7,6 +7,7 @@ const { assertSafeSvg, renderSvgInChild } = require("./svg-render");
 // bot does not waste cycles loading an oversized attachment.
 const RAID_BG_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const RAID_BG_UPLOAD_MAX_MB = RAID_BG_UPLOAD_MAX_BYTES / 1024 / 1024;
+const RAID_BG_DOWNLOAD_TIMEOUT_MS = 15_000;
 const RAID_BG_MIN_WIDTH = 800;
 const RAID_BG_MIN_HEIGHT = 600;
 // Decoding allocates width x height x 4 bytes before any resize, and a small,
@@ -59,11 +60,20 @@ async function downloadAttachment(attachment) {
   // refused before its bytes are fetched.
   const reportedBytes = Number(attachment.size) || 0;
   if (reportedBytes > RAID_BG_UPLOAD_MAX_BYTES) throw sizeTooBigError(reportedBytes);
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new RaidBgError("raidBg.errors.downloadFailed", { status: response.status });
+  // Uploads run one at a time, so a stalled download would hold every later one.
+  const signal = AbortSignal.timeout(RAID_BG_DOWNLOAD_TIMEOUT_MS);
+  try {
+    const response = await fetch(attachment.url, { signal });
+    if (!response.ok) {
+      throw new RaidBgError("raidBg.errors.downloadFailed", { status: response.status });
+    }
+    return Buffer.from(await response.arrayBuffer());
+  } catch (err) {
+    if (err instanceof RaidBgError) throw err;
+    throw new RaidBgError("raidBg.errors.downloadFailed", {
+      status: err?.name === "TimeoutError" ? "timeout" : "network",
+    });
   }
-  return Buffer.from(await response.arrayBuffer());
 }
 
 function looksLikeSvg(buffer) {
