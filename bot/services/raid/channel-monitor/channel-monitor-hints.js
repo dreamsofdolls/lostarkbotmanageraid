@@ -117,7 +117,9 @@ function createRaidChannelHintService({
     const key = hintKey(message.guildId, message.channelId, message.author.id);
     await clearPendingHint(message.channel, key);
     try {
-      const hint = await message.reply({ content });
+      // The hint quotes the member's own tokens, and a backtick in one ends
+      // the code span, so mentions stay unparsed.
+      const hint = await message.reply({ content, allowedMentions: { parse: [], repliedUser: false } });
       const timerId = setTimeoutFn(() => {
         clearPendingHint(message.channel, key).catch(() => {});
       }, HINT_TTL_MS);

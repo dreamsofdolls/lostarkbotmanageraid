@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Security
 - `/raid-bg` refuses an SVG that contains a filter, an embedded image, `use`, `pattern`, `foreignObject`, a script, a DTD or a link outside the file, and renders the rest in a child process killed after 5 seconds. A 259-byte filter SVG had stalled the whole bot for about 5 seconds, longer with more octaves, and an `<image>` could draw local image files into the background.
+- Raid-channel hints no longer parse mentions. A hint quotes the member's own text, so a post like ``a`@everyone hard Aki`` made Artist ping the whole channel.
 
 ## 2026-11-13
 

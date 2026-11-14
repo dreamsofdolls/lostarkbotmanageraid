@@ -129,6 +129,18 @@ test("raid-channel hint service allows one quick correction while a hint is pend
   });
 });
 
+test("persistent hint sends with every mention disabled", async () => {
+  // The hint quotes the member's own tokens, so `a`@everyone` would ping
+  // the channel if Discord parsed mentions in it.
+  const harness = createHarness();
+  await harness.service.postPersistentHint(harness.createMessage(), "Unknown raid: `a`@everyone`");
+
+  assert.deepEqual(harness.replies[0], {
+    content: "Unknown raid: `a`@everyone`",
+    allowedMentions: { parse: [], repliedUser: false },
+  });
+});
+
 test("raid-channel hint service clears both bot hint and original failed message", async () => {
   const harness = createHarness();
   const message = harness.createMessage({ id: "original-1" });
