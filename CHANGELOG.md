@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-14
+
+### Security
+- `/raid-bg` refuses an SVG that contains a filter, an embedded image, `use`, `pattern`, `foreignObject`, a script, a DTD or a link outside the file, and renders the rest in a child process killed after 5 seconds. A 259-byte filter SVG had stalled the whole bot for about 5 seconds, longer with more octaves, and an `<image>` could draw local image files into the background.
+
 ## 2026-11-13
 
 ### Added

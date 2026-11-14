@@ -2205,7 +2205,7 @@ module.exports = {
         notes: [
           "アニメアート / キャラクターレンダー / 壁紙を1回のコマンドで1-4枚アップロードすると、アーティストが最大6シーンのライブラリに保存し、roster ごとに割り当てて /raid-status embed の画像として表示しますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - 1回に最大4枚アップロードできますの。`action:overwrite` はライブラリを置き換え、`action:extend` は6シーン上限まで追加しますわ。各画像は 8 MB まで、800x600 以上かつ約 25 メガピクセル以下、PNG / JPG / WEBP / SVG を受け付けますの。保存時に均等割り当て、またはランダム割り当てを選べますわ。共有 roster でも閲覧者ご自身の pool を使いますわ。",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - 1回に最大4枚アップロードできますの。`action:overwrite` はライブラリを置き換え、`action:extend` は6シーン上限まで追加しますわ。各画像は 8 MB まで、800x600 以上かつ約 25 メガピクセル以下、PNG / JPG / WEBP / SVG (フィルターや埋め込み画像のない SVG) を受け付けますの。保存時に均等割り当て、またはランダム割り当てを選べますわ。共有 roster でも閲覧者ご自身の pool を使いますわ。",
           "**view** - 大きな preview を1シーンずつ表示する browser を開きますわ。シーン選択 dropdown と ◀/▶ pager で切り替えられますの。",
           "**edit [image:<file>]** - 画像を添付すると選択したシーンの差し替え mode、添付なしなら1シーン削除またはライブラリ全削除 mode になりますわ。",
           "",
@@ -2671,7 +2671,7 @@ module.exports = {
       rejectTip: "上の条件に合わせてから再アップロードしてね",
       requirementsHeader: "📋 画像の条件",
       requirementsLines:
-        "• サイズ: 最低 **{minW}x{minH}**、最大 約 **{maxMp}** メガピクセル (わたくしが 1600x900 フレームに合わせますの)\n• アップロード容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP / SVG",
+        "• サイズ: 最低 **{minW}x{minH}**、最大 約 **{maxMp}** メガピクセル (わたくしが 1600x900 フレームに合わせますの)\n• アップロード容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP / SVG (フィルターや埋め込み画像なし)",
       saveFailedTitle: "画像を保存できませんでしたわ",
       saveFailedTip: "少し経ってから再試行して、まだ失敗するなら管理者にお知らせくださいませ",
       successTitle: "✅ Background をしまっておきましたわ～",

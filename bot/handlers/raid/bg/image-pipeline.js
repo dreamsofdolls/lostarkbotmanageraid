@@ -1,7 +1,7 @@
 "use strict";
 
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
-const { Resvg } = require("@resvg/resvg-js");
+const { assertSafeSvg, renderSvgInChild } = require("./svg-render");
 
 // Discord-upload-boundary cap. Validation happens before decode/resize so the
 // bot does not waste cycles loading an oversized attachment.
@@ -214,34 +214,12 @@ function detectMime(attachment, buffer) {
   return declared;
 }
 
-function renderSvgBuffer(buffer) {
-  const svgText = buffer.toString("utf8");
-  const probe = new Resvg(svgText);
-  const sourceWidth = Math.round(probe.width || 0);
-  const sourceHeight = Math.round(probe.height || 0);
-  if (sourceWidth <= 0 || sourceHeight <= 0) {
-    throw new Error("SVG has no readable width/height");
-  }
-
-  let options = null;
-  if (Math.max(sourceWidth, sourceHeight) > RAID_BG_OUTPUT_WIDTH) {
-    options = sourceWidth >= sourceHeight
-      ? { fitTo: { mode: "width", value: RAID_BG_OUTPUT_WIDTH } }
-      : { fitTo: { mode: "height", value: RAID_BG_OUTPUT_WIDTH } };
-  }
-
-  const renderer = options ? new Resvg(svgText, options) : probe;
-  return {
-    buffer: renderer.render().asPng(),
-    width: sourceWidth,
-    height: sourceHeight,
-  };
-}
-
 async function decodeBgImage(buffer, mime) {
-  // Native SVG decoding allocates at the source size; render a bounded bitmap first.
+  // An SVG is checked, then rendered to a bounded bitmap outside this process.
   if (mime === "image/svg+xml") {
-    const rendered = renderSvgBuffer(buffer);
+    const svgText = buffer.toString("utf8");
+    assertSafeSvg(svgText);
+    const rendered = await renderSvgInChild(svgText, { maxSide: RAID_BG_OUTPUT_WIDTH });
     const img = await loadImage(rendered.buffer);
     return { img, width: rendered.width, height: rendered.height };
   }

@@ -2204,7 +2204,7 @@ module.exports = {
         notes: [
           "Upload 1-4 anime art / character render / wallpaper images per command · Artist stores them in a 6-scene library, maps scenes across your rosters, and attaches the selected one as the /raid-status embed image. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload up to 4 images per command. `action:overwrite` replaces the library; `action:extend` appends until the 6-scene cap. Each file may be up to 8 MB, at least 800x600 and at most about 25 megapixels, in PNG / JPG / WEBP / SVG. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload up to 4 images per command. `action:overwrite` replaces the library; `action:extend` appends until the 6-scene cap. Each file may be up to 8 MB, at least 800x600 and at most about 25 megapixels, in PNG / JPG / WEBP / SVG (an SVG without filters or embedded images). Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
           "**view** - Artist opens an interactive scene browser with one large preview, the roster map, and scene dropdown / pager controls.",
           "**edit [image:<file>]** - attach an image to replace a selected scene; omit `image` to enter delete mode and remove one scene or clear the whole library.",
           "",
@@ -2670,7 +2670,7 @@ module.exports = {
       rejectTip: "Fix the image to match the requirements above, then upload it again",
       requirementsHeader: "📋 Image requirements",
       requirementsLines:
-        "• Dimensions: minimum **{minW}x{minH}**, up to about **{maxMp}** megapixels (I fit it to a 1600x900 frame)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
+        "• Dimensions: minimum **{minW}x{minH}**, up to about **{maxMp}** megapixels (I fit it to a 1600x900 frame)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG (no filters or embedded images)",
       saveFailedTitle: "Couldn't save the image",
       saveFailedTip: "Try again in a moment; if it keeps failing, tell an admin",
       successTitle: "✅ Background tucked away",

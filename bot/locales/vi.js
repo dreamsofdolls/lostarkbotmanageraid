@@ -2224,7 +2224,7 @@ module.exports = {
         notes: [
           "Upload 1-4 ảnh anime art / character render / wallpaper mỗi lần chạy lệnh, Artist sẽ lưu vào thư viện tối đa 6 cảnh, map chúng theo từng roster rồi gắn ảnh tương ứng vào embed /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600 và tối đa khoảng 25 triệu điểm ảnh, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600 và tối đa khoảng 25 triệu điểm ảnh, format PNG / JPG / WEBP / SVG (SVG không chứa filter hay ảnh nhúng). Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
           "**view** - Artist mở browser tương tác: một preview lớn mỗi lần, map roster, dropdown chọn cảnh và nút ◀/▶ để lật trang.",
           "**edit [image:<file>]** - đính kèm ảnh để vào mode thay cảnh đã chọn; bỏ trống `image` để vào mode xoá một cảnh hoặc xoá cả thư viện.",
           "",
@@ -2700,7 +2700,7 @@ module.exports = {
       rejectTip: "Sửa ảnh theo yêu cầu bên trên rồi upload lại nhé",
       requirementsHeader: "📋 Ảnh cần có",
       requirementsLines:
-        "• Kích thước: tối thiểu **{minW}x{minH}**, tối đa khoảng **{maxMp}** triệu điểm ảnh (tớ tự đưa về khung 1600x900)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP / SVG",
+        "• Kích thước: tối thiểu **{minW}x{minH}**, tối đa khoảng **{maxMp}** triệu điểm ảnh (tớ tự đưa về khung 1600x900)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP / SVG (không chứa filter hay ảnh nhúng)",
       saveFailedTitle: "Không lưu được ảnh",
       saveFailedTip: "Thử lại sau một lúc; nếu vẫn lỗi thì báo admin",
       successTitle: "✅ Background đã yên vị rồi nhé~",
