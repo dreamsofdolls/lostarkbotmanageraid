@@ -11,6 +11,7 @@ const {
 } = require("../../services/access/access-control");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { createRosterOwnerResolver } = require("../../services/raid/roster-owner-resolver");
+const { isManagerId: defaultIsManagerId } = require("../../services/access/manager");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const { weeklyResetStartMs } = require("../../utils/raid/schedule/reset-windows");
 const {
@@ -47,6 +48,7 @@ function createRaidSetCommand(deps) {
     getAccessibleAccounts = defaultGetAccessibleAccounts,
     loadAccessibleAccountsForAutocomplete = (discordId) =>
       getAccessibleAccounts(discordId, { includeOwn: false }),
+    isManagerId = defaultIsManagerId,
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -62,6 +64,7 @@ function createRaidSetCommand(deps) {
     loadUserForAutocomplete,
     loadAccountsRegisteredBy,
     getAccessibleAccounts,
+    isManagerId,
   });
   const { resolveRosterOwner: resolveRosterOwnerForAutocomplete } =
     createRosterOwnerResolver({
@@ -70,6 +73,7 @@ function createRaidSetCommand(deps) {
       loadUserForAutocomplete: loadCachedUserForAutocomplete,
       loadAccountsRegisteredBy: loadCachedAccountsRegisteredBy,
       getAccessibleAccounts: loadAccessibleAccountsForAutocomplete,
+      isManagerId,
     });
 
   function findCharacterInUser(userDoc, characterName, rosterName = null) {
@@ -92,6 +96,7 @@ function createRaidSetCommand(deps) {
     toModeLabel,
     findCharacterInUser,
     RAID_REQUIREMENT_MAP,
+    isManagerId,
   });
 
   const { handleRaidSetAutocomplete } = createRaidSetAutocompleteService({

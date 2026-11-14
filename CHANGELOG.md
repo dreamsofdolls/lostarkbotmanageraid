@@ -10,6 +10,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-bg` refuses an SVG that contains a filter, an embedded image, `use`, `pattern`, `foreignObject`, a script, a DTD or a link outside the file, and renders the rest in a child process killed after 5 seconds. A 259-byte filter SVG had stalled the whole bot for about 5 seconds, longer with more octaves, and an `<image>` could draw local image files into the background.
 - Raid-channel hints no longer parse mentions. A hint quotes the member's own text, so a post like ``a`@everyone hard Aki`` made Artist ping the whole channel.
 - Names another user chose now show as plain text in embeds: the owner's name on shared-roster badges and refusal notices, side-task names and player names on `/raid-log` highlights. A nickname or task name like `[Claim reward](https://...)` had rendered as a clickable link. `/raid-server` uses the same escape.
+- A roster a Raid Manager registered for someone with `/raid-add-roster target:` stays writable by that Manager only while they are still in `RAID_MANAGER_ID`, as a share already stops when its owner leaves the list. A former Manager could still mark or reset that roster's progress.
 
 ## 2026-11-13
 

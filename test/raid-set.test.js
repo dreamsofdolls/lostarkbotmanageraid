@@ -117,6 +117,9 @@ function makeFactory(overrides = {}) {
       overrides.getAccessibleAccounts || (async () => []),
     loadAccessibleAccountsForAutocomplete:
       overrides.loadAccessibleAccountsForAutocomplete || (async () => []),
+    // The helper Managers these tests seed are in the allowlist unless a
+    // test says otherwise.
+    isManagerId: overrides.isManagerId || ((id) => /manager/.test(id)),
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -1428,7 +1431,7 @@ test("normalizeAssignedRaid: in-progress completion locks mode against auto-upgr
 //
 // Manager M runs `/raid-add-roster target:U` -> account stamped with
 // `registeredBy = M`. Later when M runs `/raid-set`, the resolver lets M
-// edit U's progress without re-checking live Manager role. These tests
+// edit U's progress while M is still in RAID_MANAGER_ID. These tests
 // pin the four branches (own match, helper match, miss, ambiguous) so a
 // future refactor of the lookup order or label preference can't silently
 // change semantics.
@@ -1722,6 +1725,32 @@ test("applyRaidSetForDiscordId via helper-Manager flow: re-checks registeredBy b
     !Number(targetKaz?.G1?.completedDate),
     "stale helper authorization must not stamp the target roster"
   );
+});
+
+test("a Manager removed from RAID_MANAGER_ID keeps their own roster but loses helper-added ones", async () => {
+  const { factory, docs } = makeFactory({ isManagerId: () => false });
+  seedUserAccounts(docs, "manager-1", [
+    { accountName: "Own", characters: [makeChar("Cyrano", 1730)] },
+  ]);
+  seedUserAccounts(docs, "user-2", [
+    { accountName: "TargetRoster", characters: [makeChar("Senko", 1740)], registeredBy: "manager-1" },
+  ]);
+
+  assert.equal((await factory.resolveRosterOwner("manager-1", "Own")).actingForOther, false);
+  assert.equal(await factory.resolveRosterOwner("manager-1", "TargetRoster"), null);
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-2",
+    executorId: "manager-1",
+    characterName: "Senko",
+    rosterName: "TargetRoster",
+    raidMeta: KAZEROS_HARD,
+    statusType: "complete",
+    effectiveGates: [],
+  });
+  assert.equal(result.authLost, true);
+  assert.equal(result.updated, false);
+  assert.ok(!Number(docs.get("user-2").accounts[0].characters[0].assignedRaids?.kazeros?.G1?.completedDate));
 });
 
 // ---------------------------------------------------------------------------

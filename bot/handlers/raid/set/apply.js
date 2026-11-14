@@ -28,6 +28,7 @@ function createRaidSetApplyService({
   toModeLabel,
   findCharacterInUser,
   RAID_REQUIREMENT_MAP = {},
+  isManagerId,
 }) {
   function makeRaidSetResult(raidMeta) {
     return {
@@ -64,7 +65,8 @@ function createRaidSetApplyService({
       return true;
     }
 
-    const isHelperManager = account.registeredBy === executorId;
+    // The registration counts only while its Manager is still in the allowlist.
+    const isHelperManager = account.registeredBy === executorId && isManagerId(executorId);
     const isShareEdit = !isHelperManager
       && (await canEditAccount(executorId, discordId));
     if (!isHelperManager && !isShareEdit) {

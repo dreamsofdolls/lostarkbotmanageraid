@@ -53,6 +53,7 @@ function flattenRegisteredAccounts(userDocs, executorId) {
  * @param {Function} deps.loadUserForAutocomplete - loads the executor's own user doc
  * @param {Function} [deps.loadAccountsRegisteredBy] - loads user docs holding accounts registered by the executor
  * @param {Function} deps.getAccessibleAccounts - lists accounts shared with the executor
+ * @param {(discordId: string) => boolean} deps.isManagerId - whether the executor is in RAID_MANAGER_ID
  * @param {{warn: Function}} [deps.log] - logger
  * @returns {{
  *   flattenRegisteredAccounts: Function,
@@ -69,6 +70,7 @@ function createRosterOwnerResolver({
   loadUserForAutocomplete,
   loadAccountsRegisteredBy = async () => [],
   getAccessibleAccounts,
+  isManagerId,
   log = console,
 }) {
   if (!User) throw new Error("[roster-owner-resolver] User model required");
@@ -81,6 +83,14 @@ function createRosterOwnerResolver({
   if (typeof getAccessibleAccounts !== "function") {
     throw new Error("[roster-owner-resolver] getAccessibleAccounts required");
   }
+  if (typeof isManagerId !== "function") {
+    throw new Error("[roster-owner-resolver] isManagerId required");
+  }
+
+  // A helper registration grants access only while its Manager is still in
+  // RAID_MANAGER_ID, as a share does for its owner.
+  const listHelperAccounts = (userDocs, executorId) =>
+    (isManagerId(executorId) ? flattenRegisteredAccounts(userDocs, executorId) : []);
 
   // Resolve a roster name picked in /raid-set to the user doc that
   // actually owns it. Search order:
@@ -115,7 +125,7 @@ function createRosterOwnerResolver({
         (error) => ({ error })
       );
     const registeredDocs = await loadAccountsRegisteredBy(executorId);
-    const flattened = flattenRegisteredAccounts(registeredDocs, executorId);
+    const flattened = listHelperAccounts(registeredDocs, executorId);
     const matches = flattened.filter(
       (entry) => normalizeName(entry.account.accountName) === target
     );
@@ -161,8 +171,7 @@ function createRosterOwnerResolver({
   }
 
   return {
-    flattenRegisteredAccounts: (userDocs, executorId) =>
-      flattenRegisteredAccounts(userDocs, executorId),
+    flattenRegisteredAccounts: listHelperAccounts,
     resolveRosterOwner,
   };
 }
