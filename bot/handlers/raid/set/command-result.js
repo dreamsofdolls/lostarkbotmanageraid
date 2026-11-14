@@ -9,6 +9,7 @@ const {
   buildRosterNotFoundNotice,
   formatCharacterLabel,
 } = require("../../../utils/raid/common/shared");
+const { escapeEmbedText } = require("../../../utils/discord/embed-text");
 
 function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
   const { buildRaidChannelReceiptEmbed } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
@@ -36,8 +37,9 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
 
     if (!resolvedOwner.ambiguous) return false;
 
+    // Owner labels are names members chose, so they show as text.
     const ownerNames = resolvedOwner.matches
-      .map((entry) => entry.ownerLabel)
+      .map((entry) => escapeEmbedText(entry.ownerLabel))
       .join(", ");
     await replySetNotice(setNotice(NoticeKind.INPUT, "roster.ambiguous", lang, {
       count: resolvedOwner.matches.length,
@@ -120,7 +122,7 @@ function createRaidSetResultResponder({ EmbedBuilder, UI, t }) {
 
   function buildHelperLine({ lang, targetDiscordId, ownerLabel }) {
     const labelHint = ownerLabel
-      ? t("raid-set.success.helperLabelHint", lang, { ownerLabel })
+      ? t("raid-set.success.helperLabelHint", lang, { ownerLabel: escapeEmbedText(ownerLabel) })
       : "";
     return t("raid-set.success.helperLine", lang, {
       iconInfo: UI.icons.info,

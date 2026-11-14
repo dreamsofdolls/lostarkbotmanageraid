@@ -11,6 +11,7 @@
 const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
+const { escapeEmbedText } = require("../../utils/discord/embed-text");
 // tPick, not t: some descriptions here are variant pools; non-pool keys pass through.
 const { tPick: t, getUserLanguage } = require("../../services/i18n");
 const {
@@ -199,7 +200,7 @@ function createRaidShareCommand(deps) {
       } else {
         for (const share of incoming) {
           const ownerDoc = incomingOwnerById.get(share.ownerDiscordId);
-          const label = ownerLabel(ownerDoc, share.ownerDiscordId);
+          const label = escapeEmbedText(ownerLabel(ownerDoc, share.ownerDiscordId));
           const suspended = !isManagerId(share.ownerDiscordId);
           const tag = suspended ? t("share.list.incomingSuspendedTag", lang) : "";
           const accessText = localizedAccessLevel(share.accessLevel, lang);

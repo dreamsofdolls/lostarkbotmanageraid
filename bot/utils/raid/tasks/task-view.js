@@ -190,7 +190,7 @@ function addTaskViewContent({
   if (hasSharedField) {
     const lines = displayRows.slice(0, SHARED_TASK_DISPLAY_LIMIT).map((display) => {
       const icon = display.completed ? UI.icons.done : UI.icons.pending;
-      return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
+      return `${icon} ${display.emoji} **${escapeEmbedText(display.name)}** · ${display.status}`;
     });
     if (displayRows.length > SHARED_TASK_DISPLAY_LIMIT) {
       lines.push(text.sharedOverflow(displayRows.length - SHARED_TASK_DISPLAY_LIMIT));
