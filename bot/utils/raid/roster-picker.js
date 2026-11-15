@@ -1,7 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
-const { NoticeKind } = require("./common/shared");
+const { NoticeKind, cutText } = require("./common/shared");
 
 function newPickerSessionId() {
   return crypto.randomBytes(8).toString("hex");
@@ -9,7 +9,7 @@ function newPickerSessionId() {
 
 function truncateButtonLabel(value) {
   const text = String(value || "");
-  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
+  return text.length > 80 ? `${cutText(text, 77)}...` : text;
 }
 
 function buildToggleButtonRows({
@@ -74,7 +74,7 @@ const SELECT_OPTION_TEXT_MAX = 100;
 
 function clipOptionText(value) {
   const text = String(value || "");
-  return text.length > SELECT_OPTION_TEXT_MAX ? `${text.slice(0, SELECT_OPTION_TEXT_MAX - 3)}...` : text;
+  return text.length > SELECT_OPTION_TEXT_MAX ? `${cutText(text, SELECT_OPTION_TEXT_MAX - 3)}...` : text;
 }
 
 /**

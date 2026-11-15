@@ -9,6 +9,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Security
 - `/raid-server leave` refuses a server Discord reports as unavailable (an outage leaves only its id), and asks to try again once Discord is back.
 
+### Fixed
+- Text cut to a Discord limit no longer ends on half an emoji. Notice titles, descriptions and fields, autocomplete choices, picker buttons and options, select labels and an over-long raid-channel reply were cut by raw length, which could split an emoji and leave a broken character at the end. Every such cut now ends on a whole character, through one shared helper.
+
 ## 2026-11-14
 
 ### Security

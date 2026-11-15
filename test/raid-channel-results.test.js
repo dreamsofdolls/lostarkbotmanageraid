@@ -256,3 +256,24 @@ test("a done post names the found mode's item-level floor, and the bare raid whe
     `${UI.icons.warn} Lỗi hệ thống khi update: <:aero:1> **Qiaoli** · Final`,
   ]);
 });
+
+test("the DM fallback cuts an over-long post on a whole character", () => {
+  // One part with no "; " in it leaves the cut no boundary, so it falls at
+  // the limit, here inside an emoji.
+  const longPart = `${"x".repeat(1998)}😀tail`;
+  const fakeT = (key, lang, vars) => ({
+    "text-parser.dmFallback": vars?.parts,
+    "text-parser.dmFallbackWritten": longPart,
+    "text-parser.dmFallbackSeparator": "; ",
+  }[key]);
+  const content = buildRaidChannelDmFallbackText({
+    resultGroups: [group(ACT4_SOLO, [written("Qiaoli")])],
+    accounts: ACCOUNTS,
+    authorLang: "vi",
+    UI,
+    userId: "user-1",
+    t: fakeT,
+  });
+
+  assert.equal(content, `${"x".repeat(1998)}…`);
+});

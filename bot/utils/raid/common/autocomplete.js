@@ -17,7 +17,7 @@
  * map - this module is pure.
  */
 
-const { normalizeName } = require("./shared");
+const { cutText, normalizeName } = require("./shared");
 
 function getCharName(character) {
   return String(character?.name || character?.charName || "").trim();
@@ -128,8 +128,8 @@ function truncateChoice(label, value, max = 100) {
   const safeValue = String(value || "");
   return {
     name:
-      safeLabel.length > max ? `${safeLabel.slice(0, max - 3)}...` : safeLabel,
-    value: safeValue.length > max ? safeValue.slice(0, max) : safeValue,
+      safeLabel.length > max ? `${cutText(safeLabel, max - 3)}...` : safeLabel,
+    value: cutText(safeValue, max),
   };
 }
 

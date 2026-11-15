@@ -8,6 +8,7 @@ const {
   uniqueNames,
 } = require("./channel-monitor-characters");
 const { resolveResultRaidMeta } = require("./channel-monitor-parse-validation");
+const { cutText } = require("../../../utils/raid/common/shared");
 
 // Discord refuses a channel message longer than this.
 const MESSAGE_LIMIT = 2000;
@@ -21,7 +22,7 @@ const MESSAGE_LIMIT = 2000;
  */
 function cutAtBoundary(text, maxLength, boundary) {
   if (text.length <= maxLength) return text;
-  const head = text.slice(0, maxLength - 1);
+  const head = cutText(text, maxLength - 1);
   const end = head.lastIndexOf(boundary);
   return `${end > 0 ? head.slice(0, end) : head}…`;
 }

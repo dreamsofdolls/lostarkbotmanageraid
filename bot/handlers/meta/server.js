@@ -16,13 +16,13 @@ const { awaitAutoManageDecision } = require("../raid/auto-manage/core/confirmati
 const {
   NoticeKind,
   buildNoticeEmbed,
+  cutText,
   deferEphemeralReply,
   editNotice,
 } = require("../../utils/raid/common/shared");
 
 const SUGGESTION_LIMIT = 25;
 const CHOICE_TEXT_MAX = 100;
-const TRAILING_HIGH_SURROGATE = /[\uD800-\uDBFF]$/;
 const DESCRIPTION_MAX = 4096;
 const LEAVE_PREFIX = "raid-server:leave:";
 const LEAVE_CONFIRM_ID = `${LEAVE_PREFIX}confirm`;
@@ -64,12 +64,6 @@ function guildName(guild) {
 // Server names are chosen by strangers, so they show as plain text.
 function shownName(guild) {
   return escapeEmbedText(guildName(guild));
-}
-
-// Discord's 100-character choice limit, without leaving half an emoji.
-function cutChoiceText(value) {
-  const cut = String(value).slice(0, CHOICE_TEXT_MAX);
-  return TRAILING_HIGH_SURROGATE.test(cut) ? cut.slice(0, -1) : cut;
 }
 
 function joinedLabel(guild) {
@@ -245,7 +239,7 @@ function createRaidServerCommand(deps) {
         .sort((a, b) => guildName(a).localeCompare(guildName(b)))
         .slice(0, SUGGESTION_LIMIT)
         // Icon and name only: the id stays the value, and the card shows it.
-        .map((guild) => ({ name: cutChoiceText(`🏠 ${guildName(guild)}`), value: guild.id }));
+        .map((guild) => ({ name: cutText(`🏠 ${guildName(guild)}`, CHOICE_TEXT_MAX), value: guild.id }));
       await interaction.respond(choices);
     } catch (err) {
       console.warn("[raid-server] Server suggestions failed:", err?.message || err);
