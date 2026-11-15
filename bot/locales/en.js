@@ -151,6 +151,8 @@ module.exports = {
     notFoundDescription: "I'm not in a server with ID `{guild}` right now. Run /raid-server list to see where I am.",
     protectedTitle: "I'm staying in this server",
     protectedDescription: "`{guild}` is my home server, where my commands live, so I won't leave it.",
+    unavailableTitle: "That server is unavailable right now",
+    unavailableDescription: "Discord reports `{guild}` as unavailable, so I can't see it properly. Try again once Discord is back.",
     cancelledTitle: "Cancelled",
     cancelledDescription: "I'm staying in the server.",
     expiredTitle: "Confirmation expired",

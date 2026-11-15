@@ -153,6 +153,8 @@ module.exports = {
     notFoundDescription: "ID `{guild}` のサーバーには今いませんの。/raid-server list でいる場所を確認してね♪",
     protectedTitle: "このサーバーには残りますわ",
     protectedDescription: "`{guild}` はわたしのコマンドがあるホームサーバーなので、退出しませんの。",
+    unavailableTitle: "そのサーバーは今は利用できませんわ",
+    unavailableDescription: "Discord が `{guild}` を unavailable と報告していて、きちんと見えませんの。Discord が戻ってからもう一度お試しくださいませ。",
     cancelledTitle: "キャンセルしましたわ",
     cancelledDescription: "サーバーに残りますわ～",
     expiredTitle: "確認の期限が切れましたの",

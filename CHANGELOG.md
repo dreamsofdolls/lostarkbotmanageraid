@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-15
+
+### Security
+- `/raid-server leave` refuses a server Discord reports as unavailable (an outage leaves only its id), and asks to try again once Discord is back.
+
 ## 2026-11-14
 
 ### Security

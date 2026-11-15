@@ -165,6 +165,8 @@ module.exports = {
     notFoundDescription: "Hiện tớ không ở server nào có ID `{guild}`. Cậu chạy /raid-server list để xem tớ đang ở đâu nhé.",
     protectedTitle: "Server này tớ ở lại",
     protectedDescription: "`{guild}` là server nhà của tớ, nơi có các lệnh của tớ, nên tớ không rời đâu.",
+    unavailableTitle: "Server đó đang không truy cập được",
+    unavailableDescription: "Discord báo `{guild}` đang unavailable, nên tớ chưa nhìn rõ server đó. Đợi Discord ổn rồi thử lại nhé.",
     cancelledTitle: "Đã hủy",
     cancelledDescription: "Tớ vẫn ở lại server nha.",
     expiredTitle: "Thẻ xác nhận đã hết hạn",

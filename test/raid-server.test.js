@@ -341,3 +341,14 @@ test("a stranger-set server name is escaped in the list and on the cards", async
     assert.ok(shown.includes(escaped) && !shown.includes("[x](https://evil.test)"), shown);
   }
 });
+
+test("leave refuses a server Discord reports as unavailable, before any card", async () => {
+  const { handleRaidServerCommand } = makeHandlers();
+  const guild = makeUnavailableGuild("g-x");
+  const { interaction } = makeCommand(makeClient([guild]), { subcommand: "leave", server: "g-x" });
+  await handleRaidServerCommand(interaction);
+  const embed = embedOf(lastEdit(interaction));
+  assert.ok(embed.title.includes(titleOf("unavailable")), embed.title);
+  assert.ok(embed.description.includes("g-x"));
+  assert.equal(interaction.edits.length, 1);
+});

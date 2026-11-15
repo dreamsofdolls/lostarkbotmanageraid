@@ -31,6 +31,7 @@ const LEAVE_CANCEL_ID = `${LEAVE_PREFIX}cancel`;
 const NOTICE_KINDS = Object.freeze({
   notOwner: NoticeKind.GUARD,
   notFound: NoticeKind.EXPIRED,
+  unavailable: NoticeKind.BUSY,
   protected: NoticeKind.GUARD,
   cancelled: NoticeKind.DONE,
   expired: NoticeKind.EXPIRED,
@@ -130,6 +131,9 @@ function createRaidServerCommand(deps) {
   // command: it comes from the cached application and stays fixed meanwhile.
   const LEAVE_RULES = Object.freeze([
     { refusal: "notFound", refuses: ({ client, guildId }) => !client.guilds.cache.has(guildId) },
+    // An unavailable guild (a Discord outage) carries only its id; leaving
+    // one waits until Discord reports it again.
+    { refusal: "unavailable", refuses: ({ client, guildId }) => client.guilds.cache.get(guildId)?.available === false },
     { refusal: "protected", refuses: ({ guildId }) => guildId === homeId },
   ]);
 
