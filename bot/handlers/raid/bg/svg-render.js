@@ -73,4 +73,4 @@ function renderSvgInChild(svgText, { timeoutMs = SVG_RENDER_TIMEOUT_MS, maxSide 
   });
 }
 
-module.exports = { assertSafeSvg, renderSvgInChild, SVG_RENDER_TIMEOUT_MS };
+module.exports = { assertSafeSvg, renderSvgInChild };

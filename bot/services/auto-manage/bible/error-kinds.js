@@ -46,17 +46,21 @@ function isPublicLogDisabledError(error) {
   return PUBLIC_LOG_DISABLED_PATTERN.test(errorText(error));
 }
 
+// The first rule that matches decides. publicLogOff comes before blocked:
+// the logs API refuses a private character with 403 too.
+const BIBLE_ERROR_RULES = Object.freeze([
+  { kind: BIBLE_ERROR_KIND.notFound, matches: (error) => CHARACTER_NOT_FOUND_PATTERN.test(errorText(error)) },
+  { kind: BIBLE_ERROR_KIND.rateLimit, matches: isBibleRateLimitError },
+  { kind: BIBLE_ERROR_KIND.publicLogOff, matches: isPublicLogDisabledError },
+  { kind: BIBLE_ERROR_KIND.blocked, matches: (error) => getBibleHttpStatus(error) === 403 },
+]);
+
 /**
  * @param {unknown} error - an Error or an error message
  * @returns {string} one of BIBLE_ERROR_KIND
  */
 function classifyBibleError(error) {
-  if (CHARACTER_NOT_FOUND_PATTERN.test(errorText(error))) return BIBLE_ERROR_KIND.notFound;
-  if (isBibleRateLimitError(error)) return BIBLE_ERROR_KIND.rateLimit;
-  // Before blocked: the logs API refuses a private character with 403 too.
-  if (isPublicLogDisabledError(error)) return BIBLE_ERROR_KIND.publicLogOff;
-  if (getBibleHttpStatus(error) === 403) return BIBLE_ERROR_KIND.blocked;
-  return BIBLE_ERROR_KIND.other;
+  return BIBLE_ERROR_RULES.find(({ matches }) => matches(error))?.kind ?? BIBLE_ERROR_KIND.other;
 }
 
 module.exports = {

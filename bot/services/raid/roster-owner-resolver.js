@@ -74,18 +74,10 @@ function createRosterOwnerResolver({
   log = console,
 }) {
   if (!User) throw new Error("[roster-owner-resolver] User model required");
-  if (typeof normalizeName !== "function") {
-    throw new Error("[roster-owner-resolver] normalizeName required");
-  }
-  if (typeof loadUserForAutocomplete !== "function") {
-    throw new Error("[roster-owner-resolver] loadUserForAutocomplete required");
-  }
-  if (typeof getAccessibleAccounts !== "function") {
-    throw new Error("[roster-owner-resolver] getAccessibleAccounts required");
-  }
-  if (typeof isManagerId !== "function") {
-    throw new Error("[roster-owner-resolver] isManagerId required");
-  }
+  // The injected functions the resolver calls; the first one missing is named.
+  const requiredFunctions = { normalizeName, loadUserForAutocomplete, getAccessibleAccounts, isManagerId };
+  const missing = Object.keys(requiredFunctions).find((name) => typeof requiredFunctions[name] !== "function");
+  if (missing) throw new Error(`[roster-owner-resolver] ${missing} required`);
 
   // A helper registration grants access only while its Manager is still in
   // RAID_MANAGER_ID, as a share does for its owner.
