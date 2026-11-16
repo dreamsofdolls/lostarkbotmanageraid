@@ -6,225 +6,139 @@
 ![Railway](https://img.shields.io/badge/Railway-deploy-635BFF?logo=railway&logoColor=white)
 ![Languages](https://img.shields.io/badge/i18n-vi%20%C2%B7%20ja%20%C2%B7%20en-informational)
 
-**Artist** automates weekly raid-progress tracking for a Lost Ark guild, replacing shared spreadsheets. It syncs each member's roster from `lostark.bible`, records raid-gate completion from chat posts or automatic reconciliation against the clear-logs, shows at a glance who still owes which raid, and resets the entire guild every Wednesday at 17:00 VN. Every surface is available in Vietnamese, Japanese, and English.
+**Artist** tracks a Lost Ark guild's weekly raid progress in place of shared spreadsheets. It
+syncs each member's roster from `lostark.bible`, records gate clears from chat posts, commands
+or the clear logs, shows who still owes which raid, and resets the guild every Wednesday at
+17:00 VN. Every surface is in Vietnamese, Japanese and English.
 
-Beyond progress tracking, Artist ships a **zero-upload Local Reader** that reads `encounters.db` on the user's device and writes the new clears when the user presses Sync on the page. The raw database never leaves the browser. Artist also includes an auction-bid calculator, per-character side-tasks, and weekly gold management: one bot for the entire raid week.
+It also ships a **zero-upload Local Reader** that reads `encounters.db` on the user's device and
+writes new clears when they press Sync on the page; the raw database never leaves the browser.
+Side tasks, weekly gold and an auction-bid calculator round out the raid week.
 
-## Contents
-
-- [Features](#features)
-- [Commands](#commands)
-- [Text-monitor format](#text-monitor-format)
-- [Data Model](#data-model)
-- [Architecture](#architecture)
-- [Environment Variables](#environment-variables)
-- [Run Local](#run-local)
-- [Railway Deploy](#railway-deploy)
-- [Development](#development)
-- [Known Limitations](#known-limitations)
+**Contents:** [Features](#features) · [Commands](#commands) · [How it works](#how-it-works) ·
+[Text monitor](#text-monitor) · [Raid log capture](#raid-log-capture) · [Data](#data) ·
+[Architecture](#architecture) · [Setup](#setup) · [Known limitations](#known-limitations)
 
 ## Features
 
-- Slash commands for roster sync, progress view, per-char update, and manager scan
-- Text-channel monitor: post `<raid> <difficulty> <character> [gate]`, bot parses + updates + DM confirms
-- Daily roster refresh opens at 00:00 VN for every registered roster, including Local Sync, and drains up to six users every five minutes with restart catch-up and at most four attempts per user in each daily cycle. Roster refreshes are spaced 1.5 s apart; when lostark.bible answers 429, the run pauses until its backoff ends and the interrupted user keeps the attempt. Roster metadata refresh applies to every mode; lostark.bible clear-log reconciliation remains opt-in via `/raid-auto-manage action:on`, while new Local Sync encounter progress still requires Local Reader to be open and submit `encounters.db`. When the cycle finishes, the aggregate `daily-roster-sync` result rides the next raid-channel cleanup notice (or the morning wakeup greeting during Artist's quiet hours) and leaves with it; a guild without channel cleanup, or with its own channel set for this announcement, gets it as a separate post. A scoped Solo Local Reader is launched from `/raid-status`; the alternative full local-sync mode (`action:local-on`) reads the active raid week from `encounters.db`. The browser remembers the file handle, watches SQLite revisions in near real time (sub-500 ms visible fallback), discards superseded scans, and verifies the current file header immediately before sending a small delta preview; changed files still settle and rebuild before handoff. Pressing Sync stores that preview as a short-lived job and applies it in a second call, so a retry after a transient write error reuses the same job and keeps party propagation for the Gates already written; the reader link keeps its full 30-minute lifetime after a web sync. A Full Local Sync also propagates that encounter's cumulative Gate progress to party characters registered in any Artist roster, whatever sync mode their owner uses, but only while the target raid has no current-week progress at all; the synced card in `/raid-status` → `🗃️ Local Sync` lists the ones it wrote. Solo Local Reader never propagates party progress. Party membership comes from the client-readable `players` snapshot and is not cryptographically attested by Artist; the server limits each evidenced source Gate to 15 propagated targets, requires that source Gate to apply first, and re-checks untouched progress before every write.
-- Per-character side-task tracker + roster-level shared-task tracker (`/raid-task`) with auto-reset at 17:00 VN daily / Wed 17:00 VN weekly (Chaos Gate / Field Boss follow the US Eastern (ET) schedule, so they open an hour later in VN during US winter time)
-- Per-character + per-account weekly gold-earned tracker with bound/unbound breakdown, plus `/raid-gold-earner` picker to mark which 6 chars/account earn gold (per Lost Ark's cap)
-- Auction bid calculator (`/raid-auction`): given an item's AH listing price (5% sell fee auto-deducted), computes the recommended bid for BOTH 4- and 8-player parties in one embed plus each member's cut and the winner's estimated profit
-- Weekly reset Wed 17:00 VN (catch-up safe) with per-guild announcement
-- Monitor-channel auto-cleanup every 30 minutes, with Artist quiet hours 02:00-09:00 VN (bedtime + morning catch-up sweep); while she sleeps, her scheduled posts (Chaos Gate / Field Boss and maintenance reminders, the weekly reset, the daily roster report) stay quiet, and something due at 02:00 or 09:00 still gets its post
-- Raid Manager tier: shorter sync cooldown, `👑` roster header icon
-- Manager-only roster sharing (`/raid-share grant target:@user`): grantee sees and edits the manager's rosters across `/raid-status`, `/raid-set`, `/raid-task`, and the text parser; revocable any time
-- Per-user display language (`/raid-language`): switch Artist's voice between Tiếng Việt (default) and 日本語 (cuter Senko-flavored Artist); persistent across sessions
-- Help (`/raid-help`) with dropdown drill-down in vi / jp / en (`language:` slash option for per-call override)
+- **Rosters** from `lostark.bible`, picked character by character (up to 20 per roster), refreshed daily.
+- **Progress** per character and gate in `/raid-status`, with a Raid Manager scan in `/raid-check`.
+- **Four ways to record clears**: chat posts in the monitor channel, `/raid-set`, Bible clear-log auto-sync, or the Local Reader.
+- **Side tasks** per character and shared tasks per roster, reset daily and weekly.
+- **Gold**: weekly gold per character and account with the bound/unbound split, and the six gold earners per account.
+- **Auction calculator**: bids for 4- and 8-player parties from one listing price.
+- **Public log capture**: `/raid-log` shows a character's latest public log as images.
+- **Schedules**: weekly reset (catch-up safe), monitor-channel cleanup every 30 minutes, 11 announcement types, and Artist's quiet hours 02:00-09:00 VN.
+- **Sharing**: Raid Managers can share their rosters with another user.
+- **Languages**: per-user Tiếng Việt (default) or 日本語; help in vi / jp / en.
 
 ## Commands
 
-All replies are ephemeral (visible only to the caller) unless a command's row notes otherwise.
-
-Bible and Local Sync remain mutually exclusive even when the mode changes during a
-running sync or a save retry. A failed Discord acknowledgement releases the sync slot.
-Reset also clears the daily scheduler's lease and retry state. A new daily attempt has
-its own identity, so an older worker cannot overwrite it after reset and re-enable.
-Task writes to shared rosters recheck edit access before each save attempt and stay
-bound to the original owner, so a revoked grant cannot continue a pending retry.
+Replies are private (ephemeral) unless a row says otherwise.
 
 | Command | Who | What |
 |---|---|---|
-| `/raid-add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible`, open an interactive picker (numbered list with class icons, one dropdown where ticking a char flips it, Save/Cancel, 5-min session), then save the chosen chars (cap 20/roster) |
-| `/raid-edit-roster` | anyone (self) | Edit an existing saved roster: re-fetches bible + opens a merged picker (saved ∪ bible) with a ✅/🆕/➖/⬜ state column and one dropdown where ticking a char flips it, so you can add new chars or drop saved ones in one shot. Preserves per-char raid completion state. |
-| `/raid-status` | anyone (self) | View raid progress, paginated 1 roster/page; the view dropdown holds four screens (📋 Raid · 📝 Side tasks · 💰 Gold & difficulty · 🗃️ Local Sync · always listed since Discord cannot disable a single select option, and it renders a no-button "turn it on" card when no sync mode is active). Local Sync hands out a Local Reader link and shows the latest sync (a public card never carries the signed link: its **New link** button sends the link in a private follow-up); a preview left pending (for example after a web sync hit a transient write error) can still be Synced / Cancelled / Refreshed in this same frame; preview jobs last 2 hours, newer scans supersede older pending previews, interrupted applies recover automatically, and transient DB writes can be retried without losing successful writes. Roster iLvl/class auto-refreshes in the background and can be refreshed immediately from the Refresh roster button; a refresh follows a character renamed in game to its new name by its lostark.bible character id and keeps its progress, the roster card notes the old name for a week and any character new on the roster (not added by itself), and Bible Auto-sync may record that character's clears one sync after the rename; Bible Auto-sync users also get a Local Reader launcher whose private link detects explicit Solo clears and syncs them from the page; per-char + per-account weekly gold rollup shows bound gold through the `🔒` tail, with per-char gold hidden when a specific raid filter is active; Gold view edits one or several characters at once (✏️ marks the selection): the gold dropdown pins up to 3 gold raids (3 ticked set exactly those, fewer leave the free slots to Artist) and the 🔄 Reset gold button returns them to automatic, and the difficulty dropdown sets several raid modes that apply immediately before a raid runs or queue for the next weekly reset after it ran; each save posts one summary |
-| `/raid-bg` | anyone (self) | Per-user background-image library for `/raid-status` card embeds: `set` (upload 1-4, `action:overwrite` or `extend`, up to a 6-scene library), `view` (interactive one-scene-at-a-time browser with pager), `edit` (replace one scene with a new image, or delete scenes). Storage + sizing details in the Environment Variables section. |
-| `/raid-gold-earner` | anyone (self) | Picker to flip the per-character `isGoldEarner` flag (cap 6/account/week per LA). Pre-checks top 6 by iLvl on first open for legacy data; new chars default to ON. |
-| `/raid-auction` | anyone (self) | Auction bid calculator for shared raid loot. `market_value:<AH listing in gold>` (+ optional `profit`, default on). Renders bids for BOTH 4- and 8-player parties side by side from one input. Formula ported from la-utils: `floor(0.95 × listing × (N-1)/N)`, ×0.92 in profit mode. The 5% AH sell fee is already baked into the bid (enter listing price as-is). Replies publicly so the whole party sees the bids; input errors stay ephemeral. |
-| `/raid-set` | anyone (self); Raid Manager (rosters they registered via `/raid-add-roster target:`) | Update one character: `complete` / `process <gate>` / `reset`. Manager-registered rosters surface in autocomplete with a 👥 marker so the helper can keep maintaining the registered user's progress. |
-| `/raid-check` | Raid Manager | Scan rosters for pending chars from iLvl 1720 up (lower characters stay out of its cards, counts and roster pages); **Sync-check all** pulls Bible logs across all raids and all saved rosters whose owners enabled Auto-sync (Local Sync users are skipped); it sits on the button row in every view, filtered or not. Reopen `/raid-check` after syncing to load the updated progress. Refresh roster pulls iLvl/class for the current roster. |
-| `/raid-auto-manage` | anyone (self) | `on` / `off` / `sync` / `status` for bible-log auto-reconcile · `local-on` / `local-off` for full `encounters.db` Local Reader mode (mutex with bible; sync from the reader page, new links from `/raid-status` → `🗃️ Local Sync`) · `reset` to wipe your own raid progress + sync state (2-step confirm) |
-| `/raid-task` | anyone (self) | Side tasks (per-char): `add` (action=`single` or `all`) / `remove` / `clear` daily/weekly tasks per char (cap 3 daily + 5 weekly). Shared tasks (per-roster): `shared-add` / `shared-remove` for Event Shop, Chaos Gate, Field Boss, or custom presets (cap 5 daily + 5 weekly + 5 scheduled). `shared-add all_rosters:true` applies to every saved roster at once. `expires_at:YYYY-MM-DD` auto-hides expired event shops. Toggle complete via `/raid-status` → Side tasks view. Auto-reset 17:00 VN daily / Wed 17:00 VN weekly; scheduled presets (Chaos Gate Mon/Thu/Sat/Sun, Field Boss Tue/Fri/Sun) follow 11 AM-5 AM ET windows (US Eastern time, daylight saving included). |
-| `/raid-channel` | admin | Register monitor channel, toggle schedules, repin welcome |
-| `/raid-announce` | admin | List / enable / disable / redirect per-guild announcement types (11 types, including the configurable `daily-roster-sync` completion summary and the opt-in `world-event-reminder` that posts T-20m for Chaos Gate / Field Boss, names whichever of the two spawns, and combines Sunday overlaps) |
-| `/raid-server` | bot owner (the Discord application owner; shown only to admins) | `list` the servers Artist is in, or `leave server:` one after a confirmation card (60 s). The `server` option suggests server names; the home server (`GUILD_ID`) is refused and nothing saved about a server is deleted. Not listed in `/raid-help`. |
-| `/raid-help` | anyone | Drill-down help (dropdown lists every command). `language:` slash option overrides locale for one call (vi / en / jp). |
-| `/raid-language` | anyone (self) | Per-user persistent display language: 🇻🇳 Tiếng Việt (default) or 🇯🇵 日本語 (cuter Artist voice). Switches across every command for that user. |
-| `/raid-share` | Raid Manager | `grant` / `revoke` / `list` - share all your rosters with another user (default `permission:edit`). Grantee gets read+write on /raid-status, /raid-set, /raid-task, and text parser; owner exclusivity preserved on /raid-add-roster, /raid-edit-roster, /raid-remove-roster, /raid-auto-manage. |
+| `/raid-add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible` and pick the characters to save (up to 20; the picker session lasts 5 minutes) |
+| `/raid-edit-roster` | anyone (self) | Re-fetch a saved roster and add or drop characters in one picker (✅/🆕/➖/⬜); raid progress is kept |
 | `/raid-remove-roster` | anyone (self) | Remove a roster or one character from it |
+| `/raid-status` | anyone (self) | Progress card with four views: 📋 Raid · 📝 Side tasks · 💰 Gold & difficulty · 🗃️ Local Sync |
+| `/raid-set` | anyone (self); Raid Manager (rosters they registered) | Update one character: `complete` / `process <gate>` / `reset`. Rosters a manager registered show 👥 in autocomplete |
+| `/raid-check` | Raid Manager | Scan rosters for pending characters from iLvl 1720 up, with **Sync-check all** |
+| `/raid-auto-manage` | anyone (self) | `on` / `off` / `sync` / `status` for Bible auto-sync · `local-on` / `local-off` for Local Sync · `reset` your own progress and sync state (two-step confirm) |
+| `/raid-task` | anyone (self) | Side tasks per character and shared tasks per roster |
+| `/raid-gold-earner` | anyone (self) | Choose which characters earn gold (6 per account per week) |
+| `/raid-auction` | anyone (self) | Bid calculator for 4- and 8-player parties; replies publicly, input errors stay private |
+| `/raid-bg` | anyone (self) | Background images for your `/raid-status` cards |
+| `/raid-log` | anyone | A character's latest public log as images ([Raid log capture](#raid-log-capture)) |
+| `/raid-share` | Raid Manager | `grant` / `revoke` / `list` sharing of all your rosters with another user |
+| `/raid-language` | anyone (self) | Your display language: 🇻🇳 Tiếng Việt (default) or 🇯🇵 日本語 (a cuter Artist voice) |
+| `/raid-help` | anyone | Drill-down help; `language:` overrides the language for one call (vi / en / jp) |
+| `/raid-channel` | admin | Register the monitor channel, toggle schedules, repin the welcome |
+| `/raid-announce` | admin | List, enable, disable or redirect the 11 announcement types per guild |
+| `/raid-server` | bot owner | `list` the servers Artist is in, or `leave server:` one (see [Access](#access-and-sharing)) |
 
-Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). Manager perks: 15s auto-manage sync cooldown (vs 10m), `👑` header icon on their rosters, and exclusive access to `/raid-check`.
+**Raid Manager** = a Discord user ID in `RAID_MANAGER_ID` (comma-separated). Managers get a 15 s
+auto-sync cooldown (10 minutes for others), a `👑` header icon on their rosters, `/raid-check`,
+and `/raid-share`.
 
-## Experimental public log capture
+## How it works
 
-`/raid-log` opens a public character picker without command options. Only the
-caller can use it: **🔎 Search by name** opens a text-input dialog, and a menu
-lists the caller's own saved characters with class icon, roster and item level,
-paginated when needed, and **🕘 Recent logs** gathers the newest public logs
-across that roster. Users with no saved characters see only name search. Shared
-or manager-accessible rosters belonging to other users are excluded, and a roster
-choice is checked against the owner's current saved characters before lookup.
+### Raid status
 
-Selecting a character replaces the opening card with their latest public
-log in NA by encounter timestamp, without a weekly reset filter. It resolves the
-character IDs and class from a single profile-page request through the existing
-Bible client, then reads the
-newest logs page, and requires an exact character-name match (case-insensitive,
-with accents preserved). No registered roster is needed. Private logs, unknown
-characters, no logs and mismatched identities produce a notice card instead of a capture.
+- One roster per page. The 🗃️ Local Sync view is always listed, since Discord cannot disable a single select option; with no sync mode on it shows a "turn it on" card.
+- Roster iLvl and class refresh in the background and from the **Refresh roster** button. A refresh follows a character renamed in game to its new name by its `lostark.bible` character id and keeps its progress; the roster card notes the old name for a week, and any character that is new on the roster without being added. Bible auto-sync may record the renamed character's clears one sync later.
+- **Gold & difficulty**: weekly gold per character and per account, bound gold in the `🔒` tail; per-character gold is hidden while a raid filter is active. The view edits one or several characters at once (✏️ marks the selection):
+  - the gold dropdown pins up to 3 gold raids (3 ticked set exactly those; fewer leave the free slots to Artist), and 🔄 **Reset gold** returns them to automatic;
+  - the difficulty dropdown sets raid modes, which apply at once before a raid has run and queue for the next weekly reset after it ran;
+  - each save posts one summary.
+- `/raid-gold-earner` pre-checks the top 6 by iLvl the first time for older data; new characters default to on.
 
-The panel is a log book titled with the raid and character and linked to the log
-on Bible. Its fields name 👑 MVP DMG (highest D%), 📈 DPS score (best percentile
-badge, with nDPS) and 🎯 MVP Counter (most counters; ties go to STAG, then D%,
-then table order) on the DPS row; ✨ MVP Sup (highest bD%), 🤝 Sup
-contribution (best rContribution badge, with rCon%) and ⏱️ Sup uptime (best Buff
-Performance badge) on the support row. 📜 The raid's five latest logs follow, coloured by parse tier
-with ▶ on the open log, and the side colour follows the open log's parse. New
-panels open on the full Damage tab with **Bracketed**; the image is the selected
-tab as captured from Bible, and a player view adds an image-only embed for the
-lower half. No roster registration or Auto-sync is required. This is one
-log/gate, not a whole-raid aggregate, and anonymized names are kept as shown on
-Bible. It does not update raid progress or scan for logs automatically.
+### Sync
 
-Controls sit in five rows: **◀️ tab ▶️ · 📐 Bracketed/Normalized · ↩️ Defaults**,
-then menus for **raid**, **log**, **player** and **tab**. A closed menu shows only
-its chosen option, so labels carry the facts: a raid's log count and best parse, a
-log's percent, DPS, nDPS and duration, a player's class icon, gear score and
-badges, a tab's short explanation. Defaults keeps the current log and returns to
-the whole team, Damage and Bracketed; Normalized is Bible's normalized percentile
-mode. Character lookup starts with 25 recent logs; the raid menu lists only raids
-in that history and holds **⏬ Load older logs** (another page on demand, up to
-250 logs) and **🔄 Refresh**, which reloads the history and recaptures the current
-view, bypassing cached captures, while keeping the log, player, tab and mode. If
-Bible repeats a page without new IDs, loading stops; the count is the history
-loaded into this panel, not a claim to cover every log. Long menus paginate within
-Discord's 25-option limit. Only the original caller can operate the panel, for 15
-minutes; other members can view it or open their own. Player choices follow the
-Damage table's party and row order, keeping anonymous names.
+| Mode | How it records clears |
+|---|---|
+| Bible auto-sync (`/raid-auto-manage action:on`) | Reconciles clears from `lostark.bible` logs; cannot reach characters with Public Log off |
+| Local Sync (`action:local-on`) | The Local Reader reads the active raid week from `encounters.db`; new links come from `/raid-status` → 🗃️ Local Sync |
+| Solo Local Reader | For Bible auto-sync users: a private link from `/raid-status` that syncs only explicit Solo clears from the page |
 
-Selections acknowledge immediately with a waiting line on the existing message,
-before roster lookup or Bible access. It clears on success or failure; the previous
-images and controls remain available while the next view is prepared. Repeated
-clicks on the same panel do not start another job.
+- **Bible and Local Sync exclude each other**, even when the mode changes during a running sync or a save retry. A failed Discord acknowledgement releases the sync slot.
+- **The Local Reader page** remembers the file handle, watches SQLite revisions in near real time (sub-500 ms visible fallback), drops superseded scans, and checks the file header right before sending a small delta preview; changed files settle and rebuild first.
+- **Sync** stores the preview as a short-lived job and applies it in a second call, so a retry after a transient write error reuses the job and keeps party propagation for gates already written. Preview jobs last 2 hours, a newer scan supersedes an older pending preview, and an interrupted apply recovers automatically. A pending preview can still be Synced, Cancelled or Refreshed from `/raid-status`. Reader links last 30 minutes, also after a web sync. A public card never carries the signed link: its **New link** button sends it in a private follow-up.
+- **Solo scope**: the Solo link accepts only rows whose local difficulty is explicitly `Solo`. The page, the preview endpoint and the apply endpoint all enforce it, so a Solo link cannot apply a Full job; unknown, empty or non-Solo difficulties are never guessed into Solo. The Solo reader never propagates party progress.
+- **Party propagation** (Full Local Sync only): an encounter's cumulative gate progress is also written to party characters registered in any Artist roster, whatever their owner's sync mode, but only while the target raid has no progress this week; the synced card lists them. Party membership comes from the client-readable `players` snapshot and is not attested by Artist, so the server caps each source gate at 15 targets, applies the source gate first, and re-checks untouched progress before every write.
+- **Daily roster refresh** opens at 00:00 VN for every registered roster, Local Sync included. It drains up to six users every five minutes with restart catch-up, at most four attempts per user per day, and spaces refreshes 1.5 s apart; on a `lostark.bible` 429 it pauses until the backoff ends and the interrupted user keeps the attempt. It refreshes roster data in every mode; clear-log reconciliation still needs `action:on`, and Local Sync clears still need the Local Reader. The `daily-roster-sync` summary rides the next raid-channel cleanup notice (or the morning greeting during quiet hours); a guild without channel cleanup, or with its own channel set for it, gets a separate post. `AUTO_MANAGE_DAILY_DISABLED` switches the scheduler off.
+- **Reset** (`/raid-auto-manage action:reset`) also clears the daily scheduler's lease and retry state; a new daily attempt has its own identity, so an older worker cannot overwrite it.
 
-Team navigation includes Damage, Party/Self Buffs (offensive or all), Shields
-(Given, Received, Total Blocked, Blocked Breakdown), Tanked, Average DPS and 10s DPS.
-Player navigation includes Skill Damage, Party/Self Buffs (offensive or all), and
-Damage Breakdown By Category when available; other player tabs use By Source.
-Each player capture is two ordered images covering the entire content, including
-skill tables, buff contribution, Crit Luck, stat conversion, damage potential,
-miscellaneous bonuses, opener rotation and charts when provided by that log.
-Public profile/loadout links are shown where Bible exposes them. Switching logs
-resets player focus to the team so a slot can never silently select another person.
+### Raid check
 
-**🕘 Recent logs** reads page 1 of each saved character's logs (the 24 highest item
-levels) with the Bible IDs Auto-sync stored, asking for a profile only when they
-are missing, and skips characters Auto-sync saw with Public Log off in the last
-day. It shows the ten newest fights with parse, DPS and nDPS, or a support's two
-badges, AP/Brand/Identity/T uptime and rCon, and lists characters whose logs are
-private. A menu opens any of the newest 25 in the log panel after checking that
-the character is still in the caller's roster. Results are kept for five minutes
-per caller and invalidated when the candidate roster, Bible IDs or known private
-status changes. Concurrent panels share a pending read; **🔄 Refresh** starts a
-fresh read whose cache cannot be overwritten by an older load. A gathering that
-passes 45 seconds cancels its HTTP work and shows any logs that arrived in time;
-expired work still queued in the shared limiter cannot start an HTTP request.
-Characters are asked two at a time, as Auto-sync does. If no logs arrived while
-any reads failed or timed out, the previous card comes back with a notice instead
-of an empty result. Partial results are not cached. A selected Recent log that
-has moved past page 1 is looked up within the existing 250-log history limit.
+`/raid-check` lists pending characters from iLvl 1720 up; lower characters stay out of its cards,
+counts and roster pages, and Solo raids stay hidden because a solo clear needs no team.
+**Sync-check all** sits on the button row in every view and pulls Bible logs for every raid and
+every saved roster whose owner turned auto-sync on (Local Sync users are skipped); reopen
+`/raid-check` afterwards to see the update. **Refresh roster** pulls iLvl and class for the current
+roster. Characters sit in their natural iLvl bucket (Serca Normal `[1710,1730)`, Hard
+`[1730,1740)`, Nightmare `1740+`), and an explicit clear also shows on the mode it was cleared
+in, marked when seen from another bucket, e.g. `2/2 (Normal Clear)`.
 
-Every problem is answered with a notice card that only the clicker sees: what
-happened and what to do next. A capture that fails or times out links the original
-log on Bible. Each panel action checks public-log access before using any cached
-image, and a character whose logs turn private mid-session gets a lock card in
-place of the panel, with the image removed and every control disabled.
+### Side tasks
 
-Capture reuses one browser/page for up to 45 idle seconds when memory permits.
-It uses Playwright's Chromium Headless Shell rather than the full Chromium
-channel. Before entering/changing player detail and before each detail PNG,
-it requests browser garbage collection to release temporary chart allocations.
-The capture layout, CSS resolution and two-image detail coverage are unchanged.
-When it first opens a log it also reads every player's figures and percentile
-badges from the Damage table in both modes. Support bD% comes from the public
-encounter data already embedded in the page, using Bible's displayed total DMG
-as the denominator, including Esther when shown. No support detail is opened
-automatically. Missing or incompatible data leaves bD% empty; player detail still
-opens on demand. Only the small computed figures are retained, not raw encounters.
-Before PNG framing, both detail screenshots are collected. With a finite cgroup
-limit, Chromium closes first if free memory is below a 128 MiB reserve plus the
-largest input/output bitmap pair. Memory is checked again after framing and
-before reusing a warm browser. Missing/unlimited cgroup readings preserve the
-45-second reuse policy. This reserve reduces peak overlap; it is not an OOM
-guarantee. One-shot captures always close Chromium before framing.
-Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
-5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
-tables expand the capture container/viewport, up to 3200px, without hiding columns.
-Tall PNGs get transparent side margins to a minimum 4:3 frame before caching,
-to keep Discord's image preview from narrowing the summary card. Content is
-neither resized nor cropped; images already wide enough pass through unchanged.
-Player images split near a card boundary with a small overlap, covering the last
-chart instead of clipping at the last table. No player images are pre-rendered.
-Concurrent panel edits are rejected before work starts, and failed edits retain
-the last successful selection. A crashed browser gets one fresh attempt within
-the original deadline, respecting the shared Bible HTTP 429 backoff.
+- **Per character**: daily and weekly tasks (up to 3 daily + 5 weekly); `add` with `action:single` or `all`, `remove`, `clear`.
+- **Shared per roster**: Event Shop, Chaos Gate, Field Boss or custom presets (up to 5 daily + 5 weekly + 5 scheduled); `shared-add all_rosters:true` adds to every saved roster; `expires_at:YYYY-MM-DD` hides an expired event shop.
+- Ticked in `/raid-status` → 📝 Side tasks. They reset at 17:00 VN daily and Wednesday 17:00 VN weekly. Scheduled presets (Chaos Gate Mon/Thu/Sat/Sun, Field Boss Tue/Fri/Sun) follow 11 AM-5 AM US Eastern windows, daylight saving included, so they open an hour later in VN during US winter time.
+- Writes to a shared roster recheck edit access before each save attempt and stay bound to the original owner, so a revoked grant cannot finish a pending retry.
 
-For a local experiment without Discord or MongoDB:
+### Schedules and announcements
 
-```powershell
-npm ci
-npx playwright install --only-shell chromium
-npm run preview:raid-log -- --character Qiylyn
-```
+- **Weekly reset**, Wednesday 17:00 VN: checked every 30 minutes (Wednesday ≥ 10:00 UTC), once per user through `weeklyResetKey` (ISO week); a bot that was offline through the window resets on its next check.
+- **Monitor-channel cleanup** every 30 minutes. During Artist's quiet hours (02:00-09:00 VN, with a bedtime and a morning catch-up sweep) her scheduled posts stay quiet: Chaos Gate / Field Boss and maintenance reminders, the weekly reset and the daily roster report. Something due at exactly 02:00 or 09:00 still posts.
+- **Announcement types** (`/raid-announce`): `daily-roster-sync`, `weekly-reset`, `stuck-nudge`, `set-greeting`, `hourly-cleanup`, `artist-bedtime`, `artist-wakeup`, `whisper-ack`, `maintenance-early`, `maintenance-countdown` and the opt-in `world-event-reminder`, which posts 20 minutes before Chaos Gate or Field Boss, names whichever spawns and combines Sunday overlaps.
 
-The shared capture service writes PNG + JSON evidence to `.agent/raid-log-preview/`
-only when invoked through this preview script. The Discord handler keeps the PNG
-in memory and attaches it to its reply. Register the command through the existing
-`deploy:commands` workflow and restart the bot when ready to test in Discord; the
-preview command itself never registers commands or sends messages.
+### Auction calculator
 
-Playwright is pinned in the lockfile. Docker installs Chromium Headless Shell and
-its system dependencies at build time; other Linux installations need
-`npx playwright install --with-deps --only-shell chromium`. Capture leaves the
-`channel` option unset to use that shell. See the official
-[Playwright browser setup](https://playwright.dev/docs/browsers#chromium-headless-shell).
-The bot needs Embed Links and Attach Files permissions in the target channel.
+`/raid-auction market_value:<AH listing>` (with optional `profit`, on by default) shows the bids
+for 4- and 8-player parties side by side, each member's cut and the winner's estimated profit.
+Enter the listing price as it is: the 5% sell fee is already in the formula
+`floor(0.95 × listing × (N-1)/N)`, × 0.92 in profit mode (ported from la-utils).
 
-Only HTTPS public log URLs on `lostark.bible` are accepted, without query strings
-or fragments. Captures use an isolated unsigned-in browser, allow only same-origin
-requests plus image assets from `cdn.ags.lol`. Failed captures close their browser;
-successful interactive captures close after the idle timeout. One capture runs
-per process, with up to four queued jobs. Capture attempts and both queue waits
-share a 60-second deadline; expired jobs are removed without starting later.
-Only page loading uses Bible's existing limiter/backoff; local tab changes and
-PNG encoding leave its slots available. Identical queued views reuse a completed
-cached image. Catalog operations have a separate 30-second budget covering queued
-requests and, for an exact-log lookup, its profile and history pages together.
-The render log records queue, capture (including queue) and Discord upload times.
-Captures over 8 MiB, missing assets, clipped
-tables and inaccessible logs are reported as errors. This experiment depends on
-Bible's current layout and access policy; local success does not establish Railway
-resource usage, Linux rendering or Discord delivery.
+### Backgrounds
 
-## Text-monitor format
+`/raid-bg` needs no admin setup or environment variable. Uploads are normalized to a 16:9
+(1600×900) JPEG of at most 2 MB and stored in the `userbackgrounds` collection.
+- `set` adds 1-4 images: `action:overwrite` replaces the library, `extend` appends, up to 6 scenes.
+- `view` browses one scene at a time with a dropdown and ◀/▶.
+- `edit` replaces a scene or deletes scenes.
 
-Post into the channel registered via `/raid-channel`:
+Saved images map evenly or randomly across your rosters (extra scenes are spares). Shared roster
+pages use the viewer's own backgrounds, not the owner's.
+
+### Access and sharing
+
+- **`/raid-share grant target:@user`** (default `permission:edit`): the grantee reads and writes the manager's rosters in `/raid-status`, `/raid-set`, `/raid-task` and the text monitor. Adding, editing and removing rosters and `/raid-auto-manage` stay with the owner. Revocable any time.
+- **`/raid-server`** is for the Discord application owner and shown only to admins. `leave` asks for confirmation on a card (60 s); the `server` option suggests server names; the home server (`GUILD_ID`) is refused, and nothing saved about a server is deleted. It is not listed in `/raid-help`.
+
+## Text monitor
+
+Post into the channel registered with `/raid-channel`:
 
 ```text
 Serca Nightmare Clauseduk            → mark all Serca Nightmare gates done
@@ -235,7 +149,7 @@ Act4 reset Priscilladuk               → reset all Act 4 gates while preserving
 Kazeros done Priscilladuk             → mark Kazeros done in the mode the character already has
 ```
 
-Aliases (case-insensitive):
+The bot parses the post, updates the characters and confirms by DM. Aliases are case-insensitive:
 
 | Kind | Values |
 |---|---|
@@ -246,48 +160,48 @@ Aliases (case-insensitive):
 | Done | `done` in place of the difficulty: each character's raid is marked in the mode it already has (a raid with no stored mode uses the one `/raid-status` shows), so the mode never changes; a gate still works; no difficulty or `reset` beside it |
 | Separator | space, `+`, or `,` |
 
-Note: `nm` is Normal (not Nightmare). Nightmare only accepts the full word or `9m`. Horizon uses Level 1/2/3 and does not support Solo. Typed Level 1/2 still records, but `/raid-set` autocomplete and the `/raid-status` difficulty picker offer Horizon Level 3 only, and a character below 1750 no longer gets Horizon by default.
+`nm` is Normal, not Nightmare; Nightmare takes only the full word or `9m`. Horizon uses Level
+1/2/3 and has no Solo. A typed Level 1/2 still records, but `/raid-set` autocomplete and the
+`/raid-status` difficulty picker offer Horizon Level 3 only, and a character below 1750 no longer
+gets Horizon by default.
 
-## Data Model
+## Raid log capture
 
-One MongoDB collection (`users`), one document per Discord user. Accounts and characters nest as subdocuments; raid progress lives on each character.
+Experimental: it depends on `lostark.bible`'s current layout and access policy.
 
-```mermaid
-erDiagram
-    USER ||--o{ ACCOUNT : "has"
-    ACCOUNT ||--o{ CHARACTER : "contains"
-    CHARACTER ||--|| ASSIGNED_RAIDS : "tracks"
-    ASSIGNED_RAIDS ||--o{ GATE : "per-raid per-gate"
+### Using it
 
-    USER {
-        string discordId PK
-        string weeklyResetKey
-        bool autoManageEnabled
-        number lastAutoManageSyncAt
-        number lastAutoManageAttemptAt
-    }
-    ACCOUNT {
-        string accountName
-        number lastRefreshedAt
-        number lastRefreshAttemptAt
-    }
-    CHARACTER {
-        string name
-        string class
-        number itemLevel
-        string combatScore
-        bool publicLogDisabled
-        string bibleSerial
-        number bibleCid
-        number bibleRid
-    }
-    GATE {
-        string difficulty
-        number completedDate
-    }
+- `/raid-log` opens a character picker only the caller can use: **🔎 Search by name**, a menu of the caller's own saved characters (class icon, roster, item level), and **🕘 Recent logs**. Users with no saved characters see only the name search. Other users' shared or manager-accessible rosters are not offered, and a roster choice is checked against the owner's current characters first.
+- A character opens their latest public NA log by encounter time, with no weekly filter and no roster registration or auto-sync needed. The name must match exactly (case-insensitive, accents kept); private logs, unknown characters, no logs and mismatched identities get a notice card.
+- **The panel** is a log book titled with the raid and character and linked to the log on Bible. The DPS row names 👑 MVP DMG, 📈 DPS score and 🎯 MVP Counter; the support row names ✨ MVP Sup, 🤝 Sup contribution and ⏱️ Sup uptime. The raid's five latest logs follow, coloured by parse tier, with ▶ on the open one.
+- **Controls**: **◀️ tab ▶️ · 📐 Bracketed/Normalized · ↩️ Defaults**, then menus for raid, log, player and tab. The raid menu holds **⏬ Load older logs** (one more page at a time, up to 250 logs) and **🔄 Refresh** (reloads and recaptures, bypassing cached images). A click answers at once with a waiting line, and a second click on the same panel starts no second job. Only the caller can operate the panel, for 15 minutes; others can view it or open their own.
+- **Tabs**: the team view has Damage, Party/Self Buffs, Shields, Tanked, Average DPS and 10s DPS; a player view has Skill Damage, Party/Self Buffs and Damage Breakdown, as two images covering the whole page. Switching logs resets the player focus to the team.
+- **🕘 Recent logs** shows the ten newest fights across the caller's saved characters (the 24 highest item levels) and lists characters whose logs are private; its menu opens any of the newest 25. Results are kept five minutes per caller; a gathering stops at 45 seconds and shows what arrived.
+- One log is one gate, not a whole-raid aggregate, and anonymized names stay as Bible shows them. It never updates raid progress. Every problem gets a private notice card; a failed capture links the log on Bible, and a character whose logs turn private mid-session gets a lock card.
+
+### Running it
+
+- Only HTTPS public log URLs on `lostark.bible` are accepted. Captures run in an isolated, signed-out Playwright Chromium Headless Shell that may load only same-origin requests and images from `cdn.ags.lol`.
+- One capture runs per process with up to four queued, all inside a 60-second deadline; a crashed browser gets one fresh attempt within it. Catalog lookups (profile and history pages) have their own 30-second budget. Images are kept in a 16 MiB LRU cache for 5 minutes; captures over 8 MiB are errors. The render log records the queue, capture and Discord upload times.
+- The browser is reused for up to 45 idle seconds when memory permits. With a cgroup memory limit, Chromium closes before framing when free memory is under a 128 MiB reserve plus the largest bitmap pair; this lowers peak memory but is not an OOM guarantee.
+- The bot needs **Embed Links** and **Attach Files** in the target channel. Docker installs the headless shell at build time; other Linux hosts need `npx playwright install --with-deps --only-shell chromium` ([Playwright docs](https://playwright.dev/docs/browsers#chromium-headless-shell)).
+- A local try without Discord or MongoDB (it fetches the public site and writes PNG + JSON to `.agent/raid-log-preview/`). A local success says nothing about Railway memory, Linux rendering or Discord delivery.
+
+```powershell
+npm ci
+npx playwright install --only-shell chromium
+npm run preview:raid-log -- --character Qiylyn
 ```
 
-User document example:
+## Data
+
+| Model (collection) | Holds |
+|---|---|
+| `users` (`User`) | One document per Discord user: accounts, characters and each character's raid progress |
+| `GuildConfig` | Per-guild monitor channel, cleanup cursors, bedtime/wake-up dedup keys and announcement settings |
+| `LocalSyncPreview` | Local Sync preview jobs (expire on their `expiresAt`) |
+| `roster_shares` (`RosterShare`) | Roster shares from a manager to a grantee |
+| `userbackgrounds` (`UserBackground`) | `/raid-bg` images, apart from the user document |
 
 ```jsonc
 {
@@ -317,84 +231,37 @@ User document example:
 }
 ```
 
-**Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. `/raid-check` places characters in their natural iLvl bucket first (for example Serca Normal is `[1710,1730)`, Hard is `[1730,1740)`, Nightmare is `1740+`), but explicit clears are also shown on the mode they actually cleared and annotated when viewed from another bucket, e.g. `2/2 (Normal Clear)`.
-
-**Solo mode.** Raids with a Normal difficulty carry a `solo` mode: a manual-only alias with the same item-level floor and the same base/bound/unbound gold, but its own stored key and localized label. Level-based content such as Horizon opts out. Solo is never picked by automatic eligibility (`manualOnly`). A mode marked `selectable: false` (Horizon Level 1/2) is skipped by every picker and by the automatic default, but stays in the catalog so stored modes, typed input and synced clears still resolve and count. Full Local Sync reads every supported explicit difficulty in the active week. A user who keeps Bible Auto-sync enabled can instead open the private Local Reader from `/raid-status`; that signed session accepts only rows whose local LoaLog difficulty is explicitly `Solo`, then applies them from the page. Client filtering, the preview endpoint, and the apply endpoint all enforce the same scope, so a Solo link cannot apply a Full job. Unknown, empty, or non-Solo difficulties are never guessed into Solo. Solo raids remain hidden from `/raid-check` because a solo clear needs no team comp. A Solo raid that holds no gold slot this week stays on its `/raid-status` character card with the `🔒` mark but is left out of every `/raid-status` count, so the raid dropdown, roster dropdown and header agree.
-
-**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `bot/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
-
-**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `bot/models/guildConfig.js`.
+- **Gates.** A raid is done when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false`, so a new gate needs no migration.
+- **Solo mode.** Raids with a Normal difficulty carry a manual-only `solo` mode: same item-level floor and gold as Normal, its own stored key and label. Automatic eligibility never picks it, and level-based content such as Horizon has none. A mode marked `selectable: false` (Horizon Level 1/2) is skipped by every picker and the automatic default but stays in the catalog, so stored modes, typed input and synced clears still count. A Solo raid that holds no gold slot this week stays on its `/raid-status` card with `🔒` but is left out of every count, so the dropdowns and the header agree.
+- **Classes.** 30+ classes map from Bible ids to display names in `bot/models/Class.js`; an unknown id falls back to the title-cased raw id.
 
 ## Architecture
 
 ```
 LostArk_RaidManage/
-|-- bot.js                         # Discord client lifecycle + listeners
+|-- bot.js            # Discord client lifecycle and listeners
 |-- bot/
-|   |-- commands.js                # Compose root: wires every command/service factory
-|   |-- db.js                      # Lazy Mongo connect with DNS fallback
-|   |-- app/                       # Boot composition: slash registration, Local Reader, router registry
-|   |-- domain/                    # Static domain catalog data, e.g. raid requirements/gold
-|   |-- handlers/                  # Slash command / component handlers by feature
-|   |   |-- commands/               # SlashCommandBuilder registry
-|   |   |-- local-sync/             # Local-sync buttons / follow-up actions
-|   |   |-- meta/                   # Help + language commands
-|   |   |-- raid/                   # raid-set/task/share/channel/announce/auto-manage handlers
-|   |   |-- raid-check/             # Scan + sync/all-mode UI
-|   |   |-- raid-status/            # Status view, task UI, sync, filters
-|   |   `-- roster/                 # Add/edit/remove roster + gold-earner handlers
-|   |-- models/                    # Persisted schemas + Discord/class metadata
-|   |   |-- user.js
-|   |   |-- guildConfig.js
-|   |   |-- Class.js
-|   |   `-- ArtistEmoji.js
-|   |-- services/                  # Cross-command services grouped by concern
-|   |   |-- access/                 # Manager allowlist + roster-share access checks
-|   |   |-- auto-manage/            # Bible auto-sync core/status helpers
-|   |   |-- discord/                # Emoji bootstrap, interaction router, identity cache
-|   |   |-- i18n/                   # Translation resolver + user/guild language cache
-|   |   |-- local-sync/             # Local Reader API, tokens, preview jobs, apply logic
-|   |   |-- raid/                   # Schedulers, weekly reset, channel monitor, raid view snapshots
-|   |   `-- roster/                 # Bible roster fetch + refresh cooldown logic
-|   `-- utils/
-|       |-- async/                 # In-flight loader + latest-only queue
-|       |-- discord/               # Generic Discord component helpers
-|       `-- raid/                  # Pure raid helpers grouped by reuse surface
-|           |-- common/             # Names, labels, embeds, character normalization
-|           |-- queries/            # Mongo query builders for raid views
-|           |-- schedule/           # Announcement registry, maintenance/quiet-hour/reset math
-|           `-- tasks/              # Side-task/shared-task helpers + task view layout
-|-- web/                            # Local Reader page; reads encounters.db, syncs through the API
-|-- assets/
-|   |-- class-icons/
-|   `-- artist-icons/
-|-- scripts/
-|   |-- deploy-commands.js         # Standalone slash-command registration (REST)
-|   `-- invert-icon.py
-|-- test/                          # node --test, pure functions via __test exports
-|-- Dockerfile
-|-- railway.toml
-|-- .env.example
-`-- package.json
+|   |-- commands.js   # Composition root: wires every command and service factory
+|   |-- db.js         # Lazy Mongo connection with DNS fallback
+|   |-- app/          # Boot: slash registration, Local Reader server, router registry
+|   |-- domain/       # Static catalog data (raids, gold, difficulty aliases)
+|   |-- handlers/     # commands, local-sync, meta, raid, raid-check, raid-status, roster
+|   |-- models/       # Schemas (user, guildConfig, localSyncPreview, RosterShare, userBackground) and class/emoji metadata
+|   |-- services/     # access, auto-manage, discord, i18n, local-sync, raid (schedulers, reset, monitor), roster
+|   `-- utils/        # async (in-flight loader, latest-only queue), discord, raid (common, queries, schedule, tasks)
+|-- web/              # Local Reader page (ES modules)
+|-- assets/           # class-icons, artist-icons
+|-- scripts/          # deploy-commands.js (manual slash registration), invert-icon.py
+|-- test/             # node --test suite
+`-- Dockerfile, railway.toml, .env.example, package.json
 ```
-Four composition principles:
 
-1. **Factory + dep injection.** Every command/service exports `create<Name>(deps)` so `bot/commands.js` wires the object graph once at boot. Tests instantiate with stubs.
-2. **Registry as single source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS`, `RAID_MANAGER_ID` all live in exactly one place and are referenced from docs, HELP_SECTIONS, and runtime logic.
-3. **Services orchestrate, utils calculate.** Long-running DB/Discord flows stay in `services/*`; pure raid math and view helpers live in `utils/raid/*` so `/raid-status`, `/raid-check`, `/raid-task`, schedulers, and Local Sync reuse the same calculations.
-4. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, and Local Sync apply logic - new UIs never re-implement raid mutation.
+1. **Factory and dependency injection.** Every command and service exports `create<Name>(deps)`, so `bot/commands.js` wires the object graph once at boot and tests pass stubs.
+2. **One source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS` and `RAID_MANAGER_ID` each live in one place, read by help text and runtime alike.
+3. **Services orchestrate, utils calculate.** DB and Discord flows stay in `services/*`; raid math and view helpers in `utils/raid/*` are shared by `/raid-status`, `/raid-check`, `/raid-task`, the schedulers and Local Sync.
+4. **Shared write paths.** `applyRaidSetForDiscordId` serves `/raid-set`, the text monitor and Local Sync. Task adds and removals share `handlers/raid/task/write-handler.js` (access checks, fresh reads, save retries, replies after commit), and auto-manage confirmations share `handlers/raid/auto-manage/core/confirmation.js`.
 
-Task additions and removals share `handlers/raid/task/write-handler.js` for access
-checks, fresh document reads, save retries, and replies after commit. Auto-manage
-enable/reset confirmations share `handlers/raid/auto-manage/core/confirmation.js`;
-their write operations and confirmation IDs stay in the individual handlers.
-
-For maintenance, see `.claude/repository-map.md` and `.claude/verification.md`
-(local, gitignored). Backend modules use CommonJS; `web/` keeps its own ES module
-boundary. Development tools live in `scripts/`. Docker excludes development files
-while retaining `web/`, runtime assets, and the bot.
-
-Interaction flow:
+The backend is CommonJS; `web/` keeps its own ES-module boundary.
 
 ```mermaid
 flowchart LR
@@ -410,68 +277,62 @@ flowchart LR
   RM -->|applyRaidSetForDiscordId| RC
 ```
 
-Weekly reset runs every 30 minutes (UTC-based trigger: Wed ≥ 10:00 UTC). Per-user dedup via `weeklyResetKey` (ISO week string). Catch-up safe: a bot offline through the reset window fires on the next tick.
+## Setup
 
-## Environment Variables
+### Environment variables
 
 | Var | Required | Default | Notes |
 |---|:---:|---|---|
-| `DISCORD_TOKEN` | ✅ | - | Bot token from Developer Portal |
+| `DISCORD_TOKEN` | ✅ | - | Bot token from the Developer Portal |
 | `CLIENT_ID` | ✅ | - | Application ID for slash-command registration |
-| `GUILD_ID` | ✅ | - | Target guild (slash commands are guild-scoped) |
+| `GUILD_ID` | ✅ | - | Home guild; slash commands are registered there |
 | `MONGO_URI` | ✅ | - | MongoDB connection string |
-| `MONGO_DB_NAME` | ❌ | `manage` | Database name |
-| `MONGO_ENSURE_INDEXES` | ❌ | `true` | Set `false` if indexes are managed in Atlas UI |
-| `DNS_SERVERS` | ❌ | `8.8.8.8,1.1.1.1` | DNS fallback when Atlas SRV lookup fails |
-| `TEXT_MONITOR_ENABLED` | ❌ | `true` | `false` skips the privileged MessageContent intent + listener |
-| `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated user IDs. Empty = `/raid-check` rejects everyone; manager perks never apply |
-| `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the background bible auto-sync scheduler (no redeploy needed) |
-| `LOCAL_SYNC_TOKEN_SECRET` | ✅ for Local Reader | - | HMAC secret used for private 30-minute reader links; use at least 16 characters |
-| `PUBLIC_BASE_URL` | ✅ for Local Reader | - | Public HTTPS origin used to build `/sync#token=...` links |
-| `LOCAL_SYNC_HTTP_DISABLED` | ❌ | `false` | `true` disables the Local Reader HTTP surface |
+| `MONGO_DB_NAME` | | `manage` | Database name |
+| `MONGO_ENSURE_INDEXES` | | `true` | `false` when indexes are managed in the Atlas UI |
+| `DNS_SERVERS` | | `8.8.8.8,1.1.1.1` | DNS fallback when the Atlas SRV lookup fails |
+| `RAID_MANAGER_ID` | recommended | empty | Comma-separated user IDs; empty means `/raid-check` refuses everyone and no manager perks apply |
+| `TEXT_MONITOR_ENABLED` | | `true` | `false` skips the privileged Message Content intent and the text monitor |
+| `AUTO_MANAGE_DAILY_DISABLED` | | `false` | Switches off the background Bible auto-sync scheduler without a redeploy |
+| `LOCAL_SYNC_TOKEN_SECRET` | for Local Reader | - | HMAC secret for the private 30-minute reader links; at least 16 characters |
+| `PUBLIC_BASE_URL` | for Local Reader | - | Public HTTPS origin used to build `/sync#token=...` links |
+| `LOCAL_SYNC_HTTP_DISABLED` | | `false` | `true` turns the Local Reader HTTP server off |
+| `PORT` | | `3000` | Port of the Local Reader HTTP server (Railway sets it) |
 
-`/raid-bg` (background image for `/raid-status` embeds) needs no admin setup and no env var · uploaded bytes are normalized to a 16:9 (1600x900) JPEG frame (≤ 2 MB per stored image) and persisted on the `userbackgrounds` Mongo collection (separate from the User doc). Users can `/raid-bg set` 1-4 images with `action:overwrite` (replace the library) or `action:extend` (append) up to a **6-scene library** (decoupled from roster count); `/raid-bg view` is an interactive browser (one large scene at a time, a scene dropdown + ◀/▶ pager); `/raid-bg edit` replaces a scene (attach an image, then pick the slot) or deletes scenes (pick a slot, or clear all) via an ephemeral picker. The bot maps saved images evenly or randomly across rosters (extra scenes are spares) and attaches the matching one as the embed image. Shared roster pages use the viewer's own background pool, not the roster owner's.
+The bot refuses to start when `NODE_TLS_REJECT_UNAUTHORIZED=0` is set, since that turns off
+certificate checks for Discord, MongoDB and `lostark.bible`. For the text monitor, turn on
+**Bot → Privileged Gateway Intents → Message Content Intent** in the Discord Developer Portal, or set
+`TEXT_MONITOR_ENABLED=false` to run with slash commands only.
 
-Discord Developer Portal: flip `Bot → Privileged Gateway Intents → Message Content Intent` on to let the text monitor read posts, or set `TEXT_MONITOR_ENABLED=false` to run slash-command-only.
-
-## Run Local
+### Run
 
 ```bash
 npm install
 cp .env.example .env        # then edit with real values
-npm run deploy:commands     # first time only, or when slash schema changes
+npm run deploy:commands     # optional: force-register slash commands from this machine
 npm start                   # or: npm run dev (node --watch)
-npm test                    # node --test on test/
+npm test                    # node --test; there is no CI, so run it before pushing
 ```
 
-Logic-only changes (inside a command, no new option or name tweak) don't require `deploy:commands`; Discord keeps the cached schema.
+### Deploy on Railway
 
-## Railway Deploy
+1. Push to the GitHub branch Railway tracks and link the repo to a Railway service.
+2. Set the environment variables in **Variables** (at least `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
+3. Railway builds from the `Dockerfile` (`node:24-bookworm-slim`, `npm ci --omit=dev`) and starts `node bot.js`; `railway.toml` restarts on failure, up to 3 times.
 
-1. Push to the GitHub branch Railway tracks (`main`).
-2. Create the Railway service → link repo.
-3. In the service's **Variables** tab, set every env var (minimum: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
-4. Railway builds from `Dockerfile` (node:24-bookworm-slim, `npm ci --omit=dev`) and starts via `node bot.js`.
-5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
+The bot re-registers its slash commands in `GUILD_ID` on every boot (`ClientReady` →
+`applicationGuildCommands`), so a redeploy is enough for command changes. A failed registration
+logs a warning and the bot keeps the previous schema; `scripts/deploy-commands.js` is for forcing
+a registration from a dev machine.
 
-The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema (fail-soft). `scripts/deploy-commands.js` stays around only for dev-machine force-registers.
+## Known limitations
 
-## Development
-
-- Run tests before pushing: `npm test`
-- Commits auto-deploy via Railway on push to `main`; think of `main` as production
-- No CI pipeline; test suite is the only gate
-- Prefer editing existing files; don't create documentation files unless asked
-
-## Known Limitations
-
-- `/raid-add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `bot/services/roster/fetch.js`.
-- Slash commands are guild-scoped. Enabling the bot in more servers needs one `deploy-commands` run per `GUILD_ID`.
-- `RAID_MANAGER_ID` rotation requires a redeploy. There's no `/admin add-manager` command.
-- Bible auto-sync can't reach a character with Public Log OFF. Its owner records that progress through `/raid-set`, the text monitor or Local Sync; the Refresh roster buttons only update roster metadata such as iLvl/class.
-- `MessageContent` is a Discord privileged intent. Large-guild deployments (100+ members without manual approval) need to set `TEXT_MONITOR_ENABLED=false` until Discord grants intent access.
-- Remembering and continuously watching `encounters.db` depends on Chromium's File System Access permission. With persistent permission the reader restores and resumes watching automatically; otherwise the browser shows one Restore click, and clearing site data requires choosing the file again. A plain drag-drop fallback is a static snapshot. WAL-mode databases are shown read-only but cannot be submitted because a single-file handle cannot prove the latest contents of `encounters.db-wal`.
-- One Mongo cluster, one collection per kind; no sharding or read replicas. The per-user footprint is small (≤ 30 chars across ≤ 5 accounts) so this fits comfortably for the 2-person deployment.
+- `/raid-add-roster` scrapes `lostark.bible` HTML and inline SSR JSON; an upstream layout change breaks the parsers in `bot/services/roster/fetch.js`.
+- Slash commands are registered in one guild (`GUILD_ID`); another server needs its own `deploy-commands` run.
+- Changing `RAID_MANAGER_ID` needs a redeploy; there is no command for it.
+- Bible auto-sync cannot reach a character with Public Log off. Its owner records progress with `/raid-set`, the text monitor or Local Sync; **Refresh roster** updates only iLvl and class.
+- Message Content is a privileged intent: a large guild (100+ members without manual approval) needs `TEXT_MONITOR_ENABLED=false` until Discord grants access.
+- Watching `encounters.db` depends on Chromium's File System Access permission. With persistent permission the reader restores and resumes on its own; otherwise it asks for one Restore click, and clearing site data means choosing the file again. A drag-and-drop file is a static snapshot. WAL-mode databases show read-only and cannot be submitted, since a single-file handle cannot prove the latest contents of `encounters.db-wal`.
+- One MongoDB cluster with no sharding or read replicas; a user's footprint is small (≤ 30 characters across ≤ 5 accounts).
 
 ## License
 

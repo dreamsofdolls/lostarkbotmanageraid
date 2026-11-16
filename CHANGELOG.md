@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-16
+
+### Docs
+- README reorganized: one short line per command, the details of status, sync, tasks, schedules, auction, backgrounds and sharing under "How it works", and `/raid-log` split into how to use it and how to run it. Corrected: the data section lists all five models instead of one collection, adds `PORT` and the `NODE_TLS_REJECT_UNAUTHORIZED` start guard, names the 11 announcement types, and drops the stale pointer to a local .claude folder.
+
 ## 2026-11-15
 
 ### Security
