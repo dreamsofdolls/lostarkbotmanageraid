@@ -190,3 +190,100 @@ test("party deltas past the preview job limit keep the newest clears", async () 
   const few = partyDeltas.slice(0, 3);
   assert.deepEqual(capPartyDeltas(few), few);
 });
+
+test("buildDiff drops stale other-mode clears once DB already completed the raid, and Solo excludes partial other-mode progress", async () => {
+  const { buildLocalSyncCatalog } = require("../bot/services/local-sync/core/catalog");
+  const {
+    buildActionableBucketKeySet,
+    buildDiff,
+    bucketize,
+    setCatalog,
+  } = await import("../web/js/sync/preview-utils.js");
+  setCatalog(buildLocalSyncCatalog());
+
+  // Case 1: DB already has Act 4 Normal 2/2, file still has older Hard G1.
+  const completedRoster = [{
+    accountName: "Roster",
+    characters: [{
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: 1500 },
+          G2: { difficulty: "Normal", completedDate: 2000 },
+        },
+      },
+    }],
+  }];
+  const mixedBuckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Normal", 1, "Aki", 1, 2000],
+    ["Brelshaza, Ember in the Ashes", "Hard", 1, "Aki", 1, 1000],
+  ]);
+  assert.equal(mixedBuckets.length, 2);
+  const completedDiff = buildDiff(completedRoster, mixedBuckets, { currentWeekStartMs: 500 });
+  assert.equal(
+    buildActionableBucketKeySet(completedDiff).size,
+    0,
+    "completed raid must not keep an older other-mode gate actionable"
+  );
+
+  // Case 2: DB has Hard G1, file has Solo G2 (cumulative G1+G2).
+  const partialHardG1Roster = [{
+    accountName: "Roster",
+    characters: [{
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "hard",
+          G1: { difficulty: "Hard", completedDate: 1500 },
+          G2: { difficulty: "Hard", completedDate: null },
+        },
+      },
+    }],
+  }];
+  const soloG2Buckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 2000],
+  ]);
+  const soloDiff = buildDiff(partialHardG1Roster, soloG2Buckets, {
+    allowedModeKeys: ["solo"],
+    currentWeekStartMs: 500,
+  });
+  assert.equal(
+    buildActionableBucketKeySet(soloDiff, { includeModeConflict: false }).size,
+    0,
+    "Solo reader must exclude a Solo clear when another difficulty has partial current-week progress"
+  );
+
+  // Case 3: DB has Hard G2 only, file has Solo G1 only.
+  const partialHardG2Roster = [{
+    accountName: "Roster",
+    characters: [{
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "hard",
+          G1: { difficulty: "Hard", completedDate: null },
+          G2: { difficulty: "Hard", completedDate: 1500 },
+        },
+      },
+    }],
+  }];
+  const soloG1Buckets = bucketize([
+    ["Brelshaza, Ember in the Ashes", "Solo", 1, "Aki", 1, 2000],
+  ]);
+  const soloG1Diff = buildDiff(partialHardG2Roster, soloG1Buckets, {
+    allowedModeKeys: ["solo"],
+    currentWeekStartMs: 500,
+  });
+  assert.equal(
+    buildActionableBucketKeySet(soloG1Diff, { includeModeConflict: false }).size,
+    0,
+    "Solo reader must exclude Solo G1 when another gate of the same raid has current-week progress in another mode"
+  );
+});

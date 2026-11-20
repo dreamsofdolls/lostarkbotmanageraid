@@ -36,12 +36,14 @@ async function applySingleWrite({
       currentWeekStartMs,
     });
     appendApplyResult(result, bucket, effectiveGates, lists);
+    return result;
   } catch (err) {
     console.error(
       `[local-sync/apply] write failed char=${bucket.charName} raid=${bucket.raidKey}:`,
       err?.message || err
     );
     lists.rejected.push(writeErrorEntry(bucket, err));
+    return null;
   }
 }
 

@@ -601,3 +601,22 @@ test("preview summary projects gold for at most 6 earners per roster", () => {
   assert.equal(summary.goldDelta.total, 6 * 13000);
   assert.deepEqual(summary.goldDelta.byChar.map((entry) => entry.charName).sort(), names.slice(0, 6).sort());
 });
+
+test("preview summary keeps G2 Normal completion when newest-first deltas include an older G1 Hard clear", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: true, charName: "Aki", lastClearMs: 2000 },
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Hard", cleared: true, charName: "Aki", lastClearMs: 1000 },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {},
+  }), buckets, { currentWeekStartMs: 500 });
+
+  const armoche = summary.charsAfterSync[0].raids.find((raid) => raid.raidKey === "armoche");
+  assert.equal(armoche.modeKey, "normal");
+  assert.equal(armoche.status, "done");
+});

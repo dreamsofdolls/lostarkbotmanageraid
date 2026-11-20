@@ -534,8 +534,27 @@ function createRosterRefreshService(deps) {
   };
 }
 
+/**
+ * Timestamp (ms) when a roster account becomes eligible for its next refresh,
+ * accounting for both the normal success cooldown and the shorter retry
+ * cooldown after a failed attempt.
+ * @param {object} account
+ * @param {number} [cooldownMs=ROSTER_REFRESH_COOLDOWN_MS]
+ * @returns {number}
+ */
+function getRosterRefreshReadyAtMs(account, cooldownMs = ROSTER_REFRESH_COOLDOWN_MS) {
+  const lastSuccess = Number(account?.lastRefreshedAt) || 0;
+  const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
+  const successReadyAt = lastSuccess > 0 ? lastSuccess + cooldownMs : 0;
+  const failureReadyAt = lastAttempt > lastSuccess
+    ? lastAttempt + ROSTER_REFRESH_FAILURE_COOLDOWN_MS
+    : 0;
+  return Math.max(successReadyAt, failureReadyAt);
+}
+
 module.exports = {
   createRosterRefreshService,
+  getRosterRefreshReadyAtMs,
   ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_NOTE_WINDOW_MS,
 };

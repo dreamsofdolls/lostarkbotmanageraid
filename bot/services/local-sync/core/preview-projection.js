@@ -173,6 +173,7 @@ function applyPreviewBuckets({
     if (preflight.action !== "apply") continue;
 
     let state = finalRaidStates.get(bucket.raidKey);
+    if (state && gates.length > 0 && state.cleared.size >= gates.length) continue;
     if (!state || state.modeKey !== bucket.modeKey) {
       state = { modeKey: bucket.modeKey, cleared: new Map() };
       finalRaidStates.set(bucket.raidKey, state);

@@ -1167,3 +1167,48 @@ test("persistEditedRoster: a renamed row keeps the saved character and its progr
   assert.deepEqual(summary.added, []);
   assert.deepEqual(summary.kept, ["Sunxpaul"]);
 });
+
+test("persistEditedRoster preserves progress when a background refresh already renamed the character before Confirm", async () => {
+  const { factory, docs } = makeFactory();
+  const renamedAt = Date.now() - 10_000;
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Chixpaul",
+      characters: [{
+        id: "zed-id",
+        name: "Sunxpaul",
+        renamedFrom: "Zedaxpaul",
+        renamedAt,
+        class: "Souleater",
+        itemLevel: 1781.67,
+        combatScore: "7139.95",
+        isGoldEarner: false,
+        bibleSerial: "200000067680670",
+        bibleCid: 291570,
+        bibleRid: 211957,
+        assignedRaids: { serca: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 111 } } },
+        sideTasks: [{ taskId: "una", name: "Una dailies", reset: "daily", completed: true }],
+      }],
+    }],
+  });
+
+  // Picker was opened before the background refresh ran, so savedKey is still the old name.
+  const summary = await factory.__test.persistEditedRoster(makeEditSession({ accountName: "Chixpaul" }), [
+    { charName: "Sunxpaul", className: "Souleater", itemLevel: 1781.67, combatScore: "7139.95", savedKey: "zedaxpaul", inBible: true },
+  ]);
+
+  const [stored] = docs.get("user-1").accounts[0].characters;
+  assert.equal(docs.get("user-1").accounts[0].characters.length, 1);
+  assert.equal(stored.name, "Sunxpaul");
+  assert.equal(stored.id, "zed-id");
+  assert.equal(stored.isGoldEarner, false);
+  assert.equal(stored.bibleCid, 291570);
+  assert.equal(stored.renamedFrom, "Zedaxpaul");
+  assert.equal(stored.renamedAt, renamedAt);
+  assert.equal(stored.assignedRaids.serca.G1.completedDate, 111);
+  assert.equal(stored.sideTasks.length, 1);
+  assert.deepEqual(summary.removed, []);
+  assert.deepEqual(summary.added, []);
+  assert.deepEqual(summary.kept, ["Sunxpaul"]);
+});

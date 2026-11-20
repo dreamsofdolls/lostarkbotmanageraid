@@ -120,6 +120,78 @@ test("resolveRaidChannelWriteBatch returns the roster it read for the receipt", 
   assert.deepEqual(batch.missingCharNames, []);
 });
 
+test("resolveRaidChannelWriteBatch ignores view-only shares and prefers edit shares on name collision", async () => {
+  const viewOnlyBatch = await resolveRaidChannelWriteBatch({
+    authorId: "viewer-1",
+    charNames: ["ViewChar"],
+    logger: silentLogger,
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "owner-view",
+      accountName: "ViewRoster",
+      isOwn: false,
+      accessLevel: "view",
+      account: { characters: [{ charName: "ViewChar" }] },
+    }],
+  });
+  assert.equal(viewOnlyBatch.noAccessibleRoster, true);
+  assert.deepEqual(viewOnlyBatch.missingCharNames, ["ViewChar"]);
+
+  const mixedBatch = await resolveRaidChannelWriteBatch({
+    authorId: "viewer-1",
+    charNames: ["Bob", "ViewOnlyChar"],
+    logger: silentLogger,
+    getAccessibleAccounts: async () => [
+      {
+        ownerDiscordId: "owner-view",
+        accountName: "ViewRoster",
+        isOwn: false,
+        accessLevel: "view",
+        account: { characters: [{ charName: "Bob" }, { charName: "ViewOnlyChar" }] },
+      },
+      {
+        ownerDiscordId: "owner-edit",
+        accountName: "EditRoster",
+        isOwn: false,
+        accessLevel: "edit",
+        account: { characters: [{ charName: "Bob" }] },
+      },
+    ],
+  });
+  assert.equal(mixedBatch.noAccessibleRoster, false);
+  assert.deepEqual(mixedBatch.missingCharNames, ["ViewOnlyChar"]);
+  assert.equal(mixedBatch.plans[0].discordId, "owner-edit");
+  assert.equal(mixedBatch.plans[0].rosterName, "EditRoster");
+});
+
+test("raid-channel result summaries treat authLost as a write error instead of notFound", () => {
+  const { EmbedBuilder } = require("discord.js");
+  const { UI } = require("../bot/utils/raid/common/shared");
+  const {
+    summarizeRaidChannelResults,
+    buildRaidChannelErrorHint,
+  } = require("../bot/services/raid/channel-monitor/channel-monitor-results");
+  const { createRaidChannelEmbedBuilders } = require("../bot/services/raid/channel-monitor/channel-monitor-embeds");
+  const authLostResult = { charName: "SharedChar", matched: false, updated: false, authLost: true };
+  const resultGroups = [{ raidMeta, statusType: "complete", results: [authLostResult] }];
+
+  const summary = summarizeRaidChannelResults([authLostResult]);
+  assert.equal(summary.notFoundResults.length, 0);
+  assert.equal(summary.errorResults.length, 1);
+
+  const hint = buildRaidChannelErrorHint({ resultGroups, accounts: [], authorLang: "en", UI });
+  assert.doesNotMatch(hint, /not found/i);
+
+  const { buildRaidChannelReceiptEmbed } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
+  const receipt = buildRaidChannelReceiptEmbed({
+    text: "kazeros hard SharedChar",
+    resultGroups,
+    accounts: [],
+    afterWrite: false,
+    lang: "en",
+  }).toJSON();
+  assert.doesNotMatch(receipt.description, /not found/i);
+});
+
 test("resolveRaidChannelWriteBatch indexes accessible characters once per batch", async () => {
   let characterNameReads = 0;
   const characterCount = 200;

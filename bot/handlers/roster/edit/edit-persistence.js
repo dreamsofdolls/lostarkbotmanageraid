@@ -42,8 +42,14 @@ function createPersistEditedRoster({
       );
       // A row of a character renamed in game carries the saved name as its
       // savedKey and the new name as charName; the saved record is found by
-      // savedKey, so Save renames it instead of replacing it.
-      const savedKeyOf = (character) => character.savedKey || normalizeName(character.charName);
+      // savedKey first, falling back to charName if a background refresh
+      // already renamed the record in MongoDB before Confirm ran.
+      const savedKeyOf = (character) => {
+        if (character.savedKey && existingMap.has(character.savedKey)) return character.savedKey;
+        const currentKey = normalizeName(character.charName);
+        if (existingMap.has(currentKey)) return currentKey;
+        return character.savedKey || currentKey;
+      };
       const selectedNameSet = new Set(selectedChars.map(savedKeyOf));
 
       summary.added = [];

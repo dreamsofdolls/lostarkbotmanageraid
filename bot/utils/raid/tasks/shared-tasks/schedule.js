@@ -46,6 +46,7 @@ function shiftLocalDate(parts, deltaDays) {
 function zonedDateTimeToUtcMs(parts, hour, minute, timeZone = SCHEDULE_SOURCE_TIME_ZONE) {
   const targetWallMs = Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute);
   let guessMs = targetWallMs;
+  let lastDeltaMs = 0;
   for (let i = 0; i < 4; i += 1) {
     const current = getZonedParts(new Date(guessMs), timeZone);
     const currentWallMs = Date.UTC(
@@ -55,9 +56,14 @@ function zonedDateTimeToUtcMs(parts, hour, minute, timeZone = SCHEDULE_SOURCE_TI
       current.hour,
       current.minute
     );
-    const deltaMs = currentWallMs - targetWallMs;
-    if (deltaMs === 0) break;
-    guessMs -= deltaMs;
+    lastDeltaMs = currentWallMs - targetWallMs;
+    if (lastDeltaMs === 0) break;
+    guessMs -= lastDeltaMs;
+  }
+  // A Spring Forward gap never reaches delta 0 and oscillates on the hour
+  // before the jump; step forward across the skipped hour instead of falling back.
+  if (lastDeltaMs < 0) {
+    guessMs -= lastDeltaMs;
   }
   return guessMs;
 }
@@ -166,19 +172,27 @@ function resolveActiveScheduleWindow(preset, parts) {
   return null;
 }
 
-// The current slot of an open schedule window, as UTC ms.
-function resolveActiveSlot(preset, activeWindow) {
-  const slotMinutes = getScheduleSlotMinutes(preset);
-  const slotOffset = Math.floor(activeWindow.elapsedMinutes / slotMinutes) * slotMinutes;
-  const atWindowMinute = (minute) => utcMsFromAnchorRelativeMinute(
+// The current slot of an open schedule window, anchored on exact UTC window
+// bounds so hourly slots stay contiguous across US Eastern DST transitions.
+function resolveActiveSlot(preset, activeWindow, nowMs) {
+  const slotMs = getScheduleSlotMinutes(preset) * 60 * 1000;
+  const windowStartAtMs = utcMsFromAnchorRelativeMinute(
     activeWindow.anchor,
-    preset.startMinute + minute,
+    preset.startMinute,
     preset.timeZone
   );
+  const windowEndAtMs = utcMsFromAnchorRelativeMinute(
+    activeWindow.anchor,
+    preset.startMinute + activeWindow.windowDuration,
+    preset.timeZone
+  );
+  const elapsedMs = Math.max(0, nowMs - windowStartAtMs);
+  const slotStartAtMs = windowStartAtMs + Math.floor(elapsedMs / slotMs) * slotMs;
+  const slotEndAtMs = Math.min(slotStartAtMs + slotMs, windowEndAtMs);
   return {
-    slotStartAtMs: atWindowMinute(slotOffset),
-    slotEndAtMs: atWindowMinute(Math.min(slotOffset + slotMinutes, activeWindow.windowDuration)),
-    windowEndAtMs: atWindowMinute(activeWindow.windowDuration),
+    slotStartAtMs,
+    slotEndAtMs,
+    windowEndAtMs,
   };
 }
 
@@ -231,7 +245,7 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   const anchor = activeWindow?.anchor || null;
   const active = !!activeWindow;
   const { slotStartAtMs, slotEndAtMs, windowEndAtMs } = active
-    ? resolveActiveSlot(preset, activeWindow)
+    ? resolveActiveSlot(preset, activeWindow, now.getTime())
     : NO_ACTIVE_SLOT;
   const key = active ? scheduledTaskKey(task, slotStartAtMs) : null;
   const completed = active && task?.completedForKey === key;

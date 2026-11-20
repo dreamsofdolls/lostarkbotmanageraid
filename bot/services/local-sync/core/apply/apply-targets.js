@@ -46,7 +46,11 @@ function bucketize(deltas) {
       existing.lastClearMs = lastClearMs;
     }
   }
-  return [...buckets.values()];
+  // Process clears oldest-first so a newer clear on another difficulty remains
+  // the source of truth when a character splits gates across modes.
+  return [...buckets.values()].sort(
+    (a, b) => (a.lastClearMs - b.lastClearMs) || (a.gateIndex - b.gateIndex)
+  );
 }
 
 function resolveCurrentWeekStartMs(value) {

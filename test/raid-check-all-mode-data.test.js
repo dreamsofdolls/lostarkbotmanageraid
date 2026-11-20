@@ -389,6 +389,13 @@ test("all-mode refresh leaves a roster added while the session is open for the n
   assert.equal(pagesData[0].account, refreshed.accounts[0]);
 });
 
+test("RAID_CHECK_USER_QUERY_FIELDS includes character id and isGoldEarner for refresh matching and gold summaries", () => {
+  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/queries/raid-check");
+  const fields = new Set(RAID_CHECK_USER_QUERY_FIELDS.split(/\s+/));
+  assert.ok(fields.has("accounts.characters.id"), "missing accounts.characters.id");
+  assert.ok(fields.has("accounts.characters.isGoldEarner"), "missing accounts.characters.isGoldEarner");
+});
+
 test("all-mode author meta never waits on Discord REST before first render", async () => {
   const fetched = [];
   const users = [

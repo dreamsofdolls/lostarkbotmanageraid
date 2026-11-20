@@ -27,16 +27,20 @@ function cutAtBoundary(text, maxLength, boundary) {
   return `${end > 0 ? head.slice(0, end) : head}…`;
 }
 
+function isWriteErrorResult(result) {
+  return Boolean(result?.error || result?.authLost);
+}
+
 function summarizeRaidChannelResults(results) {
   const list = Array.isArray(results) ? results : [];
-  const notFoundResults = list.filter((r) => !r.matched && !r.error);
+  const notFoundResults = list.filter((r) => !r.matched && !isWriteErrorResult(r));
   const alreadyResults = list.filter(
     (r) => r.matched && !r.updated && (r.alreadyComplete || r.alreadyReset)
   );
   const ineligibleResults = list.filter(
     (r) => r.matched && !r.updated && !r.alreadyComplete && !r.alreadyReset
   );
-  const errorResults = list.filter((r) => r.error);
+  const errorResults = list.filter(isWriteErrorResult);
   const successCount = list.filter((r) => r.updated).length;
   const alreadyCount = alreadyResults.length;
 
@@ -134,7 +138,7 @@ function buildRaidChannelErrorHint({ resultGroups, accounts, authorLang, UI, t =
     }));
   }
 
-  const failed = labelsByCharacter(resultGroups, (r) => Boolean(r.error));
+  const failed = labelsByCharacter(resultGroups, isWriteErrorResult);
   if (failed.size > 0) {
     // errorSystem keeps {names}: the preflight lookup failure also uses it.
     lines.push(t("text-parser.errorSystem", authorLang, {

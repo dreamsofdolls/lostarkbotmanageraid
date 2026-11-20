@@ -48,10 +48,17 @@ async function resolveRaidChannelWriteBatch({
     );
   }
 
+  const allAccessible = Array.isArray(accessibleAccounts) ? accessibleAccounts : [];
+  // View-only shares cannot be mutated via the text monitor; exclude them
+  // before indexing so they neither pass preflight nor shadow an edit share.
+  const editableAccounts = allAccessible.filter(
+    (entry) => entry?.isOwn || entry?.accessLevel !== "view"
+  );
+
   const missingCharNames = [];
   // Every requested name targets the same access snapshot, so build its index
   // once instead of rescanning every account and character for each request.
-  const characterIndex = buildAccessibleCharacterIndex(accessibleAccounts);
+  const characterIndex = buildAccessibleCharacterIndex(editableAccounts);
   const plans = (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
     const hit = findAccessibleCharacter(characterIndex, charName);
     if (!hit && !lookupFailed) missingCharNames.push(charName);
@@ -74,10 +81,9 @@ async function resolveRaidChannelWriteBatch({
     plans,
     missingCharNames,
     lookupFailed,
-    noAccessibleRoster:
-      !lookupFailed && (!Array.isArray(accessibleAccounts) || accessibleAccounts.length === 0),
+    noAccessibleRoster: !lookupFailed && editableAccounts.length === 0,
     // The roster as read before the write; replies name characters from it.
-    accessibleAccounts: Array.isArray(accessibleAccounts) ? accessibleAccounts : [],
+    accessibleAccounts: allAccessible,
   };
 }
 

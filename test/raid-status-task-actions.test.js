@@ -134,6 +134,23 @@ test("toggleParsedSideTask dispatches single side-task toggles", async () => {
   assert.equal(userDoc.accounts[0].characters[1].sideTasks[0].completed, false);
 });
 
+test("toggleParsedSideTask toggles a single side task on a legacy character stored with charName", async () => {
+  const userDoc = makeUserDoc();
+  userDoc.accounts[0].characters.push({
+    charName: "LegacyChar",
+    sideTasks: [{ taskId: "legacy-1", name: "Una", reset: "daily", completed: false }],
+  });
+  const opts = baseOptions(userDoc);
+
+  const result = await toggleParsedSideTask({
+    ...opts,
+    parsed: parseTaskToggleValue("LegacyChar::legacy-1"),
+  });
+
+  assert.deepEqual(result, { handled: true, ok: true });
+  assert.equal(userDoc.accounts[0].characters[2].sideTasks[0].completed, true);
+});
+
 test("toggleParsedSideTask ignores noop and invalid parsed values", async () => {
   const userDoc = makeUserDoc();
   const opts = baseOptions(userDoc);

@@ -405,3 +405,28 @@ test("world-event reminder follows each guild's clock: en sleeps at 04:00 UTC wh
   assert.equal((await runReminderTickAt(now, "en")).posts.length, 0);
   assert.equal((await runReminderTickAt(now, "vi")).posts.length, 1);
 });
+
+test("world-event reminder and scheduled slots stay accurate across US Eastern Fall Back and Spring Forward DST transitions", () => {
+  const { resolveScheduledSharedTaskState } = require("../bot/utils/raid/tasks/shared-tasks/schedule");
+
+  // Fall Back (Sun 2026-11-01): 05:00Z is 01:00 EDT, 06:00Z is 01:00 EST (13:00 VN).
+  const firstOneAm = resolveScheduledSharedTaskState({ preset: "chaos_gate" }, utc(2026, 11, 1, 5, 10));
+  const secondOneAm = resolveScheduledSharedTaskState({ preset: "chaos_gate" }, utc(2026, 11, 1, 6, 10));
+  assert.equal(firstOneAm.slotStartAtMs, Date.UTC(2026, 10, 1, 5, 0));
+  assert.equal(firstOneAm.slotEndAtMs, Date.UTC(2026, 10, 1, 6, 0));
+  assert.equal(secondOneAm.slotStartAtMs, Date.UTC(2026, 10, 1, 6, 0));
+  assert.equal(secondOneAm.slotEndAtMs, Date.UTC(2026, 10, 1, 7, 0));
+  assert.notEqual(firstOneAm.key, secondOneAm.key);
+
+  const fallBackReminder = resolveWorldEventReminderForNow(utc(2026, 11, 1, 5, 40));
+  assert.deepEqual(fallBackReminder?.presetKeys, ["chaos_gate"]);
+  assert.equal(fallBackReminder?.spawnAtMs, Date.UTC(2026, 10, 1, 6, 0));
+
+  // Spring Forward (Sun 2026-03-08): 06:00Z is 01:00 EST, 07:00Z is 03:00 EDT (02:00 ET skipped).
+  const springSlot = resolveScheduledSharedTaskState({ preset: "chaos_gate" }, utc(2026, 3, 8, 6, 15));
+  assert.equal(springSlot.slotStartAtMs, Date.UTC(2026, 2, 8, 6, 0));
+  assert.equal(springSlot.slotEndAtMs, Date.UTC(2026, 2, 8, 7, 0));
+
+  const nextBoundary = nextWorldEventReminderBoundaryMs(utc(2026, 3, 8, 5, 45));
+  assert.equal(nextBoundary, Date.UTC(2026, 2, 8, 6, 40));
+});

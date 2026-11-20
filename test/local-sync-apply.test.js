@@ -632,3 +632,49 @@ test("applyLocalSyncDeltas - throws when deps missing", async () => {
     /getRaidRequirementMap required/
   );
 });
+
+test("applyLocalSyncDeltas applies mixed-difficulty clears on the same raid chronologically oldest-first", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const batchCalls = [];
+  const batchStub = makeSuccessfulBatchStub(batchCalls);
+
+  // Incoming deltas arrive newest-first from encounter-query.js (ORDER BY last_ms DESC):
+  // G2 Normal at t=2000 came after G1 Hard at t=1000.
+  await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 1000 },
+  ], makeDeps(applyStub, {
+    applyRaidSetBatchForDiscordId: batchStub,
+    currentWeekStartMs: 500,
+  }));
+
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(
+    batchCalls[0].entries.map((entry) => [entry.raidMeta.modeKey, entry.effectiveGates]),
+    [["hard", ["G1"]], ["normal", ["G1", "G2"]]]
+  );
+});
+
+test("applyLocalSyncDeltas skips a later cross-mode bucket when an earlier bucket in the same batch already completed the raid", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const batchCalls = [];
+  const batchStub = makeSuccessfulBatchStub(batchCalls);
+
+  // Earlier clear completes all gates of armoche (Normal G2 at t=1000); a later
+  // cross-mode clear (Hard G1 at t=2000) must be skipped instead of wiping 2/2.
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1000 },
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+  ], makeDeps(applyStub, {
+    applyRaidSetBatchForDiscordId: batchStub,
+    currentWeekStartMs: 500,
+  }));
+
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(
+    batchCalls[0].entries.map((entry) => [entry.raidMeta.modeKey, entry.effectiveGates]),
+    [["normal", ["G1", "G2"]]]
+  );
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.skipped[0].reason, "already_complete");
+});

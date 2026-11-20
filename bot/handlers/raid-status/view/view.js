@@ -15,7 +15,10 @@ const {
   normalizeName,
 } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
-const { ROSTER_NOTE_WINDOW_MS } = require("../../../services/roster/refresh");
+const {
+  getRosterRefreshReadyAtMs,
+  ROSTER_NOTE_WINDOW_MS,
+} = require("../../../services/roster/refresh");
 const { escapeEmbedText } = require("../../../utils/discord/embed-text");
 const {
   countedGoldEarners,
@@ -159,8 +162,8 @@ function createRaidStatusView(deps) {
       return `${lastUpdated} · ✅ ${t("raid-status.freshness.refreshReadyNow", lang)}`;
     }
 
-    const cursor = numberOrZero(account?.lastRefreshAttemptAt) || lastRefreshedAt;
-    const nextTs = `<t:${Math.floor((cursor + cooldownMs) / 1000)}:R>`;
+    const readyAtMs = getRosterRefreshReadyAtMs(account, cooldownMs);
+    const nextTs = `<t:${Math.floor(readyAtMs / 1000)}:R>`;
     return `${lastUpdated} · ⏳ ${t("raid-status.freshness.refreshReady", lang)} ${nextTs}`;
   }
 

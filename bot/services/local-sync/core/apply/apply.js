@@ -7,6 +7,7 @@
 
 "use strict";
 
+const { getGatesForRaid } = require("../../../../domain/raid-catalog");
 const {
   bucketize,
   effectiveGatesForBucket,
@@ -194,6 +195,7 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const buckets = bucketize(currentWeekDeltas);
   const reqMap = getRaidRequirementMap();
   const pendingWrites = [];
+  const completedRaidsInBatch = new Set();
   const useBatchApply = typeof applyRaidSetBatchForDiscordId === "function";
   const rosterIndex = userDoc ? buildRosterCharacterIndex(userDoc) : null;
 
@@ -208,6 +210,18 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     }
 
     const effectiveGates = effectiveGatesForBucket(bucket);
+    const raidBatchKey = `${bucket.charName.toLowerCase()}::${bucket.raidKey}`;
+    if (completedRaidsInBatch.has(raidBatchKey)) {
+      lists.skipped.push({
+        charName: bucket.charName,
+        raidKey: bucket.raidKey,
+        modeKey: bucket.modeKey,
+        gates: effectiveGates,
+        reason: "already_complete",
+      });
+      continue;
+    }
+
     if (shouldSkipForRosterPreflight(
       userDoc,
       bucket,
@@ -224,13 +238,16 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       continue;
     }
 
+    const allGates = getGatesForRaid(bucket.raidKey);
+    const completesRaid = allGates.length > 0 && effectiveGates.length >= allGates.length;
     const pending = buildPendingWrite(bucket, raidMeta, effectiveGates);
     if (useBatchApply) {
       pendingWrites.push(pending);
+      if (completesRaid) completedRaidsInBatch.add(raidBatchKey);
       continue;
     }
 
-    await applySingleWrite({
+    const result = await applySingleWrite({
       discordId,
       applyRaidSetForDiscordId,
       requireLocalSyncEnabled,
@@ -240,6 +257,9 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       ...pending,
       lists,
     });
+    if (completesRaid && result?.updated) {
+      completedRaidsInBatch.add(raidBatchKey);
+    }
   }
 
   await applyBatchWrites({

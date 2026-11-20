@@ -383,6 +383,7 @@ function resolveCellState({
   modeKey,
   gate,
   currentWeekStartMs = 0,
+  dbRaidComplete = false,
 }) {
   const dbEntry = assignedRaids?.[gate];
   const completedAt = Number(dbEntry?.completedDate);
@@ -392,6 +393,9 @@ function resolveCellState({
   const fileHas = fileGates && fileGates.has(gate);
   if (dbCleared && (!dbModeKey || dbModeKey === targetModeLabel)) {
     return "synced";
+  }
+  if (dbRaidComplete && dbModeKey && dbModeKey !== targetModeLabel) {
+    return "empty";
   }
   if (dbCleared && dbModeKey !== targetModeLabel && fileHas) {
     return "mode-conflict";
@@ -423,10 +427,12 @@ export function buildActionableBucketKeySet(
   for (const account of diffAccounts || []) {
     for (const character of account?.characters || []) {
       for (const cell of character?.cells || []) {
-        const hasAction = (cell.gates || []).some((gate) => {
-          const state = cell.states?.[gate];
-          return state === "pending" || (includeModeConflict && state === "mode-conflict");
-        });
+        const gateStates = (cell.gates || []).map((gate) => cell.states?.[gate]);
+        const hasConflict = Boolean(cell.hasOtherModeProgress) || gateStates.includes("mode-conflict");
+        if (!includeModeConflict && hasConflict) continue;
+        const hasAction = gateStates.some((state) => (
+          state === "pending" || (includeModeConflict && state === "mode-conflict")
+        ));
         if (hasAction) {
           keys.add(makeBucketKey(character.name, cell.raidKey, cell.modeKey));
           if (cell.sourceModeKey && cell.sourceModeKey !== cell.modeKey) {
@@ -497,6 +503,17 @@ function buildCharacterCell({
     modeKey
   );
   const assignedRaids = character?.assignedRaids?.[raidKey];
+  const weekFloor = Number(currentWeekStartMs) || 0;
+  const isGateClearedThisWeek = (gate) => {
+    const completedAt = Number(assignedRaids?.[gate]?.completedDate);
+    return completedAt > 0 && completedAt >= weekFloor;
+  };
+  const dbRaidComplete = gates.length > 0 && gates.every(isGateClearedThisWeek);
+  const storedModeKey = normalizeDifficulty(
+    assignedRaids?.modeKey || gates.map((gate) => assignedRaids?.[gate]?.difficulty).find(Boolean)
+  );
+  const hasOtherModeProgress = Boolean(storedModeKey && storedModeKey !== modeKey)
+    && gates.some(isGateClearedThisWeek);
   const states = Object.fromEntries(gates.map((gate) => [
     gate,
     resolveCellState({
@@ -505,6 +522,7 @@ function buildCharacterCell({
       modeKey,
       gate,
       currentWeekStartMs,
+      dbRaidComplete,
     }),
   ]));
   if (!Object.values(states).some((state) => state !== "empty")) return null;
@@ -514,7 +532,7 @@ function buildCharacterCell({
   const replacedModeKey = conflictGate
     ? normalizeDifficulty(assignedRaids?.[conflictGate]?.difficulty)
     : null;
-  return { raidKey, modeKey, sourceModeKey, gates, states, replacedModeKey };
+  return { raidKey, modeKey, sourceModeKey, gates, states, replacedModeKey, hasOtherModeProgress };
 }
 
 function buildCharacterProjection(character, context) {

@@ -41,7 +41,7 @@ function formatReceiptText(text) {
 }
 
 function resultOutcome(result) {
-  if (result.error) return "errored";
+  if (result.error || result.authLost) return "errored";
   if (result.updated) return "updated";
   if (result.alreadyComplete || result.alreadyReset) return "already";
   if (!result.matched) return "notFound";

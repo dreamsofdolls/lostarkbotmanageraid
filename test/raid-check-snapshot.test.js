@@ -295,12 +295,26 @@ test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
   const now = Date.now();
   const account = {
     lastRefreshedAt: now - 3 * 60 * 60_000, // success cooldown expired
-    lastRefreshAttemptAt: now - 2 * 60_000, // but a failed attempt is still cooling down
+    lastRefreshAttemptAt: now - 2 * 60_000, // but a failed attempt is still cooling down (3m left)
   };
   const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
   assert.match(line, /Cập nhật <t:\d+:R>/);
-  assert.match(line, /⏳ Refresh lại <t:\d+:R>/);
+  const match = line.match(/⏳ Refresh lại <t:(\d+):R>/);
+  assert.ok(match, line);
+  const expectedReadySec = Math.floor((account.lastRefreshAttemptAt + 5 * 60_000) / 1000);
+  assert.equal(Number(match[1]), expectedReadySec, "failure cooldown should show 5m from attempt, not 2h");
   assert.doesNotMatch(line, /✅ Refresh được rồi/);
+
+  // Case B: failure cooldown (5m) already elapsed, success cooldown (2h) has 10m left.
+  const accountB = {
+    lastRefreshedAt: now - 110 * 60_000,
+    lastRefreshAttemptAt: now - 6 * 60_000,
+  };
+  const lineB = __test.buildAccountFreshnessLine(accountB, { autoManageEnabled: false });
+  const matchB = lineB.match(/⏳ Refresh lại <t:(\d+):R>/);
+  assert.ok(matchB, lineB);
+  const expectedSuccessReadySec = Math.floor((accountB.lastRefreshedAt + 2 * 60 * 60_000) / 1000);
+  assert.equal(Number(matchB[1]), expectedSuccessReadySec, "remaining success cooldown must anchor on lastRefreshedAt");
 });
 
 test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {

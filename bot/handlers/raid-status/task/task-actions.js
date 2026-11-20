@@ -7,7 +7,7 @@
  * heavy import.
  */
 
-const { normalizeName } = require("../../../utils/raid/common/shared");
+const { getCharacterName, normalizeName } = require("../../../utils/raid/common/shared");
 const { resolveScheduledSharedTaskState } = require("../../../utils/raid/tasks/shared-tasks");
 const { CYCLE_START_BY_RESET, isTaskInCurrentCycle } = require("../../../utils/raid/tasks/task-cycle");
 const { findAccountByName } = require("../../../utils/user-doc");
@@ -123,7 +123,7 @@ async function toggleSingleSideTask(options) {
     if (!Array.isArray(account.characters)) return false;
 
     const target = account.characters.find(
-      (c) => normalizeName(c?.name) === normalizeName(targetCharName)
+      (c) => normalizeName(getCharacterName(c)) === normalizeName(targetCharName)
     );
     if (!target) return false;
     if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
