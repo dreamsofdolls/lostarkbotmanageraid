@@ -370,13 +370,33 @@ function normalizeDifficultyLabel(value) {
  *                   the old mode and write the new one
  *   "empty"         no actionable state for THIS mode (neither cleared at
  *                   this mode nor pending; OR cleared at a different mode
- *                   with no current-week activity at this mode - the
- *                   off-mode clear is informational but irrelevant for
- *                   the "is this raid+mode worth showing" question and
- *                   was previously a separate "db-other-mode" state -
- *                   collapsed into empty so chars who only do Hard don't
- *                   pollute the Normal raid card)
+ *                   with no current-week activity at this mode - collapsed
+ *                   into empty so chars who only do Hard don't pollute the
+ *                   Normal raid card)
  */
+const CELL_STATE_RULES = Object.freeze([
+  {
+    applies: ({ dbCleared, dbModeKey, targetModeLabel }) => dbCleared && (!dbModeKey || dbModeKey === targetModeLabel),
+    state: "synced",
+  },
+  {
+    applies: ({ dbRaidComplete, dbModeKey, targetModeLabel }) => (
+      dbRaidComplete && Boolean(dbModeKey) && dbModeKey !== targetModeLabel
+    ),
+    state: "empty",
+  },
+  {
+    applies: ({ dbCleared, dbModeKey, targetModeLabel, fileHas }) => (
+      dbCleared && dbModeKey !== targetModeLabel && Boolean(fileHas)
+    ),
+    state: "mode-conflict",
+  },
+  {
+    applies: ({ fileHas }) => Boolean(fileHas),
+    state: "pending",
+  },
+]);
+
 function resolveCellState({
   assignedRaids,
   fileGates,
@@ -391,17 +411,14 @@ function resolveCellState({
   const dbModeKey = normalizeDifficultyLabel(dbEntry?.difficulty);
   const targetModeLabel = normalizeDifficultyLabel(modeKey);
   const fileHas = fileGates && fileGates.has(gate);
-  if (dbCleared && (!dbModeKey || dbModeKey === targetModeLabel)) {
-    return "synced";
-  }
-  if (dbRaidComplete && dbModeKey && dbModeKey !== targetModeLabel) {
-    return "empty";
-  }
-  if (dbCleared && dbModeKey !== targetModeLabel && fileHas) {
-    return "mode-conflict";
-  }
-  if (fileHas) return "pending";
-  return "empty";
+  const match = CELL_STATE_RULES.find((rule) => rule.applies({
+    dbCleared,
+    dbRaidComplete,
+    dbModeKey,
+    targetModeLabel,
+    fileHas,
+  }));
+  return match?.state || "empty";
 }
 
 /**

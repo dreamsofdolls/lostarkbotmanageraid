@@ -24,6 +24,7 @@ const {
   uniqueNames,
 } = require("./channel-monitor-characters");
 const { resolveResultRaidMeta } = require("./channel-monitor-parse-validation");
+const { classifyRaidChannelResult } = require("./channel-monitor-results");
 
 const RECEIPT_TEXT_LIMIT = 200;
 
@@ -40,14 +41,6 @@ function formatReceiptText(text) {
     : chars.join("");
 }
 
-function resultOutcome(result) {
-  if (result.error || result.authLost) return "errored";
-  if (result.updated) return "updated";
-  if (result.alreadyComplete || result.alreadyReset) return "already";
-  if (!result.matched) return "notFound";
-  return "ineligible";
-}
-
 /**
  * One outcome per character and raid of the post, plus the totals. A
  * character typed twice finds the raid already DONE on its second write;
@@ -58,7 +51,7 @@ function collectReceiptOutcomes(resultGroups) {
   const notFoundNames = [];
   for (const group of resultGroups) {
     for (const result of group.results) {
-      const outcome = resultOutcome(result);
+      const outcome = classifyRaidChannelResult(result);
       if (outcome === "notFound") {
         notFoundNames.push(result.charName);
         continue;

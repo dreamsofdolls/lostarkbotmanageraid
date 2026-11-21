@@ -14,7 +14,6 @@ const {
   getGatesForRaid,
   getGoldForGate,
   getRaidLabel,
-  getRaidPartySize,
   getRaidGateForBoss,
   getRaidRequirementMap,
 } = require("../bot/domain/raid-catalog");
@@ -35,7 +34,6 @@ function boundGoldTotal(modeKey) {
 test("Belgardin is the newest raid: 8 players, two gates, Normal 1750 / Hard 1770 / Nightmare 1780", () => {
   assert.equal(RAID_ORDER.at(-1), "belgardin");
   assert.equal(getRaidLabel("belgardin"), "Belgardin");
-  assert.equal(getRaidPartySize("belgardin"), 8);
   assert.deepEqual(getGatesForRaid("belgardin"), ["G1", "G2"]);
 
   const requirementMap = getRaidRequirementMap();

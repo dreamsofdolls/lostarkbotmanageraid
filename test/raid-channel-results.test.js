@@ -8,6 +8,7 @@ const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 const {
   buildRaidChannelDmFallbackText,
   buildRaidChannelErrorHint,
+  classifyRaidChannelResult,
   summarizeRaidChannelResults,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-results");
 
@@ -276,4 +277,22 @@ test("the DM fallback cuts an over-long post on a whole character", () => {
   });
 
   assert.equal(content, `${"x".repeat(1998)}…`);
+});
+
+test("classifyRaidChannelResult classifies all five outcomes and keeps errored results out of ineligible", () => {
+  assert.equal(classifyRaidChannelResult({ matched: true, updated: true, alreadyComplete: true }), "updated");
+  assert.equal(classifyRaidChannelResult({ matched: true, updated: true, error: "save failed" }), "errored");
+  assert.equal(classifyRaidChannelResult({ matched: true, authLost: true }), "errored");
+  assert.equal(classifyRaidChannelResult({ matched: true, alreadyComplete: true }), "already");
+  assert.equal(classifyRaidChannelResult({ matched: true, alreadyReset: true }), "already");
+  assert.equal(classifyRaidChannelResult({ matched: false }), "notFound");
+  assert.equal(classifyRaidChannelResult({ matched: true, ineligibleItemLevel: 1600 }), "ineligible");
+
+  const summary = summarizeRaidChannelResults([
+    { charName: "AuthFail", matched: true, authLost: true },
+    { charName: "ErrMatched", matched: true, error: "save failed" },
+    { charName: "Low", matched: true, ineligibleItemLevel: 1600 },
+  ]);
+  assert.deepEqual(summary.errorResults.map((r) => r.charName), ["AuthFail", "ErrMatched"]);
+  assert.deepEqual(summary.ineligibleResults.map((r) => r.charName), ["Low"]);
 });

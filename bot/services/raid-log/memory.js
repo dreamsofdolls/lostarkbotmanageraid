@@ -12,8 +12,8 @@ async function readCaptureMemory(read = readFile) {
 }
 
 // Allow for renderer growth, encoded buffers and streamed PNG scanlines.
-// Framing no longer holds full decoded surfaces. This is a reserve, not an
-// exact peak prediction or an OOM guarantee.
+// Framing streams PNG scanlines instead of holding full decoded surfaces. This
+// is a reserve, not an exact peak prediction or an OOM guarantee.
 const MEMORY_RESERVE = 128 * 1024 * 1024;
 
 /**

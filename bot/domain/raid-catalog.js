@@ -86,7 +86,6 @@ function preserveManualRaidModePreference(storedModeKey, incomingModeKey, raidKe
 const RAID_REQUIREMENTS = {
   armoche: {
     label: "Act 4",
-    partySize: 8,
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
@@ -96,7 +95,6 @@ const RAID_REQUIREMENTS = {
   },
   kazeros: {
     label: "Kazeros",
-    partySize: 8,
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
@@ -106,7 +104,6 @@ const RAID_REQUIREMENTS = {
   },
   serca: {
     label: "Serca",
-    partySize: 4,
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
@@ -117,7 +114,6 @@ const RAID_REQUIREMENTS = {
   },
   horizon: {
     label: "Horizon",
-    partySize: 4,
     gates: ["G1", "G2"],
     supportsSolo: false,
     // Level 1 and Level 2 are retired: no picker or automatic default offers
@@ -130,7 +126,6 @@ const RAID_REQUIREMENTS = {
   },
   belgardin: {
     label: "Belgardin",
-    partySize: 8,
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
@@ -154,12 +149,6 @@ function getGatesForRaid(raidKey) {
 
 function getRaidLabel(raidKey) {
   return RAID_REQUIREMENTS[raidKey]?.label || String(raidKey || "");
-}
-
-function getRaidPartySize(raidKey) {
-  const size = Number(RAID_REQUIREMENTS[raidKey]?.partySize);
-  if (size === 4 || size === 8) return size;
-  throw new Error(`[raid-catalog] unsupported raid party size for: ${raidKey}`);
 }
 
 function buildRaidRequirementList() {
@@ -311,7 +300,6 @@ module.exports = {
   getRaidRequirementList,
   getRaidRequirementMap,
   getRaidLabel,
-  getRaidPartySize,
   getGatesForRaid,
   getRaidGateForBoss,
   BOSS_TO_RAID_GATE,

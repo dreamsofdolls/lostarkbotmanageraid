@@ -31,21 +31,45 @@ function isWriteErrorResult(result) {
   return Boolean(result?.error || result?.authLost);
 }
 
+const RESULT_OUTCOME_RULES = Object.freeze([
+  { applies: isWriteErrorResult, outcome: "errored" },
+  { applies: (result) => Boolean(result?.updated), outcome: "updated" },
+  { applies: (result) => Boolean(result?.alreadyComplete || result?.alreadyReset), outcome: "already" },
+  { applies: (result) => !result?.matched, outcome: "notFound" },
+]);
+
+/**
+ * Classify a single raid-channel write result into one display outcome.
+ * Precedence is intentional: write errors win over matched/already flags.
+ * @param {object} result
+ * @returns {"errored"|"updated"|"already"|"notFound"|"ineligible"}
+ */
+function classifyRaidChannelResult(result) {
+  return RESULT_OUTCOME_RULES.find((rule) => rule.applies(result))?.outcome || "ineligible";
+}
+
 function summarizeRaidChannelResults(results) {
   const list = Array.isArray(results) ? results : [];
-  const notFoundResults = list.filter((r) => !r.matched && !isWriteErrorResult(r));
-  const alreadyResults = list.filter(
-    (r) => r.matched && !r.updated && (r.alreadyComplete || r.alreadyReset)
-  );
-  const ineligibleResults = list.filter(
-    (r) => r.matched && !r.updated && !r.alreadyComplete && !r.alreadyReset
-  );
-  const errorResults = list.filter(isWriteErrorResult);
-  const successCount = list.filter((r) => r.updated).length;
-  const alreadyCount = alreadyResults.length;
+  const notFoundResults = [];
+  const ineligibleResults = [];
+  const errorResults = [];
+  let successCount = 0;
+  let alreadyCount = 0;
+  let hadNoRoster = false;
+
+  for (const r of list) {
+    if (r?.noRoster) hadNoRoster = true;
+    switch (classifyRaidChannelResult(r)) {
+      case "errored": errorResults.push(r); break;
+      case "updated": successCount += 1; break;
+      case "already": alreadyCount += 1; break;
+      case "notFound": notFoundResults.push(r); break;
+      case "ineligible": ineligibleResults.push(r); break;
+    }
+  }
 
   return {
-    hadNoRoster: list.some((r) => r.noRoster),
+    hadNoRoster,
     successCount,
     alreadyCount,
     notFoundResults,
@@ -199,5 +223,6 @@ function buildRaidChannelDmFallbackText({ resultGroups, accounts, authorLang, UI
 module.exports = {
   buildRaidChannelDmFallbackText,
   buildRaidChannelErrorHint,
+  classifyRaidChannelResult,
   summarizeRaidChannelResults,
 };

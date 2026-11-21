@@ -1,8 +1,6 @@
 // Raid-manager allowlist helper. Single source of truth for who counts as a
-// "manager" across the bot. Previously each caller parsed process.env.RAID_MANAGER_ID
-// on its own, which made it hard to extend the allowlist with additional
-// privileges (shorter sync cooldown, on-roster visual tag, etc) without
-// scattering the same comma-split-and-trim logic everywhere.
+// "manager" across the bot, keeping allowlist parsing and privileges (shorter
+// sync cooldown, on-roster visual tag, etc.) in one module.
 //
 // Why env-over-Mongo: keeps operator rotation identical to the pre-existing
 // /raid-check gate (update Railway env + redeploy) instead of fragmenting
