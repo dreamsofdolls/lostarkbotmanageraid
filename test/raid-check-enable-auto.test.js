@@ -144,16 +144,17 @@ test("tryEnableAutoManage returns 'error' when findOneAndUpdate throws", async (
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 
-test("tryEnableAutoManage tolerates findOne throwing in the fallback path", async () => {
-  // CAS rejects and fallback reads fail. Unknown state is treated as
-  // 'missing' rather than crashing - the leader gets the refresh-page
-  // hint instead of a stack trace.
+test("tryEnableAutoManage returns 'error' when fallback findOne throws", async () => {
+  // When CAS rejects and the fallback read fails, surface 'error' so callers
+  // report a DB failure rather than falsely claiming the user is missing.
+  const dbErr = new Error("Mongo blip");
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(null),
-    findOneImpl: () => Promise.reject(new Error("Mongo blip")),
+    findOneImpl: () => Promise.reject(dbErr),
   });
   const result = await tryEnableAutoManage(UserStub, "user-1");
-  assert.equal(result.outcome, "missing");
+  assert.equal(result.outcome, "error");
+  assert.equal(result.error, dbErr);
 });
 
 // --------- tryDisableAutoManage (Option C quick-undo button) ---------
@@ -210,6 +211,17 @@ test("tryDisableAutoManage returns 'error' when findOneAndUpdate throws", async 
   const dbErr = new Error("Mongo timeout");
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.reject(dbErr),
+  });
+  const result = await tryDisableAutoManage(UserStub, "user-1");
+  assert.equal(result.outcome, "error");
+  assert.equal(result.error, dbErr);
+});
+
+test("tryDisableAutoManage returns 'error' when fallback findOne throws", async () => {
+  const dbErr = new Error("Mongo blip");
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneImpl: () => Promise.reject(dbErr),
   });
   const result = await tryDisableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "error");
