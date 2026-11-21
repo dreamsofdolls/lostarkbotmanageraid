@@ -65,7 +65,7 @@ const RICH_CARD_FILES = new Set([
   "bot/handlers/roster/picker/render.js",
   "bot/services/auto-manage/reports/embeds.js",
   "bot/services/raid/channel-monitor/channel-monitor-embeds.js",
-  "bot/utils/raid/common/shared.js",
+  "bot/utils/raid/common/notices.js",
 ]);
 
 test("no legacy severity option reaches a notice", () => {
