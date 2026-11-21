@@ -5,6 +5,7 @@ const {
   buildDetailField,
   buildErrorDetailField,
   buildNoticeEmbed,
+  editNotice: editSharedNotice,
   replyNotice: replySharedNotice,
 } = require("../../utils/raid/common/shared");
 const {
@@ -70,10 +71,9 @@ function createAddRosterCommand({
   const adminMention = resolveAdminMention(getPrimaryManagerId);
   const replyNotice = (interaction, notice) => replySharedNotice(interaction, EmbedBuilder, notice);
   // Replaces a deferred reply or the open picker with one notice.
-  const editNotice = (interaction, notice) => interaction.editReply({
+  const editNotice = (interaction, notice) => editSharedNotice(interaction, EmbedBuilder, notice, {
     content: null,
     components: [],
-    embeds: [buildNoticeEmbed(EmbedBuilder, notice)],
   });
   // Title and body vars of a notice about a saved account.
   const savedAccountVars = (accountName, characters) => ({

@@ -130,8 +130,14 @@ function toModeKey(modeLabel) {
   return MODE_KEYS.get(normalizeName(modeLabel)) || "normal";
 }
 
+/**
+ * Read a character's display name across current (`name`) and legacy
+ * (`charName`) schemas, trimmed of surrounding whitespace.
+ * @param {object|null|undefined} character
+ * @returns {string}
+ */
 function getCharacterName(character) {
-  return character?.name || character?.charName || "";
+  return String(character?.name || character?.charName || "").trim();
 }
 
 function getCharacterClass(character) {

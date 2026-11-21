@@ -32,5 +32,6 @@ test("raid task add reset policy selects the matching cycle boundary", () => {
 
   assert.equal(cycleStartForReset("daily", deps), 111);
   assert.equal(cycleStartForReset("weekly", deps), 222);
+  assert.equal(cycleStartForReset("scheduled", deps), 0);
   assert.deepEqual(calls, ["daily", "weekly"]);
 });

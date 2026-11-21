@@ -6,7 +6,6 @@ const { createTaskMutationHandler } = require("../write-handler");
 const {
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
-  getCharacterDisplayName,
   findCharacterInUser,
   ensureSideTasks,
   countByReset,
@@ -25,6 +24,7 @@ const {
   NoticeKind,
   formatCharacterLabel,
   getCharacterClass,
+  getCharacterName,
 } = require("../../../../utils/raid/common/shared");
 const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
@@ -76,7 +76,7 @@ function applyAddSingleToUserDoc(userDoc, request, result, deps) {
 
   const character = found.character;
   const sideTasks = ensureSideTasks(character);
-  result.resolvedCharName = getCharacterDisplayName(character);
+  result.resolvedCharName = getCharacterName(character);
   result.resolvedCharClass = getCharacterClass(character);
 
   const outcome = tryAddSideTask(sideTasks, request, cycleStartForReset(request.reset, deps));

@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
 
-const { cutText, truncateText } = require("../bot/utils/raid/common/shared");
+const { cutText, getCharacterName, truncateText } = require("../bot/utils/raid/common/shared");
 const { truncateChoice } = require("../bot/utils/raid/common/autocomplete");
 const { buildFlipPickerComponents, buildTogglePickerComponents } = require("../bot/utils/raid/roster-picker");
 
@@ -58,4 +58,13 @@ test("picker buttons and options never end their text on half an emoji", () => {
   const [option] = select.toJSON().components[0].options;
   assert.equal(option.label, `${"x".repeat(96)}...`);
   assert.equal(option.description, `${"x".repeat(96)}...`);
+});
+
+test("getCharacterName reads current and legacy name fields and trims whitespace", () => {
+  assert.equal(getCharacterName({ name: "  Main  " }), "Main");
+  assert.equal(getCharacterName({ charName: " Legacy " }), "Legacy");
+  assert.equal(getCharacterName({ name: "", charName: "Alt" }), "Alt");
+  assert.equal(getCharacterName({}), "");
+  assert.equal(getCharacterName(null), "");
+  assert.equal(getCharacterName(undefined), "");
 });

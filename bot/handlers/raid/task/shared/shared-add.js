@@ -19,6 +19,7 @@ const {
   findAccountInUser,
   formatSharedResetDetail,
 } = require("../../../../utils/raid/tasks/side-tasks");
+const { cycleStartForReset } = require("../add/reset-policy");
 const { NoticeKind, buildRosterNotFoundNotice } = require("../../../../utils/raid/common/shared");
 const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
@@ -99,12 +100,6 @@ function resolveTargetAccountsForSharedAdd(userDoc, request, result) {
   result.targetRosterCount = accounts.length;
   result.resolvedRosterName = accounts[0]?.accountName || request.rosterName;
   return accounts;
-}
-
-function cycleStartForReset(reset, { dailyResetStartMs, weekResetStartMs }) {
-  if (reset === "daily") return dailyResetStartMs();
-  if (reset === "weekly") return weekResetStartMs();
-  return 0;
 }
 
 function buildSharedTaskRecord(request, now, deps) {

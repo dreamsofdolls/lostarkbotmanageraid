@@ -17,6 +17,7 @@ const {
 } = require("./shared-tasks");
 const { findSharedRosterEntry } = require("../../share-match");
 const { findAccountByName } = require("../../user-doc");
+const { getCharacterName } = require("../common/shared");
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
@@ -110,10 +111,6 @@ function formatSharedResetDetail(reset, { t, lang }) {
   return detailKey ? t(detailKey, lang) : formatSharedResetLabel(reset, lang);
 }
 
-function getCharacterDisplayName(character) {
-  return String(character?.name || character?.charName || "").trim();
-}
-
 /**
  * Resolve a single (account, character) pair from a user doc. When
  * `rosterName` is supplied, the search is scoped to that account so
@@ -134,7 +131,7 @@ function findCharacterInUser(userDoc, characterName, rosterName = null) {
     }
     const chars = Array.isArray(account.characters) ? account.characters : [];
     for (const character of chars) {
-      if (normalizeName(getCharacterDisplayName(character)) === target) {
+      if (normalizeName(getCharacterName(character)) === target) {
         return { account, character };
       }
     }
@@ -207,7 +204,6 @@ module.exports = {
   isDuplicateSharedTask,
   sharedPresetLabel,
   formatSharedResetDetail,
-  getCharacterDisplayName,
   findCharacterInUser,
   findAccountInUser,
   resolveTaskWriteTargetFromAccessible,

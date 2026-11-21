@@ -14,7 +14,7 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../services/i18n");
-const { NoticeKind, buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { NoticeKind, replyNotice } = require("../../utils/raid/common/shared");
 
 // Auction bid formula ported verbatim from la-utils.vercel.app
 // (bundle chunk 86dcebd97a96c81b.js):
@@ -52,7 +52,6 @@ const PARTY_SIZES = [4, 8];
  * Build the /raid-auction command handler.
  * @param {object} deps - injected dependencies
  * @param {Function} deps.EmbedBuilder - discord.js EmbedBuilder
- * @param {object} deps.MessageFlags - discord.js MessageFlags enum
  * @param {object} deps.UI - shared color/icon palette
  * @param {object} deps.User - Mongoose User model (used by
  *   getUserLanguage to render embed copy in the caller's locale)
@@ -60,7 +59,7 @@ const PARTY_SIZES = [4, 8];
  *   commands.js dispatch. Pure formula helpers are exported directly by this
  *   module for unit tests.
  */
-function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
+function createRaidAuctionCommand({ EmbedBuilder, UI, User }) {
   async function handleRaidAuctionCommand(interaction) {
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
 
@@ -69,16 +68,11 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
     const isProfit = interaction.options.getBoolean("profit") ?? true;
 
     if (!Number.isInteger(marketValue) || marketValue <= 0) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            kind: NoticeKind.INPUT,
-            title: t("raid-auction.notice.invalidValueTitle", lang),
-            description: t("raid-auction.notice.invalidValueDescription", lang),
-            tip: t("raid-auction.notice.invalidValueTip", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        kind: NoticeKind.INPUT,
+        title: t("raid-auction.notice.invalidValueTitle", lang),
+        description: t("raid-auction.notice.invalidValueDescription", lang),
+        tip: t("raid-auction.notice.invalidValueTip", lang),
       });
       return;
     }

@@ -5,7 +5,6 @@ const { tPick: t } = require("../../../../services/i18n");
 const { createTaskMutationHandler } = require("../write-handler");
 const {
   findAccountInUser,
-  getCharacterDisplayName,
   ensureSideTasks,
 } = require("../../../../utils/raid/tasks/side-tasks");
 const {
@@ -24,6 +23,7 @@ const {
   buildRosterNotFoundNotice,
   formatCharacterLabel,
   getCharacterClass,
+  getCharacterName,
 } = require("../../../../utils/raid/common/shared");
 const { hasRosterAccounts } = require("../../../../utils/user-doc");
 
@@ -58,7 +58,7 @@ const RESULT_LIST_BY_OUTCOME = Object.freeze({
 function applyAddAllToCharacter(character, request, result, cycleStart) {
   const outcome = tryAddSideTask(ensureSideTasks(character), request, cycleStart);
   result[RESULT_LIST_BY_OUTCOME[outcome]].push(
-    formatCharacterLabel(getCharacterDisplayName(character), getCharacterClass(character)),
+    formatCharacterLabel(getCharacterName(character), getCharacterClass(character)),
   );
 }
 

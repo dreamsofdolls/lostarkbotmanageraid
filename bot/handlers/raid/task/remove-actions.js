@@ -2,13 +2,14 @@
 
 const { tPick: t } = require("../../../services/i18n");
 const { createTaskMutationHandler } = require("./write-handler");
-const { getCharacterDisplayName, findCharacterInUser, findAccountInUser, ensureSideTasks } = require("../../../utils/raid/tasks/side-tasks");
+const { findCharacterInUser, findAccountInUser, ensureSideTasks } = require("../../../utils/raid/tasks/side-tasks");
 const { ensureSharedTasks } = require("../../../utils/raid/tasks/shared-tasks");
 const {
   NoticeKind,
   buildRosterNotFoundNotice,
   formatCharacterLabel,
   getCharacterClass,
+  getCharacterName,
 } = require("../../../utils/raid/common/shared");
 
 /**
@@ -43,7 +44,7 @@ function createTaskRemoveHandler(deps, { shared = false } = {}) {
       }
       result.displayName = shared
         ? target.accountName
-        : formatCharacterLabel(getCharacterDisplayName(target), getCharacterClass(target));
+        : formatCharacterLabel(getCharacterName(target), getCharacterClass(target));
       const tasks = shared ? ensureSharedTasks(target) : ensureSideTasks(target);
       const index = tasks.findIndex(task => task?.taskId === request.taskId);
       if (index === -1) {

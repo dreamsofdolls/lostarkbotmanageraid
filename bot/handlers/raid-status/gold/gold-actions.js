@@ -1,7 +1,7 @@
 "use strict";
 
 const { RAID_REQUIREMENTS, raidModeSortRank } = require("../../../domain/raid-catalog");
-const { normalizeName, toModeKey } = require("../../../utils/raid/common/shared");
+const { getCharacterName, normalizeName, toModeKey } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
   getCompletedGateKeys,
@@ -201,7 +201,7 @@ function applyGoldReceive(character, receive) {
 function findAccountCharacter(account, targetCharName) {
   const charName = normalizeName(targetCharName);
   const character = (Array.isArray(account?.characters) ? account.characters : []).find(
-    (c) => normalizeName(c?.name || c?.charName) === charName
+    (c) => normalizeName(getCharacterName(c)) === charName
   );
   if (!character) return null;
   if (!character.assignedRaids) character.assignedRaids = {};

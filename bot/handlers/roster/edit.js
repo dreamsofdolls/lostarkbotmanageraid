@@ -6,6 +6,7 @@ const {
   buildKeyedNotice,
   buildNoRosterNotice,
   buildNoticeEmbed,
+  editNotice,
 } = require("../../utils/raid/common/shared");
 const { findAccountByName, hasRosterAccounts } = require("../../utils/user-doc");
 const {
@@ -157,17 +158,13 @@ function createEditRosterCommand({
       userDoc,
     });
     if (!hasRosterAccounts(userDoc)) {
-      await interaction.editReply({
-        embeds: [buildNoticeEmbed(EmbedBuilder, buildNoRosterNotice(lang))],
-      });
+      await editNotice(interaction, EmbedBuilder, buildNoRosterNotice(lang));
       return;
     }
 
     const targetAccount = findAccountByName(userDoc, rosterArg, normalizeName);
     if (!targetAccount) {
-      await interaction.editReply({
-        embeds: [buildNoticeEmbed(EmbedBuilder, rosterNotice(NoticeKind.EMPTY, "notFound", rosterArg, lang))],
-      });
+      await editNotice(interaction, EmbedBuilder, rosterNotice(NoticeKind.EMPTY, "notFound", rosterArg, lang));
       return;
     }
 
@@ -193,12 +190,12 @@ function createEditRosterCommand({
     } = buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
 
     if (merged.length === 0) {
-      await interaction.editReply({
-        content: null,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, rosterNotice(NoticeKind.EMPTY, "emptyMerged", targetAccount.accountName, lang)),
-        ],
-      });
+      await editNotice(
+        interaction,
+        EmbedBuilder,
+        rosterNotice(NoticeKind.EMPTY, "emptyMerged", targetAccount.accountName, lang),
+        { content: null },
+      );
       return;
     }
 
@@ -327,10 +324,9 @@ function createEditRosterCommand({
           fields: [buildErrorDetailField(err, session.lang)],
           tip: t("raid-edit-roster.persistFail.tip", session.lang),
         };
-      await interaction.editReply({
+      await editNotice(interaction, EmbedBuilder, notice, {
         content: null,
         components: [],
-        embeds: [buildNoticeEmbed(EmbedBuilder, notice)],
       });
       return;
     }

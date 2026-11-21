@@ -14,6 +14,7 @@
 const {
   NoticeKind,
   buildNoticeEmbed,
+  editNotice,
   getCharacterName,
   INLINE_SPACER,
 } = require("../../../utils/raid/common/shared");
@@ -175,17 +176,12 @@ function createSyncUi({
       console.log(
         `[raid-check sync] raid=all pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
       );
-      await interaction.editReply({
-        content: null,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            kind: NoticeKind.EMPTY,
-            title: t("raid-check.syncFlow.noOptedInTitle", managerLang),
-            description: t("raid-check.syncFlow.noOptedInAllDescription", managerLang),
-            tip: t("raid-check.syncFlow.noOptedInTip", managerLang),
-          }),
-        ],
-      });
+      await editNotice(interaction, EmbedBuilder, {
+        kind: NoticeKind.EMPTY,
+        title: t("raid-check.syncFlow.noOptedInTitle", managerLang),
+        description: t("raid-check.syncFlow.noOptedInAllDescription", managerLang),
+        tip: t("raid-check.syncFlow.noOptedInTip", managerLang),
+      }, { content: null });
       return;
     }
 

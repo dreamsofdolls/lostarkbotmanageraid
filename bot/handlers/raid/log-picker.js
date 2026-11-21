@@ -24,7 +24,7 @@ const { raidLogCustomId, pagedChoices, PAGE_SIZE } = require("./log-view");
  */
 function rosterChoices(accounts = []) {
   return accounts.flatMap(account => (account.characters || []).flatMap(character => {
-    const name = String(getCharacterName(character)).trim();
+    const name = getCharacterName(character);
     if (!name) return [];
     return [{
       name, key: JSON.stringify([account.accountName, normalizeCharacterName(name)]),

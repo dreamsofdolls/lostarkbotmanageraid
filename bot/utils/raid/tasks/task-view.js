@@ -8,7 +8,7 @@
 
 "use strict";
 
-const { pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
+const { getCharacterName, pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
 const { t } = require("../../../services/i18n");
 const { isTaskDone } = require("./task-cycle");
 const { escapeEmbedText } = require("../../discord/embed-text");
@@ -42,10 +42,6 @@ const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 const PAGE_CHAR_CAP = 11;
 const SHARED_TASK_DISPLAY_LIMIT = 12;
 const DISCORD_EMBED_FIELD_LIMIT = 25;
-
-function getCharacterName(character) {
-  return String(character?.name || character?.charName || "").trim();
-}
 
 function getCharacterClass(character) {
   return String(character?.class || character?.className || "").trim();

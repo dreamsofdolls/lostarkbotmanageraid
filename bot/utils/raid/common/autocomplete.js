@@ -17,11 +17,7 @@
  * map - this module is pure.
  */
 
-const { cutText, normalizeName } = require("./shared");
-
-function getCharName(character) {
-  return String(character?.name || character?.charName || "").trim();
-}
+const { cutText, getCharacterName, normalizeName } = require("./shared");
 
 function getCharClass(character) {
   return String(character?.class || character?.className || "").trim();
@@ -90,7 +86,7 @@ function getCharacterMatches(userDoc, options = {}) {
   for (const account of accounts) {
     const chars = Array.isArray(account.characters) ? account.characters : [];
     for (const character of chars) {
-      const name = getCharName(character);
+      const name = getCharacterName(character);
       if (!name) continue;
       const normalized = normalizeName(name);
       if (dedup && seen.has(normalized)) continue;

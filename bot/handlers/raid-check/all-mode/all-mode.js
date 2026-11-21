@@ -74,18 +74,13 @@ function createAllModeHandler({
     const langPromise = getUserLanguage(interaction.user.id, { UserModel: User });
     if (!isRaidLeader(interaction)) {
       const lang = await langPromise;
-      await interaction.editReply({
-        content: null,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            kind: NoticeKind.GUARD,
-            title: t("raid-check.auth.managerOnlyTitle", lang),
-            description: t("raid-check.auth.managerOnlyDescription", lang),
-            fields: [buildManagerOnlyField(lang)],
-            tip: t("raid-check.auth.managerOnlyTip", lang),
-          }),
-        ],
-      });
+      await editNotice(interaction, EmbedBuilder, {
+        kind: NoticeKind.GUARD,
+        title: t("raid-check.auth.managerOnlyTitle", lang),
+        description: t("raid-check.auth.managerOnlyDescription", lang),
+        fields: [buildManagerOnlyField(lang)],
+        tip: t("raid-check.auth.managerOnlyTip", lang),
+      }, { content: null });
       return;
     }
 
@@ -118,17 +113,12 @@ function createAllModeHandler({
 
     const pagesData = buildAllModePagesData(users);
     if (pagesData.length === 0) {
-      await interaction.editReply({
-        content: null,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            kind: NoticeKind.EMPTY,
-            title: t("raid-check.notice.noRosterTitle", lang),
-            description: t("raid-check.notice.noRosterDescription", lang),
-            tip: t("raid-check.notice.noRosterTip", lang),
-          }),
-        ],
-      });
+      await editNotice(interaction, EmbedBuilder, {
+        kind: NoticeKind.EMPTY,
+        title: t("raid-check.notice.noRosterTitle", lang),
+        description: t("raid-check.notice.noRosterDescription", lang),
+        tip: t("raid-check.notice.noRosterTip", lang),
+      }, { content: null });
       return;
     }
 

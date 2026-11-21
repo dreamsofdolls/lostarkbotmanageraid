@@ -7,9 +7,9 @@ const {
   NoticeKind,
   formatCharacterLabel,
   getCharacterClass,
+  getCharacterName,
 } = require("../../../../utils/raid/common/shared");
 const {
-  getCharacterDisplayName,
   findCharacterInUser,
   ensureSideTasks,
   countByReset,
@@ -42,7 +42,7 @@ function applyClearConfirmed(userDoc, route, result) {
     return false;
   }
 
-  result.resolvedCharName = getCharacterDisplayName(found.character);
+  result.resolvedCharName = getCharacterName(found.character);
   result.resolvedCharClass = getCharacterClass(found.character);
   const sideTasks = ensureSideTasks(found.character);
   result.removedCount = sideTasks.length;

@@ -6,10 +6,10 @@ const {
   deferEphemeralReply,
   formatCharacterLabel,
   getCharacterClass,
+  getCharacterName,
 } = require("../../../../utils/raid/common/shared");
 const { resolveEditableTaskWriteAccess } = require("../write-access");
 const {
-  getCharacterDisplayName,
   findCharacterInUser,
   countByReset,
 } = require("../../../../utils/raid/tasks/side-tasks");
@@ -36,7 +36,7 @@ function buildClearPreviewNotice(found, characterName, lang) {
   }
 
   const characterLabel = formatCharacterLabel(
-    getCharacterDisplayName(found.character),
+    getCharacterName(found.character),
     getCharacterClass(found.character),
   );
   const sideTasks = Array.isArray(found.character.sideTasks)
@@ -107,7 +107,7 @@ function createClearPreviewHandler({
       ButtonBuilder,
       ButtonStyle,
       resolvedRosterName: found.account.accountName || rosterName,
-      resolvedCharName: getCharacterDisplayName(found.character),
+      resolvedCharName: getCharacterName(found.character),
       lang,
     });
 
