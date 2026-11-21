@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-21
+
+### Fixed
+- The `/raid-check` Auto Sync enable and disable buttons now report a database error instead of saying the user is missing when the status recheck fails.
+
 ## 2026-11-16
 
 ### Docs

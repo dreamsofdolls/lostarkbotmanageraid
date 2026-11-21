@@ -85,7 +85,7 @@ class FakeButtonBuilder {
   }
 }
 
-function makeUserModel({ findOneAndUpdateImpl } = {}) {
+function makeUserModel({ findOneAndUpdateImpl, findOneSelectLeanImpl } = {}) {
   const calls = { findOne: [], findOneAndUpdate: [] };
   return {
     calls,
@@ -99,7 +99,11 @@ function makeUserModel({ findOneAndUpdateImpl } = {}) {
       calls.findOne.push({ filter });
       return {
         lean: async () => null,
-        select: () => ({ lean: async () => null }),
+        select: () => ({
+          lean: async () => (typeof findOneSelectLeanImpl === "function"
+            ? findOneSelectLeanImpl(filter)
+            : null),
+        }),
       };
     },
   };
@@ -333,4 +337,40 @@ test("raid-check auto-manage self enable uses the guarded transition and success
   assert.deepEqual(User.calls.findOneAndUpdate[0].filter.localSyncEnabled, { $ne: true });
   assert.equal(interaction.edits.length, 1);
   assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.success);
+});
+
+test("raid-check auto-manage enable reports DB errors from the fallback read instead of user-missing", async () => {
+  clearUserLanguageCache();
+  const User = makeUserModel({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneSelectLeanImpl: () => Promise.reject(new Error("db read timeout")),
+  });
+  const interaction = makeInteraction();
+
+  await createUi(User).handleRaidCheckEnableAutoOneClick(interaction, "user-1");
+
+  assert.equal(interaction.edits.length, 1);
+  const card = interaction.edits[0].embeds[0].data;
+  assert.equal(card.color, UI.colors.danger);
+  assert.ok(card.title.includes(t("raid-auto-manage.enableButton.flipFailTitle", "vi")));
+  assert.ok(!card.title.includes(t("raid-auto-manage.enableButton.userMissingTitle", "vi")));
+  assert.match(card.fields[0].value, /db read timeout/);
+});
+
+test("raid-check auto-manage disable reports DB errors from the fallback read instead of user-missing", async () => {
+  clearUserLanguageCache();
+  const User = makeUserModel({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneSelectLeanImpl: () => Promise.reject(new Error("db read timeout")),
+  });
+  const interaction = makeInteraction();
+
+  await createUi(User).handleRaidCheckDisableAutoOneClick(interaction, "user-1");
+
+  assert.equal(interaction.edits.length, 1);
+  const card = interaction.edits[0].embeds[0].data;
+  assert.equal(card.color, UI.colors.danger);
+  assert.ok(card.title.includes(t("raid-auto-manage.disableButton.flipFailTitle", "vi")));
+  assert.ok(!card.title.includes(t("raid-auto-manage.disableButton.userMissingTitle", "vi")));
+  assert.match(card.fields[0].value, /db read timeout/);
 });

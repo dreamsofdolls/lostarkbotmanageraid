@@ -20,8 +20,8 @@ async function tryEnableAutoManage(UserModel, discordId) {
     existing = await UserModel.findOne({ discordId })
       .select("_id autoManageEnabled localSyncEnabled")
       .lean();
-  } catch {
-    existing = null;
+  } catch (err) {
+    return { outcome: "error", error: err };
   }
   if (!existing) return { outcome: "missing" };
   if (existing.localSyncEnabled) return { outcome: "local-locked" };
@@ -55,8 +55,8 @@ async function tryDisableAutoManage(UserModel, discordId) {
     existing = await UserModel.findOne({ discordId })
       .select("_id autoManageEnabled")
       .lean();
-  } catch {
-    existing = null;
+  } catch (err) {
+    return { outcome: "error", error: err };
   }
   if (!existing) return { outcome: "missing" };
   return { outcome: "already-off" };
