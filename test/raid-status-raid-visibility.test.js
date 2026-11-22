@@ -326,7 +326,7 @@ test("hiding every raid on an eligible character renders allRaidsHidden instead 
   });
   const embedJson = payload.buildCurrentEmbed().toJSON();
   const charField = embedJson.fields[0];
-  assert.match(charField.value, /➖ _Đã ẩn hết raid_/);
+  assert.match(charField.value, /💤 _Đã ẩn hết raid_/);
   assert.doesNotMatch(charField.value, /Chưa đủ điều kiện/);
   assert.match(charField.value, /💰/);
 });
@@ -384,8 +384,11 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
 
   const embedJson = ui.buildGoldViewEmbed({ accountName: "Main", characters: [nonEarner] }).toJSON();
   assert.match(embedJson.title, /^⚙️ Hiển thị raid/);
-  assert.match(embedJson.fields[0].value, /➖ ~~Act 4/);
-  assert.match(embedJson.fields[0].value, /• Kazeros/);
+  // 🔹 and 💤 are both emoji, so the two states line up at one size; ➖
+  // already means "will be removed" on the roster edit card.
+  assert.match(embedJson.fields[0].value, /💤 ~~Act 4[^~]*~~ · đã ẩn/);
+  assert.match(embedJson.fields[0].value, /🔹 Kazeros/);
+  assert.doesNotMatch(embedJson.fields[0].value, /➖|•/);
 });
 
 test("gold sub-view and visibility component handlers toggle view, save visibility, and respect view-only shares", async () => {

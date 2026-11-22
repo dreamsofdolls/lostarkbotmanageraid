@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-22
+
+### Added
+- `/raid-status` Gold & difficulty has a ⚙️ Raid visibility page: pick characters, then untick the raids to hide from raid progress. A hidden raid leaves the Raid tab and `/raid-check` but keeps its gold, and stays hidden across weekly resets and Local Sync.
+
+### Changed
+- On the Raid visibility page a shown raid is marked 🔹 and a hidden one 💤 with its name struck through. Both are emoji, so the column lines up; the eye icons are gone, and so is ➖, which already means "will be removed" on the roster edit card. The progress card's all-hidden line uses 💤 too.
+
 ## 2026-11-21
 
 ### Fixed

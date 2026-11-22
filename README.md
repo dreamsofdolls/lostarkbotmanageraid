@@ -70,7 +70,8 @@ and `/raid-share`.
 - **Gold & difficulty**: weekly gold per character and per account, bound gold in the `🔒` tail; per-character gold is hidden while a raid filter is active. The view edits one or several characters at once (✏️ marks the selection):
   - the gold dropdown pins up to 3 gold raids (3 ticked set exactly those; fewer leave the free slots to Artist), and 🔄 **Reset gold** returns them to automatic;
   - the difficulty dropdown sets raid modes, which apply at once before a raid has run and queue for the next weekly reset after it ran;
-  - each save posts one summary.
+  - each save posts one summary;
+  - ⚙️ **Raid visibility** opens a page where an unticked raid is hidden (💤) from the Raid tab and `/raid-check` while a shown one is marked 🔹; its gold is unchanged, the choice stays across weekly resets, and 🔄 **Show all** brings every raid back.
 - `/raid-gold-earner` pre-checks the top 6 by iLvl the first time for older data; new characters default to on.
 
 ### Sync
