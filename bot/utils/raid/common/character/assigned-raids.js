@@ -112,6 +112,16 @@ function getAssignedRaidModeKey(assignedRaid, raidKey) {
   return normalizeRaidModeKey(raidKey, assignedRaid?.modeKey);
 }
 
+/**
+ * Whether a character's assigned raid is hidden from raid-progress views.
+ * Stored separately from goldOverride and preserved across weekly resets.
+ * @param {object|null|undefined} assignedRaid
+ * @returns {boolean}
+ */
+function isRaidHidden(assignedRaid) {
+  return assignedRaid?.hidden === true;
+}
+
 function getGateKeys(assignedRaid) {
   return Object.keys(assignedRaid || {})
     .filter((key) => /^G\d+$/i.test(key))
@@ -204,6 +214,7 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   if (goldOverride) normalized.goldOverride = goldOverride;
   const pendingModeKey = normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey);
   if (pendingModeKey) normalized.pendingModeKey = pendingModeKey;
+  if (isRaidHidden(assignedRaid)) normalized.hidden = true;
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
     const sourceDiff = source.difficulty;
@@ -305,6 +316,7 @@ module.exports = {
   getRequirementFor,
   hasAssignedRaidModeChange,
   isAssignedRaidCompleted,
+  isRaidHidden,
   normalizeAssignedRaid,
   normalizeRaidModeKey,
   resetAssignedRaidGates,

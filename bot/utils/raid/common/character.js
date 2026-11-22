@@ -37,6 +37,7 @@ const {
   getGateKeys,
   getRequirementFor,
   isAssignedRaidCompleted,
+  isRaidHidden,
   normalizeAssignedRaid,
   normalizeRaidModeKey,
   setAssignedRaidMode,
@@ -227,6 +228,7 @@ function getStatusRaidsForCharacter(character) {
       goldForced: goldOverride === "include",
       goldDisabled: goldOverride === "exclude",
       goldAutoEligible: goldOverride == null && !raidGold.goldBound,
+      hidden: isRaidHidden(assignedRaid),
       rawEarnedGold: raidGold.earnedGold,
       rawTotalGold: raidGold.totalGold,
       rawEarnedBoundGold: raidGold.earnedBoundGold,
@@ -259,8 +261,17 @@ function isGoldReceivingRaid(raid) {
   return raid?.goldReceives !== false;
 }
 
+/**
+ * Whether a status raid entry is visible on raid-progress surfaces.
+ * @param {object|null|undefined} raid
+ * @returns {boolean}
+ */
+function isRaidVisibleInStatus(raid) {
+  return raid?.hidden !== true;
+}
+
 function isCountedRaidProgress(raid) {
-  return !isSoloModeKey(raid?.modeKey) && isGoldReceivingRaid(raid);
+  return !isSoloModeKey(raid?.modeKey) && isGoldReceivingRaid(raid) && isRaidVisibleInStatus(raid);
 }
 
 /**
@@ -486,6 +497,8 @@ module.exports = {
   getStatusRaidsForCharacter,
   getStatusRaidModeKey,
   isGoldReceivingRaid,
+  isRaidHidden,
+  isRaidVisibleInStatus,
   isCountedRaidProgress,
   getRaidFilterModeKey,
   isCountedRaidFilterProgress,

@@ -8,6 +8,7 @@ const {
 } = require("../raid-filter");
 const {
   isGoldReceivingRaid,
+  isRaidVisibleInStatus,
 } = require("../../../utils/raid/common/character");
 const { resolveBackgroundLookup } = require("./accounts");
 
@@ -74,12 +75,14 @@ function createRaidStatusRenderPayload({
     const raidViews = new Map();
     const getRaidView = (character) => {
       if (raidViews.has(character)) return raidViews.get(character);
-      const raids = baseGetRaidsFor(character);
+      const all = baseGetRaidsFor(character);
+      const visible = all.filter(isRaidVisibleInStatus);
       const matching = filterRaidId
-        ? raids.filter((raid) => getRaidFilterKey(raid) === filterRaidId)
-        : raids;
+        ? visible.filter((raid) => getRaidFilterKey(raid) === filterRaidId)
+        : visible;
       const view = {
-        display: filterRaidId ? matching.filter(isGoldReceivingRaid) : raids,
+        all,
+        display: filterRaidId ? matching.filter(isGoldReceivingRaid) : visible,
         progress: matching.filter(isCountedRaidFilterProgress),
       };
       raidViews.set(character, view);
@@ -87,6 +90,9 @@ function createRaidStatusRenderPayload({
     };
     const getDisplayRaidsFor = (character) => getRaidView(character).display;
     const getCountRaidsFor = (character) => getRaidView(character).progress;
+    const getGoldRaidsFor = (character) => (
+      filterRaidId ? getRaidView(character).display : getRaidView(character).all
+    );
 
     let totalsByFilter = globalTotalsCache.get(accounts);
     if (!totalsByFilter) {
@@ -110,7 +116,7 @@ function createRaidStatusRenderPayload({
         // completed/total to the headline renderer.
         solo: soloProgress.total,
         soloProgress,
-        gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
+        gold: summarizeGlobalGold(accounts, getGoldRaidsFor),
       };
       totalsByFilter.set(totalsKey, filteredTotals);
     }
@@ -125,6 +131,7 @@ function createRaidStatusRenderPayload({
       {
         hideIneligibleChars: !!filterRaidId,
         getProgressRaidsFor: getCountRaidsFor,
+        getGoldRaidsFor,
         showCharacterGold: !filterRaidId,
         lang,
       }

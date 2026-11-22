@@ -247,17 +247,61 @@ function goldReceiveDefaults(entries) {
     .map((option) => option.value);
 }
 
+/**
+ * Raid-visibility options for the selected characters, in catalog order. A
+ * raid appears when at least one selected character is eligible for it; when
+ * every selected character keeps the same visible set, that set is pre-ticked.
+ * @param {Array<{raids: object[]}>} entries - selected characters
+ * @returns {Array<{raidKey: string, value: string, visible: number, has: number, total: number, default: boolean, raid: object|null}>}
+ */
+function computeRaidVisibilityOptions(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const total = list.length;
+  const sameSet = new Set(list.map((entry) => (entry?.raids || [])
+    .filter((raid) => !raid.hidden)
+    .map((raid) => raid.raidKey)
+    .sort()
+    .join(","))).size <= 1;
+  const out = [];
+  for (const raidKey of RAID_ORDER) {
+    const raids = list.map((entry) => raidOf(entry, raidKey)).filter(Boolean);
+    if (raids.length === 0) continue;
+    const visible = raids.filter((raid) => !raid.hidden).length;
+    out.push({
+      raidKey,
+      value: raidKey,
+      visible,
+      has: raids.length,
+      total,
+      default: sameSet && visible === total,
+      raid: total === 1 ? raids[0] : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Raid keys pre-ticked in the visibility dropdown for these characters.
+ * @param {Array<{raids: object[]}>} entries - selected characters
+ * @returns {string[]}
+ */
+function raidVisibilityDefaults(entries) {
+  return computeRaidVisibilityOptions(entries)
+    .filter((option) => option.default)
+    .map((option) => option.value);
+}
+
 function toOptionEmoji(icon) {
   return parseCustomEmoji(icon) || { name: icon };
 }
 
 /**
- * Builders for the gold view's three selects (characters, gold set and
- * difficulty) and its reset button. All read the selection from filterState
- * at build time.
+ * Builders for the gold view's selects (characters, gold set, difficulty,
+ * and raid visibility) and its reset/sub-view buttons. All read selection state
+ * from filterState at build time.
  * @param {object} deps - discord.js builders, UI, label/format helpers, lang,
- *   t, getRaidsFor, getCharacterName and filterState (createGoldFilterState)
- * @returns {{buildGoldCharsRow: (disabled: boolean) => object|null, buildGoldReceiveRow: (disabled: boolean) => object, buildGoldModeRow: (disabled: boolean) => object|null, buildGoldResetButton: (disabled: boolean) => object|null, selectedEntries: () => Array<{name: string, itemLevel: number, raids: object[]}>}}
+ *   t, getRaidsFor, getCharacterName, getGoldSubView and filterState (createGoldFilterState)
+ * @returns {object}
  */
 function createGoldToggleRows({
   ActionRowBuilder,
@@ -270,6 +314,7 @@ function createGoldToggleRows({
   truncateText,
   formatGold,
   getRaidsFor,
+  getGoldSubView = () => "gold",
   lang,
   t,
   filterState,
@@ -278,6 +323,9 @@ function createGoldToggleRows({
     goldCharactersOnPage,
     resolveGoldCharSelection,
     selectedGoldCharacters,
+    visibilityCharactersOnPage,
+    resolveVisibilityCharSelection,
+    selectedVisibilityCharacters,
   } = filterState;
 
   const GOLD_STATUS_ICONS = {
@@ -286,21 +334,29 @@ function createGoldToggleRows({
     pending: UI.icons.pending,
   };
 
-  function selectedEntries() {
-    return selectedGoldCharacters().map((character) => ({
+  function toCharacterEntries(characters) {
+    return characters.map((character) => ({
       name: getCharacterName(character),
       itemLevel: Number(character.itemLevel) || 0,
       raids: getRaidsFor(character),
     }));
   }
 
-  function selectMenu({ customId, placeholder, disabled, options, maxValues }) {
+  function selectedEntries() {
+    return toCharacterEntries(selectedGoldCharacters());
+  }
+
+  function selectedVisibilityEntries() {
+    return toCharacterEntries(selectedVisibilityCharacters());
+  }
+
+  function selectMenu({ customId, placeholder, disabled, options, minValues = 1, maxValues }) {
     return new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(customId)
         .setPlaceholder(truncateText(placeholder, 150))
         .setDisabled(disabled)
-        .setMinValues(1)
+        .setMinValues(minValues)
         .setMaxValues(maxValues)
         .addOptions(options)
     );
@@ -511,12 +567,136 @@ function createGoldToggleRows({
       .setDisabled(disabled);
   }
 
+  function buildGoldSubViewButton(disabled) {
+    const isVisibility = getGoldSubView() === "visibility";
+    return new ButtonBuilder()
+      .setCustomId("status-gold:subview")
+      .setLabel(t(
+        isVisibility
+          ? "raid-status.goldView.subViewGoldButton"
+          : "raid-status.goldView.subViewVisibilityButton",
+        lang
+      ))
+      .setEmoji(isVisibility ? "💰" : "👁️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+  }
+
+  function buildVisibilityCharsRow(disabled) {
+    const candidates = visibilityCharactersOnPage().slice(0, DISCORD_SELECT_OPTION_CAP);
+    if (candidates.length === 0) return null;
+    const selected = resolveVisibilityCharSelection();
+    const options = candidates.map((character) => {
+      const name = getCharacterName(character);
+      const raids = getRaidsFor(character);
+      const visible = raids.filter((raid) => !raid.hidden).length;
+      const option = {
+        label: truncateText(name, 100),
+        description: truncateText(
+          t("raid-status.goldView.visibilityCharDesc", lang, {
+            ilvl: Number(character.itemLevel) || 0,
+            visible,
+            total: raids.length,
+          }),
+          100
+        ),
+        value: name.slice(0, 100),
+        default: selected.some((selectedName) => sameCharacterName(selectedName, name)),
+      };
+      const classEmojiObj = parseCustomEmoji(getClassEmoji(character.class || character.className));
+      if (classEmojiObj) option.emoji = classEmojiObj;
+      return option;
+    });
+    return selectMenu({
+      customId: "status-gold:visibility-chars",
+      placeholder: t("raid-status.goldView.visibilityCharsPlaceholder", lang),
+      disabled,
+      options,
+      maxValues: options.length,
+    });
+  }
+
+  function singleVisibilityOption(option) {
+    const hidden = option.raid?.hidden === true;
+    return {
+      emoji: { name: hidden ? "🙈" : "👁️" },
+      label: truncateText(localizedRaidLabel(option.raid, lang), 100),
+      description: truncateText(
+        t(hidden ? "raid-status.goldView.toggleHidden" : "raid-status.goldView.toggleVisible", lang),
+        100
+      ),
+      value: option.value,
+      default: option.default,
+    };
+  }
+
+  function bulkVisibilityOption(option) {
+    const hasTail = option.has < option.total
+      ? t("raid-status.goldView.receiveOptionHasTail", lang, { has: option.has, total: option.total })
+      : "";
+    return {
+      emoji: { name: option.visible === option.total ? "👁️" : "🙈" },
+      label: truncateText(getRaidLabel(option.raidKey, lang) || option.raidKey, 100),
+      description: truncateText(
+        `${t("raid-status.goldView.visibilityOptionMany", lang, { visible: option.visible, total: option.total })}${hasTail}`,
+        100
+      ),
+      value: option.value,
+      default: option.default,
+    };
+  }
+
+  function buildVisibilityRaidsRow(disabled) {
+    const entries = selectedVisibilityEntries();
+    if (entries.length === 0) {
+      return buildEmptyGoldRow({
+        customId: "status-gold:visibility",
+        placeholder: t("raid-status.goldView.noEligibleCharsPlaceholder", lang),
+      });
+    }
+    const single = entries.length === 1;
+    const formatOption = single ? singleVisibilityOption : bulkVisibilityOption;
+    const options = computeRaidVisibilityOptions(entries).map(formatOption);
+    if (options.length === 0) {
+      return buildEmptyGoldRow({
+        customId: "status-gold:visibility",
+        placeholder: t("raid-status.goldView.noEligibleCharsPlaceholder", lang),
+      });
+    }
+    const placeholder = single
+      ? t("raid-status.goldView.visibilityPlaceholderOne", lang, { name: entries[0].name })
+      : t("raid-status.goldView.visibilityPlaceholderMany", lang, { n: entries.length });
+    return selectMenu({
+      customId: "status-gold:visibility",
+      placeholder,
+      disabled,
+      options,
+      minValues: 0,
+      maxValues: options.length,
+    });
+  }
+
+  function buildVisibilityResetButton(disabled) {
+    if (selectedVisibilityEntries().length === 0) return null;
+    return new ButtonBuilder()
+      .setCustomId("status-gold:visibility-reset")
+      .setLabel(t("raid-status.goldView.visibilityResetButton", lang))
+      .setEmoji("👁️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+  }
+
   return {
     buildGoldCharsRow,
     buildGoldModeRow,
     buildGoldReceiveRow,
     buildGoldResetButton,
+    buildGoldSubViewButton,
+    buildVisibilityCharsRow,
+    buildVisibilityRaidsRow,
+    buildVisibilityResetButton,
     selectedEntries,
+    selectedVisibilityEntries,
   };
 }
 
@@ -525,5 +705,7 @@ module.exports = {
   computeBulkGoldModeOptions,
   computeGoldModeOptions,
   computeGoldReceiveOptions,
+  computeRaidVisibilityOptions,
   goldReceiveDefaults,
+  raidVisibilityDefaults,
 };

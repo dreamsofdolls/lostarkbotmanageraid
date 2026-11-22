@@ -15,6 +15,7 @@ const {
   getRaidFilterModeKey,
   isCountedRaidFilterProgress,
   isGoldReceivingRaid,
+  isRaidVisibleInStatus,
 } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const {
@@ -32,7 +33,11 @@ function getRaidFilterKey(raid) {
 // counted nowhere, like a gold-locked group raid. The raid filter hides it, so
 // counting it would make the dropdowns promise rows the card never shows.
 function isCountedSoloRaid(raid) {
-  return isSoloModeKey(getRaidFilterModeKey(raid)) && isGoldReceivingRaid(raid);
+  return (
+    isSoloModeKey(getRaidFilterModeKey(raid))
+    && isGoldReceivingRaid(raid)
+    && isRaidVisibleInStatus(raid)
+  );
 }
 
 /**
@@ -184,6 +189,7 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   for (const character of characters) {
     const raids = getRaidsFor(character) || [];
     for (const raid of raids) {
+      if (!isRaidVisibleInStatus(raid)) continue;
       if (
         raidFilter &&
         (getRaidFilterKey(raid) !== raidFilter || !isGoldReceivingRaid(raid))

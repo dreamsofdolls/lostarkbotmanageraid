@@ -26,6 +26,7 @@ function createGoldViewEmbedBuilder({
   getAccounts,
   getCurrentPage,
   getRaidsFor,
+  getGoldSubView = () => "gold",
   lang,
   t,
   filterState,
@@ -33,6 +34,8 @@ function createGoldViewEmbedBuilder({
   const {
     goldCharactersOnPage,
     resolveGoldCharSelection,
+    visibilityCharactersOnPage,
+    resolveVisibilityCharSelection,
   } = filterState;
 
   function goldBoundTail(gold) {
@@ -101,7 +104,95 @@ function createGoldViewEmbedBuilder({
     };
   }
 
+  function formatVisibilityRaidLine(raid) {
+    const label = localizedRaidLabel(raid, lang);
+    if (!raid.hidden) return `👁️ ${label}`;
+    return `🙈 ~~${label}~~ - ${t("raid-status.goldView.hiddenTag", lang)}`;
+  }
+
+  function buildVisibilityCharacterField(character, selectedNames) {
+    const raids = getRaidsFor(character);
+    const name = getCharacterName(character);
+    const classIcon = getClassEmoji(character.class || character.className);
+    const editMark = selectedNames.some((selected) => sameCharacterName(selected, name))
+      ? `${GOLD_EDIT_MARK} `
+      : "";
+    const namePrefix = `${editMark}${classIcon ? `${classIcon} ` : ""}`;
+    const itemLevel = Number(character.itemLevel) || 0;
+    const visibleCount = raids.filter((raid) => !raid.hidden).length;
+    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${visibleCount}/${raids.length}`;
+    const lines = raids.map(formatVisibilityRaidLine);
+    return {
+      name: truncateText(header, 256),
+      value: truncateText(lines.join("\n"), 1024),
+      inline: true,
+    };
+  }
+
+  function appendCharacterFields(embed, fields) {
+    const visibleFields = fields.length <= PAGE_CHAR_CAP
+      ? pack2Columns(fields)
+      : fields.map((field) => ({ ...field, inline: false }));
+    const fieldBudget = fields.length > PAGE_CHAR_CAP && fields.length > 25 ? 24 : 25;
+    embed.addFields(...visibleFields.slice(0, fieldBudget));
+    if (fields.length > PAGE_CHAR_CAP && fields.length > fieldBudget) {
+      embed.addFields({
+        name: "...",
+        value: t("raid-status.goldView.moreCharacters", lang, { n: fields.length - fieldBudget }),
+        inline: false,
+      });
+    }
+  }
+
+  function buildVisibilityViewEmbed(account) {
+    const accountName = String(account?.accountName || t("raid-status.filter.unnamedRoster", lang));
+    const chars = visibilityCharactersOnPage();
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.neutral)
+      .setTitle(t("raid-status.goldView.visibilityEmbedTitle", lang, { accountName }))
+      .setTimestamp();
+
+    if (chars.length === 0) {
+      embed.setDescription(t("raid-status.goldView.visibilityEmptyDescription", lang));
+      return embed;
+    }
+
+    embed.setDescription(t("raid-status.goldView.visibilityDescription", lang));
+    const selectedNames = resolveVisibilityCharSelection();
+    const fields = chars.map((character) => buildVisibilityCharacterField(character, selectedNames));
+    appendCharacterFields(embed, fields);
+
+    let totalRaids = 0;
+    let hiddenRaids = 0;
+    for (const character of chars) {
+      const raids = getRaidsFor(character);
+      totalRaids += raids.length;
+      hiddenRaids += raids.filter((raid) => raid.hidden).length;
+    }
+    const visibleRaids = totalRaids - hiddenRaids;
+    const footerParts = [
+      hiddenRaids > 0
+        ? t("raid-status.goldView.visibilityFooter", lang, {
+            visible: visibleRaids,
+            total: totalRaids,
+            hidden: hiddenRaids,
+          })
+        : t("raid-status.goldView.visibilityFooterAllShown", lang, { total: totalRaids }),
+    ];
+    if (getAccounts().length > 1) {
+      footerParts.push(t("raid-status.taskView.footerPage", lang, {
+        current: getCurrentPage() + 1,
+        total: getAccounts().length,
+      }));
+    }
+    embed.setFooter({ text: footerParts.join(" \u00B7 ") });
+    return embed;
+  }
+
   return function buildGoldViewEmbed(account) {
+    if (getGoldSubView() === "visibility") {
+      return buildVisibilityViewEmbed(account);
+    }
     const accountName = String(account?.accountName || t("raid-status.filter.unnamedRoster", lang));
     const accountGold = summarizeAccountGold(account, getRaidsFor);
     const globalGold = summarizeGlobalGold(getAccounts(), getRaidsFor);
@@ -140,18 +231,7 @@ function createGoldViewEmbedBuilder({
 
     const selectedNames = resolveGoldCharSelection();
     const fields = goldChars.map((character) => buildGoldCharacterField(character, selectedNames));
-    const visibleFields = fields.length <= PAGE_CHAR_CAP
-      ? pack2Columns(fields)
-      : fields.map((field) => ({ ...field, inline: false }));
-    const fieldBudget = fields.length > PAGE_CHAR_CAP && fields.length > 25 ? 24 : 25;
-    embed.addFields(...visibleFields.slice(0, fieldBudget));
-    if (fields.length > PAGE_CHAR_CAP && fields.length > fieldBudget) {
-      embed.addFields({
-        name: "...",
-        value: t("raid-status.goldView.moreCharacters", lang, { n: fields.length - fieldBudget }),
-        inline: false,
-      });
-    }
+    appendCharacterFields(embed, fields);
 
     const footerParts = [
       t("raid-status.goldView.footerGold", lang, {

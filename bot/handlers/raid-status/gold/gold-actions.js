@@ -20,6 +20,7 @@ const {
 
 const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
 const GOLD_RECEIVE_AUTO = "auto";
+const RAID_VISIBILITY_SHOW_ALL = "show_all";
 const MODE_CANCEL = "cancel";
 
 // Persist a gold override onto a single assigned-raid entry. assignedRaids
@@ -38,6 +39,14 @@ function writeAssignedRaidOverride(target, raidKey, overrideValue) {
   delete plain.goldForced;
   if (overrideValue) plain.goldOverride = overrideValue;
   else delete plain.goldOverride;
+  target.assignedRaids[raidKey] = plain;
+}
+
+function writeAssignedRaidHidden(target, raidKey, hidden) {
+  if (!target.assignedRaids) target.assignedRaids = {};
+  const plain = toPlainAssignedRaid(target.assignedRaids[raidKey]);
+  if (hidden) plain.hidden = true;
+  else delete plain.hidden;
   target.assignedRaids[raidKey] = plain;
 }
 
@@ -348,15 +357,127 @@ async function saveBulkGoldReceive(options) {
   return { ok: update.saved, denied: update.denied, results, userDoc: update.userDoc };
 }
 
+/**
+ * Parse the multi-select raid visibility values. Each submitted value is a
+ * catalog raid key whose raid stays visible; omitting a raid hides it, and an
+ * empty array hides every eligible raid.
+ * @param {string[]} values - submitted select values
+ * @returns {{kind: "set", raidKeys: string[]}|{kind: "invalid"}}
+ */
+function parseRaidVisibilityValues(values) {
+  if (!Array.isArray(values)) return { kind: "invalid" };
+  const raidKeys = [...new Set(values.map(String))];
+  if (raidKeys.some((raidKey) => !VALID_RAID_KEYS.has(raidKey))) {
+    return { kind: "invalid" };
+  }
+  return { kind: "set", raidKeys };
+}
+
+/**
+ * Apply raid-visibility toggles to one character without altering gold overrides
+ * or difficulty settings.
+ * @param {object} character - character document or plain object
+ * @param {{kind: "show_all"}|{kind: "set", raidKeys: string[]}} visibility
+ * @returns {{changed: boolean, beforeHidden: string[], afterHidden: string[], skipped: string[]}}
+ */
+function applyRaidVisibility(character, visibility) {
+  if (!character.assignedRaids) character.assignedRaids = {};
+  const statusRaids = getStatusRaidsForCharacter(character);
+  const statusKeys = new Set(statusRaids.map((raid) => raid.raidKey));
+  const beforeHidden = statusRaids.filter((raid) => raid.hidden).map((raid) => raid.raidKey);
+
+  let changed = false;
+  if (visibility?.kind === RAID_VISIBILITY_SHOW_ALL) {
+    const keys = new Set([...Object.keys(character.assignedRaids), ...statusKeys]);
+    for (const raidKey of keys) {
+      if (character.assignedRaids[raidKey]?.hidden === true) {
+        writeAssignedRaidHidden(character, raidKey, false);
+        changed = true;
+      }
+    }
+    return { changed, beforeHidden, afterHidden: [], skipped: [] };
+  }
+
+  const visibleSet = new Set(visibility?.raidKeys || []);
+  for (const raidKey of statusKeys) {
+    const nextHidden = !visibleSet.has(raidKey);
+    const prevHidden = character.assignedRaids[raidKey]?.hidden === true;
+    if (prevHidden !== nextHidden) {
+      writeAssignedRaidHidden(character, raidKey, nextHidden);
+      changed = true;
+    }
+  }
+
+  return {
+    changed,
+    beforeHidden,
+    afterHidden: [...statusKeys].filter((raidKey) => !visibleSet.has(raidKey)),
+    skipped: [...visibleSet].filter((raidKey) => !statusKeys.has(raidKey)),
+  };
+}
+
+/**
+ * Apply raid visibility (or show-all reset) to every named character of one
+ * account in a single save.
+ * @param {object} options - User, saveWithRetry, discordId (roster owner),
+ *   targetAccountName, targetCharNames, visibility (from parseRaidVisibilityValues
+ *   or { kind: RAID_VISIBILITY_SHOW_ALL }), and optionally canWrite
+ * @returns {Promise<{ok: boolean, denied: boolean, results: Array<{name: string, className: string, status: "changed"|"unchanged"|"missing", hiddenAdded: string[], hiddenRemoved: string[], hiddenNow: string[], skipped: string[]}>, userDoc: object|null}>}
+ */
+async function saveBulkRaidVisibility(options) {
+  const { visibility } = options;
+  let results = [];
+  const update = await updateGoldWriteTargets(
+    { ...options, saveRolloverAlone: true },
+    ({ entries }) => {
+      results = entries.map(({ name, character }) => {
+        if (!character) {
+          return {
+            name,
+            className: "",
+            status: "missing",
+            hiddenAdded: [],
+            hiddenRemoved: [],
+            hiddenNow: [],
+            skipped: [],
+          };
+        }
+        const applied = applyRaidVisibility(character, visibility);
+        const hiddenAdded = applied.afterHidden.filter(
+          (raidKey) => !applied.beforeHidden.includes(raidKey)
+        );
+        const hiddenRemoved = applied.beforeHidden.filter(
+          (raidKey) => !applied.afterHidden.includes(raidKey)
+        );
+        return {
+          name: character.name || name,
+          className: characterClassName(character),
+          status: applied.changed ? "changed" : "unchanged",
+          hiddenAdded,
+          hiddenRemoved,
+          hiddenNow: applied.afterHidden,
+          skipped: applied.skipped,
+        };
+      });
+      return results.some((entry) => entry.status === "changed");
+    }
+  );
+  return { ok: update.saved, denied: update.denied, results, userDoc: update.userDoc };
+}
+
 module.exports = {
   GOLD_RECEIVE_AUTO,
   MODE_CANCEL,
+  RAID_VISIBILITY_SHOW_ALL,
   applyGoldReceive,
   applyModeDecision,
+  applyRaidVisibility,
   parseGoldModeValues,
   parseGoldReceiveValues,
+  parseRaidVisibilityValues,
   saveBulkGoldReceive,
   saveBulkRaidModes,
+  saveBulkRaidVisibility,
 };
 
 function getRaidModeKey(raidKey, raidData, character) {

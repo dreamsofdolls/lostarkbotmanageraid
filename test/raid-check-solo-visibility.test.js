@@ -23,4 +23,8 @@ test("raid-check visibility rejects Solo and gold-locked raids", () => {
     isRaidCheckVisibleRaid({ modeKey: "hard", goldReceives: true }),
     true
   );
+  assert.equal(
+    isRaidCheckVisibleRaid({ modeKey: "hard", goldReceives: true, hidden: true }),
+    false
+  );
 });

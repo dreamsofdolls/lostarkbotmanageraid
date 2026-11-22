@@ -14,6 +14,10 @@ function createRaidStatusComponentLayout({
   buildGoldModeRow,
   buildGoldReceiveRow,
   buildGoldResetButton,
+  buildGoldSubViewButton = () => null,
+  buildVisibilityCharsRow = () => null,
+  buildVisibilityRaidsRow = () => null,
+  buildVisibilityResetButton = () => null,
   buildSyncButton,
   buildSyncRow,
   buildLocalSyncNewButton,
@@ -28,6 +32,7 @@ function createRaidStatusComponentLayout({
   getCurrentLocalPage = getCurrentPage,
   getVisibleRosterCount = () => getAccounts().length,
   getCurrentView,
+  getGoldSubView = () => "gold",
   getStatusUserMeta,
   getRaidDropdownEntries,
   getTotalRaidPending,
@@ -86,6 +91,20 @@ function createRaidStatusComponentLayout({
     rows.push(buildTaskToggleRow(taskToggleDisabled));
   };
 
+  const addTopGoldButtons = (rows, buttons) => {
+    const valid = buttons.filter(Boolean);
+    if (valid.length === 0) return;
+    const pageRow = rows.find(isButtonRow);
+    const overflow = [];
+    for (const button of valid) {
+      if (pageRow && getRowComponentCount(pageRow) < 5) pageRow.addComponents(button);
+      else overflow.push(button);
+    }
+    if (overflow.length > 0) {
+      rows.unshift(new ActionRowBuilder().addComponents(...overflow.slice(0, 5)));
+    }
+  };
+
   const addGoldViewRows = (rows, disabled) => {
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
@@ -93,15 +112,20 @@ function createRaidStatusComponentLayout({
     const currentAccount = accounts[currentPage];
     const sharedFrom = currentAccount?._sharedFrom;
     const goldWriteDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+    const subViewButton = buildGoldSubViewButton(disabled);
 
-    // Four selects leave one row: the reset button joins the page buttons,
-    // or takes a row of its own on top when a single roster has none.
-    const resetButton = buildGoldResetButton(goldWriteDisabled);
-    if (resetButton) {
-      const pageRow = rows.find(isButtonRow);
-      if (pageRow && getRowComponentCount(pageRow) < 5) pageRow.addComponents(resetButton);
-      else rows.unshift(new ActionRowBuilder().addComponents(resetButton));
+    if (getGoldSubView() === "visibility") {
+      addTopGoldButtons(rows, [buildVisibilityResetButton(goldWriteDisabled), subViewButton]);
+      const charsRow = buildVisibilityCharsRow(disabled);
+      if (charsRow) rows.push(charsRow);
+      const visibilityRow = buildVisibilityRaidsRow(goldWriteDisabled);
+      if (visibilityRow && rows.length < 5) rows.push(visibilityRow);
+      return;
     }
+
+    // Four selects leave one row: the top buttons join the page buttons,
+    // or take a row of their own on top when a single roster has none.
+    addTopGoldButtons(rows, [buildGoldResetButton(goldWriteDisabled), subViewButton]);
 
     const charsRow = buildGoldCharsRow(disabled);
     if (charsRow) rows.push(charsRow);

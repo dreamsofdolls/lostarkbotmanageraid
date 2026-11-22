@@ -14,15 +14,19 @@ const {
 } = require("../task/task-actions");
 const {
   GOLD_RECEIVE_AUTO,
+  RAID_VISIBILITY_SHOW_ALL,
   parseGoldModeValues,
   parseGoldReceiveValues,
+  parseRaidVisibilityValues,
   saveBulkGoldReceive,
   saveBulkRaidModes,
+  saveBulkRaidVisibility,
 } = require("../gold/gold-actions");
 const { goldReceiveDefaults } = require("../gold/gold-ui/toggle-rows");
 const {
   buildGoldReceiveSummaryNotice,
   buildModeSummaryNotice,
+  buildVisibilitySummaryNotice,
 } = require("../gold/gold-summary");
 const { getClassEmoji: defaultGetClassEmoji } = require("../../../models/Class");
 const { createStatusRedraw } = require("../view/redraw");
@@ -158,6 +162,7 @@ function createStatusComponentRouteHandlers(ctx) {
     refreshLocalSyncSnapshot = async () => null,
     runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
     getGoldSelection = () => [],
+    getVisibilitySelection = () => [],
     getClassEmoji = defaultGetClassEmoji,
     // The session's shared redraw (view/redraw.js); built here when not given.
     redrawMessage = createStatusRedraw({
@@ -336,6 +341,19 @@ function createStatusComponentRouteHandlers(ctx) {
       summarize: (result) => ({
         isMissing: (entry) => entry.status === "missing",
         notice: buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks, lang, getClassEmoji }),
+      }),
+    });
+  }
+
+  function writeRaidVisibility(component, { logLabel, selection, visibility }) {
+    return runGoldBulkWrite(component, {
+      logLabel,
+      selection,
+      write: (target) => saveBulkRaidVisibility({ ...target, visibility }),
+      onSaveError: goldSaveFailedNotice(),
+      summarize: (result) => ({
+        isMissing: (entry) => entry.status === "missing",
+        notice: buildVisibilitySummaryNotice({ result, visibility, lang, getClassEmoji }),
       }),
     });
   }
@@ -775,6 +793,42 @@ function createStatusComponentRouteHandlers(ctx) {
         selection,
         receive: { kind: GOLD_RECEIVE_AUTO },
         ignoredTicks: false,
+      });
+    },
+
+    // One raid-visibility write (or show-all reset) for the selected characters.
+    [STATUS_COMPONENT_ACTION.goldSubView]: async () => {
+      session.goldSubView = session.goldSubView === "visibility" ? "gold" : "visibility";
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.goldVisibilityChars]: async (component) => {
+      const picked = selectValues(component).filter(Boolean);
+      if (picked.length > 0) {
+        session.setVisibilityCharSelectionForPage(session.currentPage, picked);
+      }
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.goldVisibility]: async (component) => {
+      const visibility = parseRaidVisibilityValues(selectValues(component));
+      const selection = getVisibilitySelection();
+      if (visibility.kind === "invalid" || selection.length === 0) return noRedraw();
+
+      return writeRaidVisibility(component, {
+        logLabel: "raid-status raid visibility",
+        selection,
+        visibility,
+      });
+    },
+
+    [STATUS_COMPONENT_ACTION.goldVisibilityReset]: async (component) => {
+      const selection = getVisibilitySelection();
+      if (selection.length === 0) return noRedraw();
+      return writeRaidVisibility(component, {
+        logLabel: "raid-status raid visibility reset",
+        selection,
+        visibility: { kind: RAID_VISIBILITY_SHOW_ALL },
       });
     },
 

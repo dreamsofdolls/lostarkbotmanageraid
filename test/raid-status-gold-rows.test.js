@@ -200,13 +200,30 @@ test("character options keep only the name in the label; item level and gold sit
   assert.equal(soulrano.description, `1771 · ${formatGold(totals.earned)}/${formatGold(totals.total)}`);
 });
 
-function goldLayoutRows({ rosterCount, sharedFrom = null }) {
-  const ui = goldUiFor(["Soulrano"]);
+function goldLayoutRows({ rosterCount, sharedFrom = null, goldSubView = "gold", characters = exampleCharacters() }) {
   const accounts = Array.from({ length: rosterCount }, (_, index) => ({
     accountName: `Roster${index}`,
-    characters: exampleCharacters(),
+    characters,
     ...(sharedFrom && index === 0 ? { _sharedFrom: sharedFrom } : {}),
   }));
+  const ui = createRaidStatusGoldUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName: (character) => character.name,
+    truncateText,
+    formatGold,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getGoldCharSelection: () => ["Soulrano"],
+    getVisibilityCharSelection: () => ["Soulrano"],
+    getGoldSubView: () => goldSubView,
+    getRaidsFor: getStatusRaidsForCharacter,
+    lang: "vi",
+  });
   const pageButton = (customId) => new ButtonBuilder().setCustomId(customId).setLabel(customId).setStyle(ButtonStyle.Secondary);
   const { buildComponents } = createRaidStatusComponentLayout({
     ActionRowBuilder,
@@ -222,36 +239,54 @@ function goldLayoutRows({ rosterCount, sharedFrom = null }) {
     buildGoldReceiveRow: ui.buildGoldReceiveRow,
     buildGoldModeRow: ui.buildGoldModeRow,
     buildGoldResetButton: ui.buildGoldResetButton,
+    buildGoldSubViewButton: ui.buildGoldSubViewButton,
+    buildVisibilityCharsRow: ui.buildVisibilityCharsRow,
+    buildVisibilityRaidsRow: ui.buildVisibilityRaidsRow,
+    buildVisibilityResetButton: ui.buildVisibilityResetButton,
     getAccounts: () => accounts,
     getCurrentPage: () => 0,
     getVisibleRosterCount: () => rosterCount,
     getCurrentView: () => "gold",
+    getGoldSubView: () => goldSubView,
   });
   return buildComponents(false).map((row) => row.toJSON().components);
 }
 
 const idsOf = (components) => components.map((component) => component.custom_id);
 
-test("with several rosters the gold reset button sits beside the page buttons", () => {
+test("with several rosters the gold reset and sub-view buttons sit beside the page buttons", () => {
   const rows = goldLayoutRows({ rosterCount: 2 });
   assert.ok(rows.length <= 5);
-  assert.deepEqual(idsOf(rows[0]), ["status:prev", "status:next", "status-gold:reset"]);
+  assert.deepEqual(idsOf(rows[0]), ["status:prev", "status:next", "status-gold:reset", "status-gold:subview"]);
   assert.deepEqual(rows.slice(1).map((row) => idsOf(row)[0]), [
     "status-view:toggle", "status-gold:chars", "status-gold:receive", "status-gold:mode",
   ]);
 });
 
-test("with one roster the gold reset button gets a row of its own on top", () => {
+test("with one roster the gold reset and sub-view buttons share a row on top", () => {
   const rows = goldLayoutRows({ rosterCount: 1 });
   assert.ok(rows.length <= 5);
-  assert.deepEqual(idsOf(rows[0]), ["status-gold:reset"]);
+  assert.deepEqual(idsOf(rows[0]), ["status-gold:reset", "status-gold:subview"]);
   assert.ok(idsOf(rows.flat()).includes("status-gold:mode"));
 });
 
-test("a view-only share gets the gold reset button disabled", () => {
+test("a view-only share disables gold writes but keeps the visibility sub-view toggle enabled", () => {
   const rows = goldLayoutRows({ rosterCount: 2, sharedFrom: { accessLevel: "view" } });
   const reset = rows[0].find((component) => component.custom_id === "status-gold:reset");
+  const subView = rows[0].find((component) => component.custom_id === "status-gold:subview");
   assert.equal(reset.disabled, true);
+  assert.equal(subView.disabled, false);
+});
+
+test("visibility sub-view exposes show-all, sub-view toggle, character select, and raid select with min_values=0", () => {
+  const rows = goldLayoutRows({ rosterCount: 1, goldSubView: "visibility" });
+  assert.ok(rows.length <= 5);
+  assert.deepEqual(idsOf(rows[0]), ["status-gold:visibility-reset", "status-gold:subview"]);
+  assert.deepEqual(rows.slice(1).map((row) => idsOf(row)[0]), [
+    "status-view:toggle", "status-gold:visibility-chars", "status-gold:visibility",
+  ]);
+  const raidSelect = rows[3][0];
+  assert.equal(raidSelect.min_values, 0);
 });
 
 test("selected characters carry the ✏️ marker in the gold embed", () => {

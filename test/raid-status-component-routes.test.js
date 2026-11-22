@@ -95,6 +95,32 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
     getStatusComponentRoute("status-gold:reset").action,
     STATUS_COMPONENT_ACTION.goldReset,
   );
+  assert.deepEqual(
+    getStatusComponentRoute("status-gold:subview"),
+    {
+      customId: "status-gold:subview",
+      action: STATUS_COMPONENT_ACTION.goldSubView,
+      editDriven: true,
+      redraw: true,
+    },
+  );
+  assert.equal(
+    getStatusComponentRoute("status-gold:visibility-chars").action,
+    STATUS_COMPONENT_ACTION.goldVisibilityChars,
+  );
+  assert.deepEqual(
+    getStatusComponentRoute("status-gold:visibility"),
+    {
+      customId: "status-gold:visibility",
+      action: STATUS_COMPONENT_ACTION.goldVisibility,
+      editDriven: true,
+      redraw: true,
+    },
+  );
+  assert.equal(
+    getStatusComponentRoute("status-gold:visibility-reset").action,
+    STATUS_COMPONENT_ACTION.goldVisibilityReset,
+  );
 });
 
 test("raid-status no longer routes the retired gold toggle and replace selects", () => {

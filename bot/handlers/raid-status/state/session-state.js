@@ -61,6 +61,8 @@ async function createRaidStatusSessionState({
   let totalSoloPending = 0;
   const taskCharFilterByPage = new Map();
   const goldCharSelectionByPage = new Map();
+  const visibilityCharSelectionByPage = new Map();
+  let goldSubView = "gold";
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
   let totalCharacters = countCharacters(accounts);
   let lastReloadedAtMs = Number(now());
@@ -217,7 +219,14 @@ async function createRaidStatusSessionState({
     },
     set currentView(value) {
       currentView = value;
+      if (value !== "gold") goldSubView = "gold";
       recomputeRosterNavigation();
+    },
+    get goldSubView() {
+      return goldSubView;
+    },
+    set goldSubView(value) {
+      goldSubView = value === "visibility" ? "visibility" : "gold";
     },
     get localSyncSnapshot() {
       return localSyncSnapshot;
@@ -262,12 +271,18 @@ async function createRaidStatusSessionState({
     getGoldCharSelection(page) {
       return goldCharSelectionByPage.get(page);
     },
+    getVisibilityCharSelection(page) {
+      return visibilityCharSelectionByPage.get(page) ?? goldCharSelectionByPage.get(page);
+    },
     refreshViewerAccountsIfStale,
     reloadViewerAccounts,
     movePage,
     selectRoster,
     setGoldCharSelectionForPage(page, names) {
       goldCharSelectionByPage.set(page, Array.isArray(names) ? [...names] : []);
+    },
+    setVisibilityCharSelectionForPage(page, names) {
+      visibilityCharSelectionByPage.set(page, Array.isArray(names) ? [...names] : []);
     },
     setTaskCharFilterForPage(page, value) {
       taskCharFilterByPage.set(page, value);
@@ -309,6 +324,12 @@ function createRaidStatusComponentSession({
     get currentView() {
       return state.currentView;
     },
+    get goldSubView() {
+      return state.goldSubView;
+    },
+    set goldSubView(value) {
+      state.goldSubView = value;
+    },
     get localSyncSnapshot() {
       return state.localSyncSnapshot;
     },
@@ -338,6 +359,9 @@ function createRaidStatusComponentSession({
     },
     setGoldCharSelectionForPage(page, names) {
       state.setGoldCharSelectionForPage(page, names);
+    },
+    setVisibilityCharSelectionForPage(page, names) {
+      state.setVisibilityCharSelectionForPage(page, names);
     },
   };
 }

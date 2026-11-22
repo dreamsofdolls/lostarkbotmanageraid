@@ -67,6 +67,7 @@ function buildSimulatedAssignedRaids(char, finalRaidStates) {
     const raidData = { modeKey: state.modeKey };
     const goldOverride = getGoldOverride(source);
     if (goldOverride) raidData.goldOverride = goldOverride;
+    if (source?.hidden === true) raidData.hidden = true;
     for (const gate of getGatesForRaid(raidKey)) {
       raidData[gate] = {
         difficulty: modeLabel,

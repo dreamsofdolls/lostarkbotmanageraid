@@ -248,7 +248,12 @@ function createRaidStatusCommand(deps) {
       buildGoldModeRow,
       buildGoldReceiveRow,
       buildGoldResetButton,
+      buildGoldSubViewButton,
+      buildVisibilityCharsRow,
+      buildVisibilityRaidsRow,
+      buildVisibilityResetButton,
       selectedGoldEntries,
+      selectedVisibilityEntries,
     } = createRaidStatusGoldUi({
       EmbedBuilder,
       ActionRowBuilder,
@@ -262,6 +267,8 @@ function createRaidStatusCommand(deps) {
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
       getGoldCharSelection: (page) => statusState.getGoldCharSelection(page),
+      getVisibilityCharSelection: (page) => statusState.getVisibilityCharSelection(page),
+      getGoldSubView: () => statusState.goldSubView,
       getRaidsFor: statusState.baseGetRaidsFor,
       lang,
     });
@@ -375,6 +382,10 @@ function createRaidStatusCommand(deps) {
       buildGoldModeRow,
       buildGoldReceiveRow,
       buildGoldResetButton,
+      buildGoldSubViewButton,
+      buildVisibilityCharsRow,
+      buildVisibilityRaidsRow,
+      buildVisibilityResetButton,
       buildSyncButton: syncControls.buildSyncButton,
       buildSyncRow: syncControls.buildSyncRow,
       buildLocalSyncNewButton: syncControls.buildLocalSyncNewButton,
@@ -389,6 +400,7 @@ function createRaidStatusCommand(deps) {
       getCurrentLocalPage: () => statusState.currentLocalPage,
       getVisibleRosterCount: () => statusState.visibleRosterCount,
       getCurrentView: () => statusState.currentView,
+      getGoldSubView: () => statusState.goldSubView,
       getStatusUserMeta: () => statusUserMeta,
       getRaidDropdownEntries: () => statusState.raidDropdownEntries,
       getTotalRaidPending: () => statusState.totalRaidPending,
@@ -457,6 +469,7 @@ function createRaidStatusCommand(deps) {
       runLocalSyncAction,
       isReplyPrivate: () => replyIsPrivate,
       getGoldSelection: selectedGoldEntries,
+      getVisibilitySelection: selectedVisibilityEntries,
     });
 
     const message = messageFromEdit?.createMessageComponentCollector

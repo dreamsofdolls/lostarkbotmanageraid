@@ -7,11 +7,13 @@ const { createGoldFilterState } = require("./gold-ui/filters");
 const { createGoldToggleRows } = require("./gold-ui/toggle-rows");
 
 /**
- * Gold view of /raid-status: its embed, its three selects, its reset button
- * and the selection the gold handlers write to.
+ * Gold view of /raid-status: its embed, its selects (gold set, difficulty,
+ * and raid visibility), its reset/sub-view buttons and the selections the
+ * gold handlers write to.
  * @param {object} deps - discord.js builders, UI, account and page getters,
- *   getGoldCharSelection, getRaidsFor, label/format helpers and lang
- * @returns {{buildGoldViewEmbed: Function, buildGoldCharsRow: Function, buildGoldModeRow: Function, buildGoldReceiveRow: Function, buildGoldResetButton: Function, selectedGoldEntries: () => Array<{name: string, itemLevel: number, raids: object[]}>}}
+ *   getGoldCharSelection, getVisibilityCharSelection, getGoldSubView,
+ *   getRaidsFor, label/format helpers and lang
+ * @returns {object}
  */
 function createRaidStatusGoldUi(deps) {
   const context = {
@@ -26,7 +28,12 @@ function createRaidStatusGoldUi(deps) {
     buildGoldModeRow,
     buildGoldReceiveRow,
     buildGoldResetButton,
+    buildGoldSubViewButton,
+    buildVisibilityCharsRow,
+    buildVisibilityRaidsRow,
+    buildVisibilityResetButton,
     selectedEntries,
+    selectedVisibilityEntries,
   } = createGoldToggleRows({
     ...context,
     filterState,
@@ -41,8 +48,13 @@ function createRaidStatusGoldUi(deps) {
     buildGoldModeRow,
     buildGoldReceiveRow,
     buildGoldResetButton,
+    buildGoldSubViewButton,
+    buildVisibilityCharsRow,
+    buildVisibilityRaidsRow,
+    buildVisibilityResetButton,
     // The gold handlers act on the same selection the rows render.
     selectedGoldEntries: selectedEntries,
+    selectedVisibilityEntries,
   };
 }
 

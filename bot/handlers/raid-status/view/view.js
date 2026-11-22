@@ -116,7 +116,11 @@ function createRaidStatusView(deps) {
 
   function buildCharacterField(character, getRaidsFor, lang, options = {}) {
     // earnsGold: one of the account's counted gold earners (at most 6).
-    const { showGold = true, earnsGold = character?.isGoldEarner !== false } = options;
+    const {
+      showGold = true,
+      earnsGold = character?.isGoldEarner !== false,
+      getGoldRaidsFor = getRaidsFor,
+    } = options;
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -127,12 +131,15 @@ function createRaidStatusView(deps) {
     const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
+    const goldRaids = getGoldRaidsFor(character);
     const lines = raids.length === 0
-      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      ? [goldRaids.length > 0
+        ? t("raid-status.embed.allRaidsHidden", lang)
+        : `${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
     if (showGold) {
-      lines.push(...buildCharacterGoldLine(earnsGold, raids, lang));
+      lines.push(...buildCharacterGoldLine(earnsGold, goldRaids, lang));
     }
 
     return {
@@ -327,17 +334,18 @@ function createRaidStatusView(deps) {
     totalPages,
     globalTotals,
     getRaidsFor,
+    getGoldRaidsFor = getRaidsFor,
     userMeta,
     showGoldEarnerHint,
     lang,
   }) {
     const lines = buildGlobalRollupLines(totalPages, globalTotals, lang);
-    const rosterGoldLine = buildRosterGoldLine(account, getRaidsFor, lang);
+    const rosterGoldLine = buildRosterGoldLine(account, getGoldRaidsFor, lang);
     const freshnessLine = buildAccountFreshnessLine(account, userMeta, lang);
     lines.push(...[
       rosterGoldLine,
       freshnessLine,
-      showGoldEarnerHint && hasEligibleNonEarner(account, getRaidsFor)
+      showGoldEarnerHint && hasEligibleNonEarner(account, getGoldRaidsFor)
         ? t("raid-status.embed.goldEarnerHint", lang)
         : "",
       buildRenamedNoteLine(account, lang),
@@ -407,6 +415,7 @@ function createRaidStatusView(deps) {
     const {
       hideIneligibleChars = false,
       getProgressRaidsFor = getRaidsFor,
+      getGoldRaidsFor = getRaidsFor,
       shouldDisplayCharacter = null,
       showCharacterGold = true,
       showGoldEarnerHint = true,
@@ -420,6 +429,7 @@ function createRaidStatusView(deps) {
       totalPages,
       globalTotals,
       getRaidsFor,
+      getGoldRaidsFor,
       userMeta,
       showGoldEarnerHint,
       lang,
@@ -473,6 +483,7 @@ function createRaidStatusView(deps) {
       buildCharacterField(c, getRaidsFor, lang, {
         showGold: showCharacterGold,
         earnsGold: goldEarners.has(c),
+        getGoldRaidsFor,
       })
     );
     if (characterFields.length <= PAIRED_LAYOUT_CHARACTER_CAP) {

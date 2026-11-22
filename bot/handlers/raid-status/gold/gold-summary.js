@@ -11,7 +11,7 @@ const {
 } = require("../../../utils/raid/common/labels");
 const { NoticeKind, formatCharacterLabel, truncateText } = require("../../../utils/raid/common/shared");
 const { t } = require("../../../services/i18n");
-const { GOLD_RECEIVE_AUTO } = require("./gold-actions");
+const { GOLD_RECEIVE_AUTO, RAID_VISIBILITY_SHOW_ALL } = require("./gold-actions");
 
 const DESCRIPTION_LIMIT = 4096;
 const RAID_RANK = new Map(RAID_ORDER.map((raidKey, index) => [raidKey, index]));
@@ -218,7 +218,69 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
   };
 }
 
+function visibilityChangeText(entry, lang) {
+  const sorted = (raidKeys) => [...raidKeys].sort(byRaidOrder);
+  return [
+    entry.hiddenAdded.length > 0
+      ? goldViewText("visibilityHiddenPart", lang, { raids: raidList(sorted(entry.hiddenAdded), lang, ", ") })
+      : "",
+    entry.hiddenRemoved.length > 0
+      ? goldViewText("visibilityShownPart", lang, { raids: raidList(sorted(entry.hiddenRemoved), lang, ", ") })
+      : "",
+  ].filter(Boolean).join(", ");
+}
+
+/**
+ * Summary of one raid-visibility save (or show-all reset) across the selected
+ * characters.
+ * @param {object} args
+ * @param {{results: object[]}} args.result - from saveBulkRaidVisibility
+ * @param {{kind: "show_all"}|{kind: "set", raidKeys: string[]}} args.visibility
+ * @param {string} args.lang - viewer language
+ * @param {(className: string) => string} args.getClassEmoji - class icon lookup
+ * @returns {{kind: "done"|"input", title: string, description: string}|null}
+ */
+function buildVisibilitySummaryNotice({ result, visibility, lang, getClassEmoji }) {
+  const entries = Array.isArray(result?.results) ? result.results : [];
+  const touched = entries.filter((entry) => entry.status === "changed");
+  const missing = missingLine(entries, (entry) => entry.status === "missing", lang);
+
+  if (touched.length === 0) {
+    if (!missing) return null;
+    return {
+      kind: NoticeKind.INPUT,
+      title: goldViewText("nothingChangedTitle", lang),
+      description: clampDescription([missing]),
+    };
+  }
+
+  if (visibility?.kind === RAID_VISIBILITY_SHOW_ALL) {
+    return {
+      kind: NoticeKind.DONE,
+      title: goldViewText("visibilityResetSummaryTitle", lang, { n: touched.length }),
+      description: clampDescription([
+        ...touched.map((entry) => (
+          `${characterPrefix(entry, getClassEmoji)}: ${goldViewText("visibilityShownAll", lang)}`
+        )),
+        missing,
+      ]),
+    };
+  }
+
+  return {
+    kind: NoticeKind.DONE,
+    title: goldViewText("visibilitySummaryTitle", lang, { n: touched.length }),
+    description: clampDescription([
+      ...touched.map((entry) => (
+        `${characterPrefix(entry, getClassEmoji)}: ${visibilityChangeText(entry, lang)}${goldSkippedTail(entry, lang)}`
+      )),
+      missing,
+    ]),
+  };
+}
+
 module.exports = {
   buildGoldReceiveSummaryNotice,
   buildModeSummaryNotice,
+  buildVisibilitySummaryNotice,
 };
