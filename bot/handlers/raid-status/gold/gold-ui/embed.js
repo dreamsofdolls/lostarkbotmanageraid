@@ -106,8 +106,8 @@ function createGoldViewEmbedBuilder({
 
   function formatVisibilityRaidLine(raid) {
     const label = localizedRaidLabel(raid, lang);
-    if (!raid.hidden) return `👁️ ${label}`;
-    return `🙈 ~~${label}~~ - ${t("raid-status.goldView.hiddenTag", lang)}`;
+    if (!raid.hidden) return `• ${label}`;
+    return `➖ ~~${label}~~ - ${t("raid-status.goldView.hiddenTag", lang)}`;
   }
 
   function buildVisibilityCharacterField(character, selectedNames) {

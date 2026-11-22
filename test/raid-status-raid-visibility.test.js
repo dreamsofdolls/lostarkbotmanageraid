@@ -326,7 +326,7 @@ test("hiding every raid on an eligible character renders allRaidsHidden instead 
   });
   const embedJson = payload.buildCurrentEmbed().toJSON();
   const charField = embedJson.fields[0];
-  assert.match(charField.value, /Đã ẩn tất cả raid/);
+  assert.match(charField.value, /➖ _Đã ẩn hết raid_/);
   assert.doesNotMatch(charField.value, /Chưa đủ điều kiện/);
   assert.match(charField.value, /💰/);
 });
@@ -340,6 +340,7 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
     serca: { modeKey: "normal" },
   }, { isGoldEarner: false });
 
+  let currentSubView = "visibility";
   const ui = createRaidStatusGoldUi({
     EmbedBuilder,
     ActionRowBuilder,
@@ -354,7 +355,7 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
     getCurrentPage: () => 0,
     getGoldCharSelection: () => [],
     getVisibilityCharSelection: () => ["SeventhChar"],
-    getGoldSubView: () => "visibility",
+    getGoldSubView: () => currentSubView,
     getRaidsFor: getStatusRaidsForCharacter,
     lang: "vi",
   });
@@ -368,6 +369,13 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
   const kazerosOpt = raidsRow.options.find((o) => o.value === "kazeros");
   assert.equal(armocheOpt.default, false);
   assert.equal(kazerosOpt.default, true);
+  assert.equal(armocheOpt.emoji, undefined);
+  assert.equal(kazerosOpt.emoji, undefined);
+  assert.equal(ui.buildVisibilityResetButton(false).toJSON().emoji.name, "🔄");
+  assert.equal(ui.buildGoldSubViewButton(false).toJSON().emoji.name, "💰");
+  currentSubView = "gold";
+  assert.equal(ui.buildGoldSubViewButton(false).toJSON().emoji.name, "⚙️");
+  currentSubView = "visibility";
   assert.deepEqual(
     raidVisibilityDefaults([{ raids: getStatusRaidsForCharacter(nonEarner) }]),
     ["kazeros", "serca"],
@@ -375,9 +383,9 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
   assert.equal(computeRaidVisibilityOptions([{ raids: getStatusRaidsForCharacter(nonEarner) }]).length, 3);
 
   const embedJson = ui.buildGoldViewEmbed({ accountName: "Main", characters: [nonEarner] }).toJSON();
-  assert.match(embedJson.title, /Hiển thị raid/);
-  assert.match(embedJson.fields[0].value, /🙈 ~~Act 4/);
-  assert.match(embedJson.fields[0].value, /👁️ Kazeros/);
+  assert.match(embedJson.title, /^⚙️ Hiển thị raid/);
+  assert.match(embedJson.fields[0].value, /➖ ~~Act 4/);
+  assert.match(embedJson.fields[0].value, /• Kazeros/);
 });
 
 test("gold sub-view and visibility component handlers toggle view, save visibility, and respect view-only shares", async () => {

@@ -577,7 +577,7 @@ function createGoldToggleRows({
           : "raid-status.goldView.subViewVisibilityButton",
         lang
       ))
-      .setEmoji(isVisibility ? "💰" : "👁️")
+      .setEmoji(isVisibility ? "💰" : "⚙️")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled);
   }
@@ -619,7 +619,6 @@ function createGoldToggleRows({
   function singleVisibilityOption(option) {
     const hidden = option.raid?.hidden === true;
     return {
-      emoji: { name: hidden ? "🙈" : "👁️" },
       label: truncateText(localizedRaidLabel(option.raid, lang), 100),
       description: truncateText(
         t(hidden ? "raid-status.goldView.toggleHidden" : "raid-status.goldView.toggleVisible", lang),
@@ -635,7 +634,6 @@ function createGoldToggleRows({
       ? t("raid-status.goldView.receiveOptionHasTail", lang, { has: option.has, total: option.total })
       : "";
     return {
-      emoji: { name: option.visible === option.total ? "👁️" : "🙈" },
       label: truncateText(getRaidLabel(option.raidKey, lang) || option.raidKey, 100),
       description: truncateText(
         `${t("raid-status.goldView.visibilityOptionMany", lang, { visible: option.visible, total: option.total })}${hasTail}`,
@@ -681,7 +679,7 @@ function createGoldToggleRows({
     return new ButtonBuilder()
       .setCustomId("status-gold:visibility-reset")
       .setLabel(t("raid-status.goldView.visibilityResetButton", lang))
-      .setEmoji("👁️")
+      .setEmoji(GOLD_AUTO_EMOJI)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled);
   }
