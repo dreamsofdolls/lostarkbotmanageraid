@@ -168,8 +168,8 @@ test("Local Sync copy matches the signed-token lifecycle in every language", () 
     const locale = TRANSLATIONS[code];
     const statusSync = locale["raid-status"].sync;
     const autoManage = locale["raid-auto-manage"];
-    const localOnHelp = flattenStrings(locale).find(
-      (text) => text.includes("action:local-on") && text.includes("TTL")
+    const localOnHelp = locale["raid-help"].sections["raid-auto-manage"].notes.find(
+      (text) => text.startsWith("**`action:local-on`")
     );
 
     const ttlCopy = [
