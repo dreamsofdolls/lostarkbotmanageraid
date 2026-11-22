@@ -1049,7 +1049,6 @@ module.exports = {
       noEligibleCharsPlaceholder: "Account này chưa có con nào đủ iLvl đi raid",
       toggleVisible: "đang hiện ở tiến độ raid",
       toggleHidden: "đang ẩn ở tiến độ raid",
-      hiddenTag: "đã ẩn",
       visibilityResetButton: "Hiện lại tất cả",
       visibilityFooter: "Đang hiện {visible}/{total} raid · Đã ẩn {hidden}",
       visibilityFooterAllShown: "Đang hiện tất cả {total} raid",

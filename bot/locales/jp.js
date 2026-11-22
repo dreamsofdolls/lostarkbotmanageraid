@@ -1030,7 +1030,6 @@ module.exports = {
       noEligibleCharsPlaceholder: "このアカウントにレイド対象のキャラがまだいませんわ",
       toggleVisible: "レイド進捗に表示",
       toggleHidden: "レイド進捗から非表示",
-      hiddenTag: "非表示",
       visibilityResetButton: "すべて表示",
       visibilityFooter: "表示中 {visible}/{total} レイド · 非表示 {hidden}",
       visibilityFooterAllShown: "全 {total} レイド表示中",

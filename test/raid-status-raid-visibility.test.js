@@ -369,8 +369,9 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
   const kazerosOpt = raidsRow.options.find((o) => o.value === "kazeros");
   assert.equal(armocheOpt.default, false);
   assert.equal(kazerosOpt.default, true);
-  assert.equal(armocheOpt.emoji, undefined);
-  assert.equal(kazerosOpt.emoji, undefined);
+  // The menu mirrors the card: a ticked raid shows 🔹, an unticked one 💤.
+  assert.equal(armocheOpt.emoji.name, "💤");
+  assert.equal(kazerosOpt.emoji.name, "🔹");
   assert.equal(ui.buildVisibilityResetButton(false).toJSON().emoji.name, "🔄");
   assert.equal(ui.buildGoldSubViewButton(false).toJSON().emoji.name, "💰");
   currentSubView = "gold";
@@ -386,7 +387,9 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
   assert.match(embedJson.title, /^⚙️ Hiển thị raid/);
   // 🔹 and 💤 are both emoji, so the two states line up at one size; ➖
   // already means "will be removed" on the roster edit card.
-  assert.match(embedJson.fields[0].value, /💤 ~~Act 4[^~]*~~ · đã ẩn/);
+  // 💤 and the strikethrough already say hidden, so no "đã ẩn" tail.
+  assert.match(embedJson.fields[0].value, /^💤 ~~Act 4[^~]*~~$/m);
+  assert.doesNotMatch(embedJson.fields[0].value, /đã ẩn/);
   assert.match(embedJson.fields[0].value, /🔹 Kazeros/);
   assert.doesNotMatch(embedJson.fields[0].value, /➖|•/);
 });

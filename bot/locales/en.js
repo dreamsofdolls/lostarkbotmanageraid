@@ -1029,7 +1029,6 @@ module.exports = {
       noEligibleCharsPlaceholder: "No raid-eligible characters on this account yet",
       toggleVisible: "shown in raid progress",
       toggleHidden: "hidden from raid progress",
-      hiddenTag: "hidden",
       visibilityResetButton: "Show all",
       visibilityFooter: "Showing {visible}/{total} raids · {hidden} hidden",
       visibilityFooterAllShown: "Showing all {total} raids",

@@ -19,6 +19,8 @@ const {
 } = require("../../../../utils/raid/common/labels");
 const {
   GOLD_RECEIVE_ICON,
+  RAID_HIDDEN_ICON,
+  RAID_SHOWN_ICON,
   localizedRaidLabel,
   rawGoldTotal,
 } = require("../gold-formatting");
@@ -616,9 +618,16 @@ function createGoldToggleRows({
     });
   }
 
+  // Follows the tick, so the menu mirrors the card: a ticked raid stays shown
+  // on save, an unticked one is hidden.
+  function visibilityOptionEmoji(option) {
+    return { name: option.default ? RAID_SHOWN_ICON : RAID_HIDDEN_ICON };
+  }
+
   function singleVisibilityOption(option) {
     const hidden = option.raid?.hidden === true;
     return {
+      emoji: visibilityOptionEmoji(option),
       label: truncateText(localizedRaidLabel(option.raid, lang), 100),
       description: truncateText(
         t(hidden ? "raid-status.goldView.toggleHidden" : "raid-status.goldView.toggleVisible", lang),
@@ -634,6 +643,7 @@ function createGoldToggleRows({
       ? t("raid-status.goldView.receiveOptionHasTail", lang, { has: option.has, total: option.total })
       : "";
     return {
+      emoji: visibilityOptionEmoji(option),
       label: truncateText(getRaidLabel(option.raidKey, lang) || option.raidKey, 100),
       description: truncateText(
         `${t("raid-status.goldView.visibilityOptionMany", lang, { visible: option.visible, total: option.total })}${hasTail}`,

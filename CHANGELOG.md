@@ -10,7 +10,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-status` Gold & difficulty has a ⚙️ Raid visibility page: pick characters, then untick the raids to hide from raid progress. A hidden raid leaves the Raid tab and `/raid-check` but keeps its gold, and stays hidden across weekly resets and Local Sync.
 
 ### Changed
-- On the Raid visibility page a shown raid is marked 🔹 and a hidden one 💤 with its name struck through. Both are emoji, so the column lines up; the eye icons are gone, and so is ➖, which already means "will be removed" on the roster edit card. The progress card's all-hidden line uses 💤 too.
+- On the Raid visibility page a shown raid is marked 🔹 and a hidden one 💤 with its name struck through, with no "hidden" word after it. Both are emoji, so the column lines up; the eye icons are gone, and so is ➖, which already means "will be removed" on the roster edit card. The raid dropdown carries the same icons (🔹 ticked, 💤 unticked), and the progress card's all-hidden line uses 💤 too.
 
 ## 2026-11-21
 
