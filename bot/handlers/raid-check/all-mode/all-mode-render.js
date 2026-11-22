@@ -63,6 +63,10 @@ function createAllModePageRenderers({
           raidMatchesStatusFilter(raid, activeStatus)
       );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);
+    // Hidden raids still count toward gold totals on the unfiltered overview.
+    const getGoldRaidsFor = !filterRaidId && activeStatus === FILTER_STATUS.all
+      ? getStatusRaidsFor
+      : getRaidsFor;
     const shouldDisplayCharacter = (character) => getVisibleRaidsFor(character).length > 0;
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
@@ -80,6 +84,7 @@ function createAllModePageRenderers({
       allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
+      getGoldRaidsFor,
       shouldDisplayCharacter,
       globalProgress: summarizeRaidProgress(allRaidEntries),
       userAccounts,
@@ -101,6 +106,7 @@ function createAllModePageRenderers({
     const {
       getRaidsFor,
       getProgressRaidsFor,
+      getGoldRaidsFor,
       shouldDisplayCharacter,
       globalProgress,
       userAccounts,
@@ -129,6 +135,7 @@ function createAllModePageRenderers({
         hideIneligibleChars:
           !!filterRaidId || activeStatus !== FILTER_STATUS.all,
         getProgressRaidsFor,
+        getGoldRaidsFor,
         lang,
         shouldDisplayCharacter,
         showGoldEarnerHint: false,

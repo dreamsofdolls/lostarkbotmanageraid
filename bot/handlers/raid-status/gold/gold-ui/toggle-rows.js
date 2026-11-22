@@ -251,19 +251,15 @@ function goldReceiveDefaults(entries) {
 
 /**
  * Raid-visibility options for the selected characters, in catalog order. A
- * raid appears when at least one selected character is eligible for it; when
- * every selected character keeps the same visible set, that set is pre-ticked.
+ * raid appears when at least one selected character is eligible for it, and
+ * stays pre-ticked whenever every eligible selected character currently shows
+ * it.
  * @param {Array<{raids: object[]}>} entries - selected characters
  * @returns {Array<{raidKey: string, value: string, visible: number, has: number, total: number, default: boolean, raid: object|null}>}
  */
 function computeRaidVisibilityOptions(entries) {
   const list = Array.isArray(entries) ? entries : [];
   const total = list.length;
-  const sameSet = new Set(list.map((entry) => (entry?.raids || [])
-    .filter((raid) => !raid.hidden)
-    .map((raid) => raid.raidKey)
-    .sort()
-    .join(","))).size <= 1;
   const out = [];
   for (const raidKey of RAID_ORDER) {
     const raids = list.map((entry) => raidOf(entry, raidKey)).filter(Boolean);
@@ -275,7 +271,7 @@ function computeRaidVisibilityOptions(entries) {
       visible,
       has: raids.length,
       total,
-      default: sameSet && visible === total,
+      default: visible === raids.length,
       raid: total === 1 ? raids[0] : null,
     });
   }
@@ -646,7 +642,7 @@ function createGoldToggleRows({
       emoji: visibilityOptionEmoji(option),
       label: truncateText(getRaidLabel(option.raidKey, lang) || option.raidKey, 100),
       description: truncateText(
-        `${t("raid-status.goldView.visibilityOptionMany", lang, { visible: option.visible, total: option.total })}${hasTail}`,
+        `${t("raid-status.goldView.visibilityOptionMany", lang, { visible: option.visible, total: option.has })}${hasTail}`,
         100
       ),
       value: option.value,

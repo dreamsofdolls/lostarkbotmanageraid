@@ -1057,6 +1057,9 @@ module.exports = {
       visibilityHiddenPart: "ẩn {raids}",
       visibilityShownPart: "hiện {raids}",
       visibilityShownAll: "hiện lại hết raid",
+      visibilitySaveFailedDescription: "Lượt lưu hiển thị raid vừa bị lỗi giữa chừng, chưa có gì thay đổi.",
+      visibilityShareViewOnlyDescription: "**{owner}** share roster cho cậu ở quyền xem, nên tớ chưa đổi hiển thị raid giúp cậu được.",
+      visibilityShareRevokedDescription: "**{owner}** không còn share roster này cho cậu nữa, nên tớ không đổi hiển thị raid được.",
     },
   },
   "raid-set": {

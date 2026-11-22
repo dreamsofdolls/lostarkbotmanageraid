@@ -12,6 +12,13 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed
 - On the Raid visibility page a shown raid is marked 🔹 and a hidden one 💤 with its name struck through, with no "hidden" word after it. Both are emoji, so the column lines up; the eye icons are gone, and so is ➖, which already means "will be removed" on the roster edit card. The raid dropdown carries the same icons (🔹 ticked, 💤 unticked), and the progress card's all-hidden line uses 💤 too.
 
+### Fixed
+- Multi-character raid visibility menu keeps raids pre-ticked whenever every eligible character shows them, even across differing item levels or differing hidden states, and shows shown/eligible counts accurately.
+- Unfiltered `/raid-check` preserves gold from hidden gold-earning raids, matching `/raid-status`.
+- Switching into the Raid visibility sub-view or picking characters there refreshes aged snapshots just like the other `/raid-status` navigation controls.
+- Local Sync preview completion totals exclude hidden raids while still projecting cleared gates and gold deltas.
+- Raid visibility save errors and view-only or revoked share refusals name raid visibility instead of gold settings.
+
 ## 2026-11-21
 
 ### Fixed

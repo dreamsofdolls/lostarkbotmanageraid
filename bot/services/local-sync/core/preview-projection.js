@@ -53,6 +53,7 @@ function cloneRaidStates(raidStates) {
   for (const [raidKey, state] of raidStates.entries()) {
     cloned.set(raidKey, {
       modeKey: state.modeKey,
+      hidden: state.hidden === true,
       cleared: new Map(state.cleared),
     });
   }
@@ -129,7 +130,7 @@ function buildPreSyncRaidStates(char, { scope, currentWeekStartMs }) {
   for (const raid of getStatusRaidsForCharacter(char)) {
     if (!raidSupportsPreviewScope(raid.raidKey, scope)) continue;
     const modeKey = resolvePreviewModeKey(raid, scope);
-    const state = { modeKey, cleared: new Map() };
+    const state = { modeKey, hidden: raid.hidden === true, cleared: new Map() };
     const assignedRaid = char?.assignedRaids?.[raid.raidKey] || {};
     const storedModeKey = resolveStoredModeKey(assignedRaid, raid.raidKey);
     const completedGateKeys = getPreSyncCompletedGateKeys(raid, scope, storedModeKey);
@@ -176,7 +177,7 @@ function applyPreviewBuckets({
     let state = finalRaidStates.get(bucket.raidKey);
     if (state && gates.length > 0 && state.cleared.size >= gates.length) continue;
     if (!state || state.modeKey !== bucket.modeKey) {
-      state = { modeKey: bucket.modeKey, cleared: new Map() };
+      state = { modeKey: bucket.modeKey, hidden: state?.hidden === true, cleared: new Map() };
       finalRaidStates.set(bucket.raidKey, state);
     }
     for (let index = 0; index <= bucket.gateIndex && index < gates.length; index += 1) {
@@ -250,6 +251,7 @@ function buildChangeDetail(account, char, appliedGates) {
 function countCompletedRaids(raidStates) {
   let completed = 0;
   for (const [raidKey, state] of raidStates.entries()) {
+    if (state.hidden) continue;
     if (state.cleared.size === getGatesForRaid(raidKey).length) completed += 1;
   }
   return completed;
@@ -260,6 +262,7 @@ function buildFinalRaidProjection(finalRaidStates, appliedGates) {
     [...appliedGates.values()].map(({ raidKey, modeKey }) => `${raidKey}::${modeKey}`)
   );
   const raids = [];
+  let total = 0;
   let projectedCleared = 0;
 
   for (const raidKey of RAID_ORDER) {
@@ -267,8 +270,10 @@ function buildFinalRaidProjection(finalRaidStates, appliedGates) {
     if (!state) continue;
     const gates = getGatesForRaid(raidKey);
     let status = "pending";
+    const visible = state.hidden !== true;
+    if (visible) total += 1;
     if (state.cleared.size === gates.length) {
-      projectedCleared += 1;
+      if (visible) projectedCleared += 1;
       status = "done";
     } else if (state.cleared.size > 0) {
       status = "partial";
@@ -281,7 +286,7 @@ function buildFinalRaidProjection(finalRaidStates, appliedGates) {
     });
   }
 
-  return { raids, total: raids.length, projectedCleared };
+  return { raids, total, projectedCleared };
 }
 
 function projectCharacter({

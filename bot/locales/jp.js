@@ -1038,6 +1038,9 @@ module.exports = {
       visibilityHiddenPart: "{raids} 非表示",
       visibilityShownPart: "{raids} 表示",
       visibilityShownAll: "全レイドを再表示",
+      visibilitySaveFailedDescription: "レイド表示の保存が途中で失敗したので、何も変わっていませんわ。",
+      visibilityShareViewOnlyDescription: "**{owner}** さんの共有は閲覧権限なので、わたくしからレイド表示を変更できませんの。",
+      visibilityShareRevokedDescription: "**{owner}** さんがこのロスターの共有を解除したので、レイド表示を変更できませんの。",
     },
   },
   "raid-set": {

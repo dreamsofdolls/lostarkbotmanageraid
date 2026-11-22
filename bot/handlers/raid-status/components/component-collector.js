@@ -26,6 +26,8 @@ const LIVE_SNAPSHOT_ACTIONS = new Set([
   STATUS_COMPONENT_ACTION.viewToggle,
   STATUS_COMPONENT_ACTION.taskCharFilter,
   STATUS_COMPONENT_ACTION.goldChars,
+  STATUS_COMPONENT_ACTION.goldSubView,
+  STATUS_COMPONENT_ACTION.goldVisibilityChars,
 ]);
 
 /**

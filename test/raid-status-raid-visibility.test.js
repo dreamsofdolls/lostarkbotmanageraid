@@ -45,6 +45,9 @@ const {
   STATUS_COMPONENT_ACTION,
 } = require("../bot/handlers/raid-status/components/component-routes");
 const {
+  attachRaidStatusComponentCollector,
+} = require("../bot/handlers/raid-status/components/component-collector");
+const {
   createAllModePageRenderers,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-render");
 const {
@@ -518,4 +521,259 @@ test("gold sub-view and visibility component handlers toggle view, save visibili
   });
   assert.deepEqual(refused, { redraw: false });
   assert.equal(viewOnlyFollowUps.length, 1);
+});
+
+test("multi-character visibility options pre-tick raids shown for every eligible character even when iLvl or hidden sets differ", () => {
+  const high = makeCharacter("Main1755", 1755, {});
+  const low = makeCharacter("Alt1700", 1700, {});
+  const buildMenu = (characters, selection) => {
+    const ui = createRaidStatusGoldUi({
+      EmbedBuilder,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      StringSelectMenuBuilder,
+      UI,
+      getCharacterName,
+      truncateText,
+      formatGold,
+      getAccounts: () => [{ accountName: "Main", characters }],
+      getCurrentPage: () => 0,
+      getGoldCharSelection: () => selection,
+      getVisibilityCharSelection: () => selection,
+      getGoldSubView: () => "visibility",
+      getRaidsFor: getStatusRaidsForCharacter,
+      lang: "vi",
+    });
+    return ui.buildVisibilityRaidsRow(false).toJSON().components[0].options;
+  };
+
+  // Different item levels, nothing hidden: every raid stays ticked and marked 🔹.
+  const diffIlvlOptions = buildMenu([high, low], ["Main1755", "Alt1700"]);
+  for (const opt of diffIlvlOptions) {
+    assert.equal(opt.default, true, `${opt.value} should stay pre-ticked when nothing is hidden`);
+    assert.equal(opt.emoji.name, "🔹", `${opt.value} should keep 🔹 icon`);
+  }
+  const kazerosDiff = diffIlvlOptions.find((o) => o.value === "kazeros");
+  assert.match(kazerosDiff.description, /1\/1 con đang hiện/);
+  assert.match(kazerosDiff.description, /1\/2 con có raid này/);
+
+  // Same item level, only Act 4 hidden on CharA: Act 4 unticked (💤), rest stay ticked (🔹).
+  const charA = makeCharacter("CharA", 1755, { armoche: { hidden: true } });
+  const charB = makeCharacter("CharB", 1755, {});
+  const diffHiddenOptions = buildMenu([charA, charB], ["CharA", "CharB"]);
+  const armocheOpt = diffHiddenOptions.find((o) => o.value === "armoche");
+  assert.equal(armocheOpt.default, false);
+  assert.equal(armocheOpt.emoji.name, "💤");
+  for (const raidKey of ["kazeros", "serca", "horizon", "belgardin"]) {
+    const opt = diffHiddenOptions.find((o) => o.value === raidKey);
+    assert.equal(opt.default, true, `${raidKey} should remain pre-ticked`);
+    assert.equal(opt.emoji.name, "🔹", `${raidKey} should keep 🔹 icon`);
+  }
+});
+
+test("unfiltered /raid-check preserves gold from hidden gold-earning raids", () => {
+  const charVisible = makeCharacter("Main1755", 1755, {
+    armoche: { modeKey: "hard", goldOverride: "include", G1: cleared, G2: cleared },
+    kazeros: { modeKey: "hard" },
+    serca: { modeKey: "nightmare" },
+  });
+  const charHidden = makeCharacter("Main1755", 1755, {
+    armoche: { modeKey: "hard", hidden: true, goldOverride: "include", G1: cleared, G2: cleared },
+    kazeros: { modeKey: "hard" },
+    serca: { modeKey: "nightmare" },
+  });
+  const renderCheck = (character) => {
+    const account = { accountName: "Main", characters: [character] };
+    const userDoc = { discordId: "owner-1", accounts: [account] };
+    const view = makeRaidStatusView();
+    const renderers = createAllModePageRenderers({
+      authorMeta: new Map([["owner-1", { displayName: "Mgr", avatarURL: null }]]),
+      buildAccountPageEmbed: view.buildAccountPageEmbed,
+      buildStatusFooterText: view.buildStatusFooterText,
+      getState: () => ({
+        filterRaidId: null,
+        filterStatus: "all",
+        currentLocalPage: 0,
+        filteredIndices: [0],
+      }),
+      getStatusRaidsForCharacter,
+      lang: "vi",
+      pagesData: [{ userDoc, account }],
+      summarizeRaidProgress,
+      truncateText,
+    });
+    return renderers.buildRaidPage(0).toJSON();
+  };
+
+  const expected = renderCheck(charVisible);
+  const actual = renderCheck(charHidden);
+  assert.equal(actual.description, expected.description);
+  const expectedGoldLine = expected.fields[0].value.split("\n").find((l) => l.startsWith("💰"));
+  const actualGoldLine = actual.fields[0].value.split("\n").find((l) => l.startsWith("💰"));
+  assert.equal(actualGoldLine, expectedGoldLine);
+  assert.doesNotMatch(actual.fields[0].value, /Act 4/);
+});
+
+test("raid-status collector refreshes stale state before visibility navigation actions", async () => {
+  for (const [customId, action] of [
+    ["status-gold:subview", STATUS_COMPONENT_ACTION.goldSubView],
+    ["status-gold:visibility-chars", STATUS_COMPONENT_ACTION.goldVisibilityChars],
+  ]) {
+    const listeners = new Map();
+    const calls = [];
+    const collector = {
+      on(event, handler) {
+        listeners.set(event, handler);
+        return this;
+      },
+    };
+    attachRaidStatusComponentCollector({
+      EmbedBuilder: { from: (embed) => embed },
+      User: {},
+      interaction: {
+        user: { id: "owner-1" },
+        editReply: async () => {
+          calls.push("edit");
+          return {};
+        },
+      },
+      message: { createMessageComponentCollector: () => collector },
+      lang: "vi",
+      sessionMs: 60_000,
+      taskAutoRefreshGraceMs: 1_000,
+      getAccounts: () => [],
+      getCurrentPage: () => 0,
+      getCurrentView: () => "gold",
+      buildCurrentEmbeds: () => [{}],
+      buildEmbedAndCanvas: async () => {
+        calls.push("render");
+        return { embeds: [{}] };
+      },
+      buildComponents: () => [],
+      componentRouteHandlers: {
+        [action]: async () => {
+          calls.push("handler");
+          return { redraw: true };
+        },
+      },
+      refreshStateIfStale: async () => {
+        calls.push("refresh");
+      },
+    });
+
+    await listeners.get("collect")({
+      customId,
+      user: { id: "owner-1" },
+      deferUpdate: async () => {
+        calls.push("defer");
+      },
+    });
+    assert.deepEqual(calls, ["defer", "refresh", "handler", "render", "edit"], `${customId} should refresh`);
+  }
+});
+
+test("Local Sync preview projection excludes hidden raids from completion totals while keeping gold", () => {
+  const hiddenWithClear = makeCharacter("Main1755", 1755, {
+    armoche: { hidden: true, modeKey: "hard", goldOverride: "include" },
+    kazeros: { hidden: true, modeKey: "hard" },
+  });
+  const baseAccount = { accountName: "Main", characters: [hiddenWithClear] };
+  const nowMs = Date.now();
+  const weekStartMs = nowMs - 60_000;
+  const deltas = [
+    {
+      charName: "Main1755",
+      raidKey: "armoche",
+      modeKey: "hard",
+      gate: "G1",
+      gateIndex: 0,
+      lastClearMs: nowMs,
+      gold: 17000,
+    },
+    {
+      charName: "Main1755",
+      raidKey: "armoche",
+      modeKey: "hard",
+      gate: "G2",
+      gateIndex: 1,
+      lastClearMs: nowMs,
+      gold: 25000,
+    },
+  ];
+  const summary = projectSummary([baseAccount], deltas, { currentWeekStartMs: weekStartMs });
+  // 5 total eligible raids - 2 hidden = 3 visible in completion totals.
+  assert.equal(summary.completion.totalRaids, 3);
+  assert.equal(summary.completion.cleared, 0);
+  assert.equal(summary.completion.projected, 0);
+  assert.equal(summary.completion.percent, 0);
+  assert.equal(summary.completion.projectedPercent, 0);
+  // Gold and change details from incoming hidden raid clear remain projected.
+  assert.equal(summary.changes.gates, 2);
+  assert.equal(summary.goldDelta.total > 0, true);
+});
+
+test("visibility save errors and share refusals report raid visibility instead of gold settings", async () => {
+  const { model } = makeRosterModel([makeCharacter("SharedChar", 1720)]);
+  const buildHandlers = ({ saveFn = directSave, sharedFrom = null, canEdit = true } = {}) => {
+    const account = {
+      accountName: "Main",
+      characters: [makeCharacter("SharedChar", 1720)],
+      ...(sharedFrom ? { _sharedFrom: sharedFrom } : {}),
+    };
+    return createStatusComponentRouteHandlers({
+      session: { accounts: [account], currentPage: 0, goldSubView: "visibility" },
+      EmbedBuilder,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      User: model,
+      saveWithRetry: saveFn,
+      interaction: {},
+      discordId: "viewer-2",
+      lang: "vi",
+      buildStatusUserMeta: () => ({}),
+      reloadViewerAccounts: async () => {},
+      buildEmbedAndCanvas: async () => ({ embeds: [], files: [], attachments: [] }),
+      buildComponents: () => [],
+      redrawMessage: async () => {},
+      runManualStatusSync: async () => {},
+      runManualRosterRefresh: async () => {},
+      formatNextCooldownRemaining,
+      getAutoManageCooldownMs: () => 60_000,
+      isReplyPrivate: () => true,
+      canEditAccountFn: async () => canEdit,
+      getAccessibleAccountsFn: async () => [{ ownerDiscordId: "owner-1", accessLevel: "view", isOwn: false }],
+      getVisibilitySelection: () => [{ name: "SharedChar", itemLevel: 1720, raids: [] }],
+    });
+  };
+
+  // Share refusal (view-only)
+  const shareFollowUps = [];
+  const viewOnlyHandlers = buildHandlers({
+    sharedFrom: { ownerDiscordId: "owner-1", ownerLabel: "Owner", accessLevel: "view" },
+    canEdit: false,
+  });
+  await viewOnlyHandlers[STATUS_COMPONENT_ACTION.goldVisibility]({
+    values: ["kazeros"],
+    followUp: async (payload) => shareFollowUps.push(payload),
+  });
+  const shareDesc = shareFollowUps[0].embeds[0].toJSON().description;
+  assert.match(shareDesc, /hiển thị raid/);
+  assert.doesNotMatch(shareDesc, /cài đặt gold/);
+
+  // Save failure
+  const failFollowUps = [];
+  const failingHandlers = buildHandlers({
+    saveFn: async () => {
+      throw new Error("boom");
+    },
+  });
+  await failingHandlers[STATUS_COMPONENT_ACTION.goldVisibility]({
+    values: ["kazeros"],
+    followUp: async (payload) => failFollowUps.push(payload),
+  });
+  const failDesc = failFollowUps[0].embeds[0].toJSON().description;
+  assert.match(failDesc, /hiển thị raid/);
+  assert.doesNotMatch(failDesc, /cài đặt gold/);
 });

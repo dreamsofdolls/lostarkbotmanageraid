@@ -115,6 +115,10 @@ const SHARE_REFUSAL_DESCRIPTIONS = Object.freeze({
     viewOnly: "raid-status.goldView.shareViewOnlyDescription",
     revoked: "raid-status.goldView.shareRevokedDescription",
   },
+  visibility: {
+    viewOnly: "raid-status.goldView.visibilityShareViewOnlyDescription",
+    revoked: "raid-status.goldView.visibilityShareRevokedDescription",
+  },
   rosterRefresh: {
     viewOnly: "raid-status.sync.rosterRefreshSharedLockedDescription",
     revoked: "raid-status.sync.rosterRefreshShareRevokedDescription",
@@ -263,10 +267,10 @@ function createStatusComponentRouteHandlers(ctx) {
   // A null write context is either a share the owner revoked or downgraded
   // since the card was drawn, or a card page with no roster; only the share
   // case has a reason to show.
-  async function followUpGoldShareRefusal(component) {
+  async function followUpGoldShareRefusal(component, shareKind = "gold") {
     const sharedFrom = session.accounts[session.currentPage]?._sharedFrom;
     if (!sharedFrom) return;
-    await followUpShareRefusal(component, "gold", sharedFrom);
+    await followUpShareRefusal(component, shareKind, sharedFrom);
   }
 
   function goldSaveFailedNotice() {
@@ -274,6 +278,15 @@ function createStatusComponentRouteHandlers(ctx) {
       kind: NoticeKind.FAILURE,
       title: t("raid-status.goldView.saveFailedTitle", lang),
       description: t("raid-status.goldView.saveFailedDescription", lang),
+      tip: t("raid-status.goldView.saveFailedTip", lang),
+    };
+  }
+
+  function visibilitySaveFailedNotice() {
+    return {
+      kind: NoticeKind.FAILURE,
+      title: t("raid-status.goldView.saveFailedTitle", lang),
+      description: t("raid-status.goldView.visibilitySaveFailedDescription", lang),
       tip: t("raid-status.goldView.saveFailedTip", lang),
     };
   }
@@ -294,13 +307,20 @@ function createStatusComponentRouteHandlers(ctx) {
   // character and save once. A view-only or revoked share gets the refusal
   // notice and no redraw; every other outcome redraws, which also clears the
   // dropdown's client-side ticks.
-  async function runGoldBulkWrite(component, { logLabel, selection, write, onSaveError, summarize }) {
+  async function runGoldBulkWrite(component, {
+    logLabel,
+    selection,
+    write,
+    onSaveError,
+    shareKind = "gold",
+    summarize,
+  }) {
     const writeContext = await resolveCurrentAccountWriteContext({
       logLabel,
       detail: `chars=${selection.length}`,
     });
     if (!writeContext) {
-      await followUpGoldShareRefusal(component);
+      await followUpGoldShareRefusal(component, shareKind);
       return noRedraw();
     }
     const { targetAccount, targetAccountName, writeDiscordId, canWrite } = writeContext;
@@ -321,7 +341,7 @@ function createStatusComponentRouteHandlers(ctx) {
       return redraw();
     }
     if (result.denied) {
-      await followUpShareRefusal(component, "gold", targetAccount._sharedFrom);
+      await followUpShareRefusal(component, shareKind, targetAccount._sharedFrom);
       return noRedraw();
     }
     const { isMissing, notice } = summarize(result);
@@ -349,8 +369,9 @@ function createStatusComponentRouteHandlers(ctx) {
     return runGoldBulkWrite(component, {
       logLabel,
       selection,
+      shareKind: "visibility",
       write: (target) => saveBulkRaidVisibility({ ...target, visibility }),
-      onSaveError: goldSaveFailedNotice(),
+      onSaveError: visibilitySaveFailedNotice(),
       summarize: (result) => ({
         isMissing: (entry) => entry.status === "missing",
         notice: buildVisibilitySummaryNotice({ result, visibility, lang, getClassEmoji }),

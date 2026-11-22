@@ -1037,6 +1037,9 @@ module.exports = {
       visibilityHiddenPart: "hid {raids}",
       visibilityShownPart: "showed {raids}",
       visibilityShownAll: "all raids shown again",
+      visibilitySaveFailedDescription: "Saving the raid visibility settings failed partway, so nothing changed.",
+      visibilityShareViewOnlyDescription: "**{owner}** shared this roster with you at view permission, so I can't change its raid visibility for you.",
+      visibilityShareRevokedDescription: "**{owner}** no longer shares this roster with you, so I can't change its raid visibility.",
     },
   },
   "raid-set": {
