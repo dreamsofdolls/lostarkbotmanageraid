@@ -1,12 +1,45 @@
-// Seed RAID_MANAGER_ID before requiring bot/commands so the module-level
-// boot warning doesn't fire during this test file.
-process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../bot/commands");
-const { announcementTypeEntry } = require("../bot/utils/raid/schedule/announcements");
+const { createSchedulingHelpers } = require("../bot/utils/raid/schedule/scheduling");
+const {
+  announcementTypeEntry,
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+} = require("../bot/utils/raid/schedule/announcements");
+const {
+  MAINTENANCE_TICK_MS,
+  getMaintenanceSlotConfigSnapshot,
+} = require("../bot/utils/raid/schedule/maintenance");
+const {
+  WORLD_EVENT_REMINDER_TICK_MS,
+  nextWorldEventReminderBoundaryMs,
+} = require("../bot/utils/raid/schedule/world-events");
+const { createAutoCleanupSchedulerService } = require("../bot/services/raid/schedulers/auto-cleanup-scheduler");
+const { createAutoManageDailySchedulerService } = require("../bot/services/raid/schedulers/auto-manage-daily-scheduler");
+
+const { AUTO_CLEANUP_TICK_MS } = createAutoCleanupSchedulerService({});
+const { AUTO_MANAGE_DAILY_TICK_MS } = createAutoManageDailySchedulerService({});
+
+const noopNull = () => null;
+const __test = createSchedulingHelpers({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+  resolveWeeklyResetStarted: noopNull,
+  // Mirrors WEEKLY_RESET_TICK_MS (30 min) without loading the mongoose-backed scheduler module.
+  resolveWeeklyResetTickMs: () => 30 * 60 * 1000,
+  resolveAutoCleanupStarted: noopNull,
+  resolveAutoCleanupTickMs: () => AUTO_CLEANUP_TICK_MS,
+  resolveAutoManageStarted: noopNull,
+  resolveAutoManageDailyTickMs: () => AUTO_MANAGE_DAILY_TICK_MS,
+  resolveMaintenanceStarted: noopNull,
+  resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
+  resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot(),
+  resolveWorldEventStarted: noopNull,
+  resolveWorldEventTickMs: () => WORLD_EVENT_REMINDER_TICK_MS,
+  resolveNextWorldEventReminderBoundary: (now) =>
+    nextWorldEventReminderBoundaryMs(now) ?? null,
+});
 
 test("raid-announce show states Artist's bedtime and wake-up hours from the sleep window", () => {
   const bedtime = announcementTypeEntry("artist-bedtime");

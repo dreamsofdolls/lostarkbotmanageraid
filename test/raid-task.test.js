@@ -1,11 +1,11 @@
-// Seed env BEFORE requiring bot/commands so the module-level boot
-// warning for missing RAID_MANAGER_ID doesn't fire during tests.
+// Seed RAID_MANAGER_ID before requiring access-control/manager so share
+// ownership tests using "test-manager-1" match the env allowlist at load.
 process.env.RAID_MANAGER_ID = "test-manager-1";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../bot/commands");
+const { dailyResetStartMs } = require("../bot/utils/raid/schedule/reset-windows");
 const {
   SHARED_TASK_CAP_DAILY,
   SHARED_TASK_CAP_WEEKLY,
@@ -36,27 +36,27 @@ const {
 test("dailyResetStartMs at 09:59 UTC snaps to YESTERDAY 10:00 UTC", () => {
   // Apr 22 2026 09:59 UTC → boundary not yet crossed → previous day's 10:00 UTC.
   const now = new Date(Date.UTC(2026, 3, 22, 9, 59, 0, 0));
-  const result = __test.dailyResetStartMs(now);
+  const result = dailyResetStartMs(now);
   assert.equal(result, Date.UTC(2026, 3, 21, 10, 0, 0, 0));
 });
 
 test("dailyResetStartMs at 10:00 UTC snaps to TODAY 10:00 UTC", () => {
   // Boundary moment itself is the start of the new cycle.
   const now = new Date(Date.UTC(2026, 3, 22, 10, 0, 0, 0));
-  const result = __test.dailyResetStartMs(now);
+  const result = dailyResetStartMs(now);
   assert.equal(result, Date.UTC(2026, 3, 22, 10, 0, 0, 0));
 });
 
 test("dailyResetStartMs at 23:59 UTC snaps to TODAY 10:00 UTC", () => {
   const now = new Date(Date.UTC(2026, 3, 22, 23, 59, 0, 0));
-  const result = __test.dailyResetStartMs(now);
+  const result = dailyResetStartMs(now);
   assert.equal(result, Date.UTC(2026, 3, 22, 10, 0, 0, 0));
 });
 
 test("dailyResetStartMs returns ms equal to 17:00 VN (UTC+7)", () => {
   // Tests confirm the 10:00 UTC boundary corresponds to 17:00 VN.
   const now = new Date(Date.UTC(2026, 3, 22, 12, 0, 0, 0));
-  const result = __test.dailyResetStartMs(now);
+  const result = dailyResetStartMs(now);
   const vnHourAtBoundary = new Date(result).getUTCHours() + 7;
   assert.equal(vnHourAtBoundary % 24, 17);
 });

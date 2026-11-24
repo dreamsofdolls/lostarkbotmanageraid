@@ -1,16 +1,53 @@
-// Seed RAID_MANAGER_ID before requiring bot/commands so the module-level
-// boot warning doesn't fire during this test file.
-process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../bot/commands");
 const { docMatchesQuery } = require("./helpers/mongo-match");
 const {
   announcementOverridableTypeKeys,
   announcementTypeEntry,
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
 } = require("../bot/utils/raid/schedule/announcements");
+const {
+  MAINTENANCE_TIME_ZONE,
+  MAINTENANCE_WEEKDAY,
+  MAINTENANCE_HOUR,
+  MAINTENANCE_MINUTE,
+  MAINTENANCE_TICK_MS,
+  getMaintenanceSlotForNow,
+  pickMaintenanceVariant,
+  buildMaintenancePreview,
+  buildMaintenanceConfigQuery,
+  getMaintenanceSlotConfigSnapshot,
+} = require("../bot/utils/raid/schedule/maintenance");
+const { createSchedulingHelpers } = require("../bot/utils/raid/schedule/scheduling");
+
+const noopNull = () => null;
+const { nextAnnouncementEligibleBoundaryMs } = createSchedulingHelpers({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+  resolveWeeklyResetStarted: noopNull,
+  resolveWeeklyResetTickMs: noopNull,
+  resolveAutoCleanupStarted: noopNull,
+  resolveAutoCleanupTickMs: noopNull,
+  resolveAutoManageStarted: noopNull,
+  resolveAutoManageDailyTickMs: noopNull,
+  resolveMaintenanceStarted: noopNull,
+  resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
+  resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot(),
+});
+
+const __test = {
+  MAINTENANCE_TIME_ZONE,
+  MAINTENANCE_WEEKDAY,
+  MAINTENANCE_HOUR,
+  MAINTENANCE_MINUTE,
+  getMaintenanceSlotForNow,
+  nextAnnouncementEligibleBoundaryMs,
+  pickMaintenanceVariant,
+  buildMaintenancePreview,
+  buildMaintenanceConfigQuery,
+};
 
 // Lost Ark maintenance starts Wednesday 00:00 Pacific time. During US
 // daylight time that is 07:00 UTC = 14:00 VN; in standard time 08:00 UTC =

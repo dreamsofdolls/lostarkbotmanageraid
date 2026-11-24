@@ -1,14 +1,107 @@
-// Seed RAID_MANAGER_ID before requiring bot/commands so manager.js captures
-// a deterministic allowlist at module load. Tests below rely on these IDs
-// to verify manager-specific cooldown branching.
+// Seed RAID_MANAGER_ID before requiring services/access/manager so it
+// captures a deterministic allowlist at module load. Tests below rely on
+// these IDs to verify manager-specific cooldown branching.
 process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test, parseRaidMessage } = require("../bot/commands");
+const { parseRaidMessage } = require("../bot/services/raid/channel-monitor/channel-monitor-parser");
+const { STATUS_PAGINATION_SESSION_MS } = require("../bot/handlers/raid-status");
+const { RAID_CHECK_PAGINATION_SESSION_MS } = require("../bot/handlers/raid-check");
+const {
+  getCurrentVNHour,
+  getTargetVNDayKey,
+  isInArtistQuietHours,
+  hasReachedArtistWakeupBoundary,
+} = require("../bot/utils/raid/schedule/artist-clock");
+const {
+  pickBedtimeNoticeContent,
+  pickWakeupNoticeContent,
+  cleanupCountBucket,
+} = require("../bot/utils/raid/schedule/cleanup-notices");
+const { createSchedulingHelpers } = require("../bot/utils/raid/schedule/scheduling");
+const {
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+} = require("../bot/utils/raid/schedule/announcements");
+const {
+  isManagerId,
+  getAutoManageCooldownMs,
+  getRosterRefreshCooldownMs,
+  DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
+} = require("../bot/services/access/manager");
+const {
+  UI,
+  normalizeName,
+  foldName,
+  getCharacterName,
+  formatNextCooldownRemaining,
+} = require("../bot/utils/raid/common/shared");
+const {
+  buildFetchedRosterIndexes,
+  findFetchedRosterMatchForCharacter,
+} = require("../bot/utils/raid/common/character");
+const {
+  createRosterRefreshService,
+  ROSTER_REFRESH_COOLDOWN_MS,
+} = require("../bot/services/roster/refresh");
+const { createRaidStatusView } = require("../bot/handlers/raid-status/view/view");
 const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
 const { lookupArray } = require("../bot/utils/raid/schedule/locale-arrays");
+
+const noopNull = () => null;
+const { nextAnnouncementEligibleBoundaryMs } = createSchedulingHelpers({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+  resolveWeeklyResetStarted: noopNull,
+  resolveWeeklyResetTickMs: noopNull,
+  resolveAutoCleanupStarted: noopNull,
+  resolveAutoCleanupTickMs: noopNull,
+  resolveAutoManageStarted: noopNull,
+  resolveAutoManageDailyTickMs: noopNull,
+  resolveMaintenanceStarted: noopNull,
+  resolveMaintenanceTickMs: noopNull,
+});
+const {
+  applyStaleAccountRefreshes,
+  formatRosterRefreshCooldownRemaining,
+} = createRosterRefreshService({
+  normalizeName,
+  foldName,
+  getCharacterName,
+  formatNextCooldownRemaining,
+  buildFetchedRosterIndexes,
+  findFetchedRosterMatchForCharacter,
+  getRosterRefreshCooldownMs,
+});
+const { buildAccountFreshnessLine } = createRaidStatusView({
+  UI,
+  formatNextCooldownRemaining,
+  formatRosterRefreshCooldownRemaining,
+  ROSTER_REFRESH_COOLDOWN_MS,
+  AUTO_MANAGE_SYNC_COOLDOWN_MS: DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  getAutoManageCooldownMs,
+  getRosterRefreshCooldownMs,
+});
+
+const __test = {
+  STATUS_PAGINATION_SESSION_MS,
+  RAID_CHECK_PAGINATION_SESSION_MS,
+  getCurrentVNHour,
+  getTargetVNDayKey,
+  isInArtistQuietHours,
+  hasReachedArtistWakeupBoundary,
+  pickBedtimeNoticeContent,
+  pickWakeupNoticeContent,
+  cleanupCountBucket,
+  nextAnnouncementEligibleBoundaryMs,
+  applyStaleAccountRefreshes,
+  formatNextCooldownRemaining,
+  buildAccountFreshnessLine,
+  isManagerId,
+  getAutoManageCooldownMs,
+};
 
 test("raid-status pagination stays open longer than raid-check", () => {
   assert.equal(__test.STATUS_PAGINATION_SESSION_MS, 10 * 60 * 1000);

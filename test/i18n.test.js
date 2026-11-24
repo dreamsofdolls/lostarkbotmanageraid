@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const { TRANSLATIONS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = require("../bot/locales");
 const { normalizeLanguage, resolveLocale } = require("../bot/services/i18n");
-const { TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync");
+const { DEFAULT_TTL_SEC: TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync/core/tokens");
 const {
   createRaidLanguageCommandDefinition,
 } = require("../bot/handlers/commands/command-definitions/social");

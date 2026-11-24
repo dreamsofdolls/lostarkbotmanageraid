@@ -1,6 +1,5 @@
 "use strict";
 
-const { JSDOM, VirtualConsole } = require("jsdom");
 const { getClassName } = require("../../models/Class");
 const { parseItemLevel } = require("../../utils/raid/common/shared");
 const {
@@ -12,11 +11,20 @@ const {
   BIBLE_REQUEST_TIMEOUT_MS,
 } = require("../bible-endpoint");
 
-const jsdomVirtualConsole = new VirtualConsole();
-jsdomVirtualConsole.on("jsdomError", (err) => {
-  if (err?.message?.includes("Could not parse CSS stylesheet")) return;
-  console.error("[jsdom]", err);
-});
+let cachedJsdom = null;
+
+function loadJsdom() {
+  if (!cachedJsdom) {
+    const { JSDOM, VirtualConsole } = require("jsdom");
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on("jsdomError", (err) => {
+      if (err?.message?.includes("Could not parse CSS stylesheet")) return;
+      console.error("[jsdom]", err);
+    });
+    cachedJsdom = { JSDOM, virtualConsole };
+  }
+  return cachedJsdom;
+}
 
 function createRosterFetchService({ bibleLimiter }) {
   function unescapeJsonLike(value) {
@@ -127,7 +135,8 @@ function createRosterFetchService({ bibleLimiter }) {
     }
 
     const html = await response.text();
-    const { document } = new JSDOM(html, { virtualConsole: jsdomVirtualConsole }).window;
+    const { JSDOM, virtualConsole } = loadJsdom();
+    const { document } = new JSDOM(html, { virtualConsole }).window;
     const rosterClassMap = extractRosterClassMapFromHtml(html);
     const links = document.querySelectorAll(`a[href^="/character/${BIBLE_REGION}/"]`);
 
