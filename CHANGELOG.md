@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-24
+
+### Changed
+- Updated dependencies: mongoose 9.13.0, jsdom 31.0.1, @napi-rs/canvas 1.2.0, and playwright 1.65.1 (Railway Docker build will install Chromium matching playwright 1.65.1).
+
 ## 2026-11-22
 
 ### Added

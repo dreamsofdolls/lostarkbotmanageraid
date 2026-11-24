@@ -19,6 +19,6 @@
     "jsdom": "^31.0.0",
     "json5": "2.2.3",
     "mongoose": "^9.12.1",
-    "playwright": "1.63.0"
+    "playwright": "1.65.1"
   }
 }
