@@ -565,8 +565,8 @@ test("goldReceive applies the ticked set to every selected character and posts o
   for (const character of doc.accounts[0].characters) {
     assert.equal(character.assignedRaids.armoche.goldOverride, "include", character.name);
     assert.equal(character.assignedRaids.kazeros.goldOverride, "include", character.name);
-    // Two ticks leave the third gold slot automatic.
-    assert.equal(character.assignedRaids.serca?.goldOverride, undefined, character.name);
+    // Two ticks exclude the third gold slot so the character takes gold from only those two raids.
+    assert.equal(character.assignedRaids.serca?.goldOverride, "exclude", character.name);
   }
   assert.equal(doc.markedPath, "accounts");
   assert.equal(doc.saves, 1);

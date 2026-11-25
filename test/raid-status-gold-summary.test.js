@@ -6,7 +6,11 @@ const assert = require("node:assert/strict");
 const {
   buildGoldReceiveSummaryNotice,
   buildModeSummaryNotice,
+  buildVisibilitySummaryNotice,
 } = require("../bot/handlers/raid-status/gold/gold-summary");
+const {
+  RAID_VISIBILITY_HIDE_ALL,
+} = require("../bot/handlers/raid-status/gold/gold-actions");
 
 const fakeClassEmoji = (className) => (className ? `[${className}]` : "");
 
@@ -146,15 +150,34 @@ test("gold summary lists the ticked set and each character's raids in and out", 
   ]);
 });
 
-test("gold summary for fewer than three ticks names the pinned raids and the slots Artist fills", () => {
+test("gold summary for fewer than three ticks uses the selected gold headline without auto-fill wording", () => {
   const notice = goldNotice([
     goldEntry("Qiylyn", "Bard", "changed", {
-      added: ["horizon"], removed: ["kazeros"], kept: ["serca", "horizon", "belgardin"],
+      added: ["horizon"], removed: ["kazeros", "serca", "belgardin"], kept: ["horizon"],
     }),
   ], { kind: "set", raidKeys: ["horizon"] });
   const [headline, line] = notice.description.split("\n");
-  assert.equal(headline, "Ghim gold: **Horizon**, ô còn trống Artist tự chọn");
-  assert.equal(line, "[Bard] **Qiylyn**: Horizon vào, Kazeros ra");
+  assert.equal(headline, "Nhận gold: **Horizon**");
+  assert.equal(line, "[Bard] **Qiylyn**: Horizon vào, Kazeros, Serca, Belgardin ra");
+});
+
+test("visibility hide-all summary names each changed character", () => {
+  const notice = buildVisibilitySummaryNotice({
+    result: {
+      ok: true,
+      denied: false,
+      results: [
+        { name: "Nachtsieger", className: "Paladin", status: "changed", hiddenAdded: ["armoche"], hiddenRemoved: [], skipped: [] },
+        { name: "AlreadyHidden", className: "Bard", status: "unchanged", hiddenAdded: [], hiddenRemoved: [], skipped: [] },
+      ],
+    },
+    visibility: { kind: RAID_VISIBILITY_HIDE_ALL },
+    lang: "vi",
+    getClassEmoji: fakeClassEmoji,
+  });
+  assert.equal(notice.kind, "done");
+  assert.equal(notice.title, "Tớ ẩn hết raid cho 1 con rồi nha");
+  assert.equal(notice.description, "[Paladin] **Nachtsieger**: ẩn hết raid");
 });
 
 test("gold summary marks pinned characters and skipped raids", () => {

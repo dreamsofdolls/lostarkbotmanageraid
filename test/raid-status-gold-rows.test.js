@@ -241,6 +241,7 @@ function goldLayoutRows({ rosterCount, sharedFrom = null, goldSubView = "gold", 
     buildGoldResetButton: ui.buildGoldResetButton,
     buildGoldSubViewButton: ui.buildGoldSubViewButton,
     buildVisibilityCharsRow: ui.buildVisibilityCharsRow,
+    buildVisibilityHideAllButton: ui.buildVisibilityHideAllButton,
     buildVisibilityRaidsRow: ui.buildVisibilityRaidsRow,
     buildVisibilityResetButton: ui.buildVisibilityResetButton,
     getAccounts: () => accounts,
@@ -278,15 +279,35 @@ test("a view-only share disables gold writes but keeps the visibility sub-view t
   assert.equal(subView.disabled, false);
 });
 
-test("visibility sub-view exposes show-all, sub-view toggle, character select, and raid select with min_values=0", () => {
+test("visibility sub-view exposes show-all, hide-all, sub-view toggle, character select, and raid select with min_values=0", () => {
   const rows = goldLayoutRows({ rosterCount: 1, goldSubView: "visibility" });
   assert.ok(rows.length <= 5);
-  assert.deepEqual(idsOf(rows[0]), ["status-gold:visibility-reset", "status-gold:subview"]);
+  assert.deepEqual(idsOf(rows[0]), [
+    "status-gold:visibility-reset",
+    "status-gold:visibility-hide-all",
+    "status-gold:subview",
+  ]);
   assert.deepEqual(rows.slice(1).map((row) => idsOf(row)[0]), [
     "status-view:toggle", "status-gold:visibility-chars", "status-gold:visibility",
   ]);
   const raidSelect = rows[3][0];
   assert.equal(raidSelect.min_values, 0);
+  assert.equal(raidSelect.options[raidSelect.options.length - 1].value, "hide_all");
+});
+
+test("with several rosters the visibility buttons pack cleanly beside page buttons within Discord's 5-component row limit", () => {
+  const rows = goldLayoutRows({ rosterCount: 2, goldSubView: "visibility" });
+  assert.ok(rows.length <= 5);
+  assert.deepEqual(idsOf(rows[0]), [
+    "status:prev",
+    "status:next",
+    "status-gold:visibility-reset",
+    "status-gold:visibility-hide-all",
+    "status-gold:subview",
+  ]);
+  assert.deepEqual(rows.slice(1).map((row) => idsOf(row)[0]), [
+    "status-view:toggle", "status-gold:visibility-chars", "status-gold:visibility",
+  ]);
 });
 
 test("selected characters carry the ✏️ marker in the gold embed", () => {

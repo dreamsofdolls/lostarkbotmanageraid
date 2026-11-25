@@ -163,20 +163,19 @@ test("applyGoldReceive set pins ticked raids and excludes the rest", () => {
   assert.equal(target.assignedRaids.belgardin.goldOverride, "exclude");
 });
 
-test("applyGoldReceive with fewer raids ticked than gold slots lets Artist fill the rest", () => {
+test("applyGoldReceive with 1 or 2 raids ticked excludes unticked raids so users can choose 1, 2, or 3 gold raids", () => {
   const target = character("Qiylyn", 1772.5);
   const result = applyGoldReceive(target, { kind: "set", raidKeys: ["horizon"] });
   assert.equal(result.changed, true);
   assert.deepEqual(result.before, ["kazeros", "serca", "belgardin"]);
-  assert.deepEqual(result.after, ["serca", "horizon", "belgardin"]);
+  assert.deepEqual(result.after, ["horizon"]);
   assert.equal(target.assignedRaids.horizon.goldOverride, "include");
   for (const raidKey of ["armoche", "kazeros", "serca", "belgardin"]) {
-    assert.equal(target.assignedRaids[raidKey]?.goldOverride, undefined, raidKey);
+    assert.equal(target.assignedRaids[raidKey]?.goldOverride, "exclude", raidKey);
   }
 });
 
-test("applyGoldReceive with fewer ticks clears earlier hand exclusions so the free slots refill", () => {
-  // The state a lone Horizon tick left under the old rule.
+test("applyGoldReceive with 2 ticks sets exactly those 2 gold raids and excludes the rest", () => {
   const target = character("Qiylyn", 1772.5, {
     armoche: { goldOverride: "exclude" },
     kazeros: { goldOverride: "exclude" },
@@ -186,17 +185,41 @@ test("applyGoldReceive with fewer ticks clears earlier hand exclusions so the fr
   });
   const result = applyGoldReceive(target, { kind: "set", raidKeys: ["horizon", "kazeros"] });
   assert.deepEqual(result.before, ["horizon"]);
-  assert.deepEqual(result.after, ["kazeros", "horizon", "belgardin"]);
-  assert.equal(target.assignedRaids.serca.goldOverride, undefined);
-  assert.equal(target.assignedRaids.belgardin.goldOverride, undefined);
+  assert.deepEqual(result.after, ["kazeros", "horizon"]);
+  assert.equal(target.assignedRaids.kazeros.goldOverride, "include");
+  assert.equal(target.assignedRaids.horizon.goldOverride, "include");
+  assert.equal(target.assignedRaids.armoche.goldOverride, "exclude");
+  assert.equal(target.assignedRaids.serca.goldOverride, "exclude");
+  assert.equal(target.assignedRaids.belgardin.goldOverride, "exclude");
 });
 
-test("applyGoldReceive skips a ticked raid the character does not have", () => {
+test("applyGoldReceive lets a 1733 character drop Act 4 by picking 2 gold raids, then reset back to 3", () => {
+  const target = character("November", 1733.33, {
+    armoche: { modeKey: "hard" },
+    kazeros: { modeKey: "hard" },
+    serca: { modeKey: "hard" },
+  });
+  const twoRaids = applyGoldReceive(target, { kind: "set", raidKeys: ["kazeros", "serca"] });
+  assert.equal(twoRaids.changed, true);
+  assert.deepEqual(twoRaids.before, ["armoche", "kazeros", "serca"]);
+  assert.deepEqual(twoRaids.after, ["kazeros", "serca"]);
+  assert.equal(target.assignedRaids.armoche.goldOverride, "exclude");
+
+  const resetAuto = applyGoldReceive(target, { kind: "auto" });
+  assert.equal(resetAuto.changed, true);
+  assert.deepEqual(resetAuto.after, ["armoche", "kazeros", "serca"]);
+  assert.equal(target.assignedRaids.armoche.goldOverride, undefined);
+});
+
+test("applyGoldReceive skips a ticked raid the character does not have and excludes unticked ones", () => {
   const target = character("Lowbie", 1745);
   const result = applyGoldReceive(target, { kind: "set", raidKeys: ["armoche", "belgardin"] });
   assert.deepEqual(result.skipped, ["belgardin"]);
-  // Armoche is pinned; the slots Belgardin would have taken refill automatically.
-  assert.deepEqual(result.after, ["armoche", "kazeros", "serca"]);
+  // Only Armoche matched; Kazeros and Serca are excluded rather than auto-refilled.
+  assert.deepEqual(result.after, ["armoche"]);
+  assert.equal(target.assignedRaids.armoche.goldOverride, "include");
+  assert.equal(target.assignedRaids.kazeros.goldOverride, "exclude");
+  assert.equal(target.assignedRaids.serca.goldOverride, "exclude");
   assert.equal(target.assignedRaids.belgardin?.goldOverride, undefined);
 });
 
@@ -338,12 +361,15 @@ test("saveBulkGoldReceive reports changed, pinned and skipped per character", as
   const [match, low] = result.results;
   assert.equal(match.status, "pinned");
   assert.deepEqual(match.kept, ["kazeros", "serca", "belgardin"]);
-  // Lowbie has two of the three ticked raids, so its third slot stays
-  // automatic and it keeps the raids it already received.
-  assert.equal(low.status, "pinned");
+  // Lowbie lacks Belgardin, so it keeps only Kazeros + Serca and drops Armoche.
+  assert.equal(low.status, "changed");
+  assert.deepEqual(low.added, []);
+  assert.deepEqual(low.removed, ["armoche"]);
+  assert.deepEqual(low.kept, ["kazeros", "serca"]);
   assert.deepEqual(low.skipped, ["belgardin"]);
   assert.deepEqual([match.className, low.className], ["Bard", "Paladin"]);
   assert.equal(charsOf(doc)[0].assignedRaids.armoche.goldOverride, "exclude");
+  assert.equal(charsOf(doc)[1].assignedRaids.armoche.goldOverride, "exclude");
 });
 
 test("saveBulkGoldReceive does not save when nothing changes", async () => {
@@ -397,8 +423,12 @@ test("bulk writers report the outcomes of the attempt that saves, not the one th
     gold: {
       run: (options) => saveBulkGoldReceive({ ...options, receive: { kind: "set", raidKeys: ["armoche"] } }),
       beforeRace: {},
-      // A lone tick pins that raid and leaves the free slots automatic.
-      afterRace: { armoche: { goldOverride: "include" } },
+      // A lone tick sets Armoche to include and excludes every other eligible raid.
+      afterRace: {
+        armoche: { goldOverride: "include" },
+        kazeros: { goldOverride: "exclude" },
+        serca: { goldOverride: "exclude" },
+      },
       outcomeOf: (entry) => entry.status,
       expected: "unchanged",
     },

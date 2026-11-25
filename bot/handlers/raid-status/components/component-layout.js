@@ -16,6 +16,7 @@ function createRaidStatusComponentLayout({
   buildGoldResetButton,
   buildGoldSubViewButton = () => null,
   buildVisibilityCharsRow = () => null,
+  buildVisibilityHideAllButton = () => null,
   buildVisibilityRaidsRow = () => null,
   buildVisibilityResetButton = () => null,
   buildSyncButton,
@@ -115,7 +116,11 @@ function createRaidStatusComponentLayout({
     const subViewButton = buildGoldSubViewButton(disabled);
 
     if (getGoldSubView() === "visibility") {
-      addTopGoldButtons(rows, [buildVisibilityResetButton(goldWriteDisabled), subViewButton]);
+      addTopGoldButtons(rows, [
+        buildVisibilityResetButton(goldWriteDisabled),
+        buildVisibilityHideAllButton(goldWriteDisabled),
+        subViewButton,
+      ]);
       const charsRow = buildVisibilityCharsRow(disabled);
       if (charsRow) rows.push(charsRow);
       const visibilityRow = buildVisibilityRaidsRow(goldWriteDisabled);

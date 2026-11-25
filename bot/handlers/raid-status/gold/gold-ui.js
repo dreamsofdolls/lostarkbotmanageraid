@@ -30,6 +30,7 @@ function createRaidStatusGoldUi(deps) {
     buildGoldResetButton,
     buildGoldSubViewButton,
     buildVisibilityCharsRow,
+    buildVisibilityHideAllButton,
     buildVisibilityRaidsRow,
     buildVisibilityResetButton,
     selectedEntries,
@@ -50,6 +51,7 @@ function createRaidStatusGoldUi(deps) {
     buildGoldResetButton,
     buildGoldSubViewButton,
     buildVisibilityCharsRow,
+    buildVisibilityHideAllButton,
     buildVisibilityRaidsRow,
     buildVisibilityResetButton,
     // The gold handlers act on the same selection the rows render.

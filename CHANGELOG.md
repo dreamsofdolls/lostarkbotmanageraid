@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-11-25
+
+### Changed
+- `/raid-status` Gold & difficulty now lets characters receive gold from 1, 2, or 3 chosen raids instead of auto-refilling free slots to 3 when fewer than 3 raids are ticked. Characters lacking every ticked raid stay unchanged, and Reset gold / Auto still restores automatic 3-raid selection.
+
+### Fixed
+- `/raid-status` Raid visibility now includes a Hide all button (`💤`) beside Show all and a Hide all option inside the raid dropdown, preventing 1-raid characters (1700 to 1709.99 with only Act 4 Solo) from collapsing into a pre-ticked single-select menu that could not be unticked.
+
 ## 2026-11-24
 
 ### Changed

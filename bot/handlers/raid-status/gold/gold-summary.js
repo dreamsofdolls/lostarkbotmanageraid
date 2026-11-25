@@ -4,14 +4,17 @@
 // which picks were skipped and why. Reads only the bulk writers' results.
 
 const { RAID_ORDER } = require("../../../domain/raid-catalog");
-const { GOLD_RAID_CAP_PER_CHARACTER } = require("../../../utils/raid/common/character");
 const {
   getRaidLabel,
   getRaidSpecificModeLabel,
 } = require("../../../utils/raid/common/labels");
 const { NoticeKind, formatCharacterLabel, truncateText } = require("../../../utils/raid/common/shared");
 const { t } = require("../../../services/i18n");
-const { GOLD_RECEIVE_AUTO, RAID_VISIBILITY_SHOW_ALL } = require("./gold-actions");
+const {
+  GOLD_RECEIVE_AUTO,
+  RAID_VISIBILITY_HIDE_ALL,
+  RAID_VISIBILITY_SHOW_ALL,
+} = require("./gold-actions");
 
 const DESCRIPTION_LIMIT = 4096;
 const RAID_RANK = new Map(RAID_ORDER.map((raidKey, index) => [raidKey, index]));
@@ -202,13 +205,11 @@ function buildGoldReceiveSummaryNotice({ result, receive, ignoredTicks = false, 
   }
 
   const ticked = [...(receive?.raidKeys || [])].sort(byRaidOrder);
-  // Fewer ticks than gold slots pin those raids and leave the rest to Artist.
-  const headlineKey = ticked.length >= GOLD_RAID_CAP_PER_CHARACTER ? "goldSetLine" : "goldPinnedLine";
   return {
     kind: NoticeKind.DONE,
     title: goldViewText("goldSummaryTitle", lang, { n: touched.length }),
     description: clampDescription([
-      goldViewText(headlineKey, lang, { raids: raidList(ticked, lang) }),
+      goldViewText("goldSetLine", lang, { raids: raidList(ticked, lang) }),
       ...touched.map((entry) => (
         `${characterPrefix(entry, getClassEmoji)}: ${goldChangeText(entry, lang)}${goldSkippedTail(entry, lang)}`
       )),
@@ -254,13 +255,16 @@ function buildVisibilitySummaryNotice({ result, visibility, lang, getClassEmoji 
     };
   }
 
-  if (visibility?.kind === RAID_VISIBILITY_SHOW_ALL) {
+  if (visibility?.kind === RAID_VISIBILITY_SHOW_ALL || visibility?.kind === RAID_VISIBILITY_HIDE_ALL) {
+    const isHideAll = visibility.kind === RAID_VISIBILITY_HIDE_ALL;
+    const titleKey = isHideAll ? "visibilityHideAllSummaryTitle" : "visibilityResetSummaryTitle";
+    const lineKey = isHideAll ? "visibilityHiddenAll" : "visibilityShownAll";
     return {
       kind: NoticeKind.DONE,
-      title: goldViewText("visibilityResetSummaryTitle", lang, { n: touched.length }),
+      title: goldViewText(titleKey, lang, { n: touched.length }),
       description: clampDescription([
         ...touched.map((entry) => (
-          `${characterPrefix(entry, getClassEmoji)}: ${goldViewText("visibilityShownAll", lang)}`
+          `${characterPrefix(entry, getClassEmoji)}: ${goldViewText(lineKey, lang)}`
         )),
         missing,
       ]),

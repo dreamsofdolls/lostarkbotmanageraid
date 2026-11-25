@@ -117,6 +117,15 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
       redraw: true,
     },
   );
+  assert.deepEqual(
+    getStatusComponentRoute("status-gold:visibility-hide-all"),
+    {
+      customId: "status-gold:visibility-hide-all",
+      action: STATUS_COMPONENT_ACTION.goldVisibilityHideAll,
+      editDriven: true,
+      redraw: true,
+    },
+  );
   assert.equal(
     getStatusComponentRoute("status-gold:visibility-reset").action,
     STATUS_COMPONENT_ACTION.goldVisibilityReset,

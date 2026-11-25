@@ -25,7 +25,7 @@ const {
   rawGoldTotal,
 } = require("../gold-formatting");
 const { sameCharacterName } = require("../../state/character-filter");
-const { GOLD_RECEIVE_AUTO, MODE_CANCEL } = require("../gold-actions");
+const { GOLD_RECEIVE_AUTO, MODE_CANCEL, RAID_VISIBILITY_HIDE_ALL } = require("../gold-actions");
 
 const DISCORD_SELECT_OPTION_CAP = 25;
 const GOLD_AUTO_EMOJI = "\u{1F504}";
@@ -650,6 +650,21 @@ function createGoldToggleRows({
     };
   }
 
+  function hideAllVisibilityOption(total) {
+    return {
+      emoji: { name: RAID_HIDDEN_ICON },
+      label: truncateText(t("raid-status.goldView.visibilityHideAllOptionLabel", lang), 100),
+      description: truncateText(
+        total === 1
+          ? t("raid-status.goldView.visibilityHideAllOptionDescOne", lang)
+          : t("raid-status.goldView.visibilityHideAllOptionDescMany", lang, { n: total }),
+        100
+      ),
+      value: RAID_VISIBILITY_HIDE_ALL,
+      default: false,
+    };
+  }
+
   function buildVisibilityRaidsRow(disabled) {
     const entries = selectedVisibilityEntries();
     if (entries.length === 0) {
@@ -660,13 +675,14 @@ function createGoldToggleRows({
     }
     const single = entries.length === 1;
     const formatOption = single ? singleVisibilityOption : bulkVisibilityOption;
-    const options = computeRaidVisibilityOptions(entries).map(formatOption);
-    if (options.length === 0) {
+    const raidOptions = computeRaidVisibilityOptions(entries).map(formatOption);
+    if (raidOptions.length === 0) {
       return buildEmptyGoldRow({
         customId: "status-gold:visibility",
         placeholder: t("raid-status.goldView.noEligibleCharsPlaceholder", lang),
       });
     }
+    const options = [...raidOptions, hideAllVisibilityOption(entries.length)];
     const placeholder = single
       ? t("raid-status.goldView.visibilityPlaceholderOne", lang, { name: entries[0].name })
       : t("raid-status.goldView.visibilityPlaceholderMany", lang, { n: entries.length });
@@ -678,6 +694,16 @@ function createGoldToggleRows({
       minValues: 0,
       maxValues: options.length,
     });
+  }
+
+  function buildVisibilityHideAllButton(disabled) {
+    if (selectedVisibilityEntries().length === 0) return null;
+    return new ButtonBuilder()
+      .setCustomId("status-gold:visibility-hide-all")
+      .setLabel(t("raid-status.goldView.visibilityHideAllButton", lang))
+      .setEmoji(RAID_HIDDEN_ICON)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
   }
 
   function buildVisibilityResetButton(disabled) {
@@ -697,6 +723,7 @@ function createGoldToggleRows({
     buildGoldResetButton,
     buildGoldSubViewButton,
     buildVisibilityCharsRow,
+    buildVisibilityHideAllButton,
     buildVisibilityRaidsRow,
     buildVisibilityResetButton,
     selectedEntries,

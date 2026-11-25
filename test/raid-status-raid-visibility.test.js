@@ -13,6 +13,7 @@ const {
 const User = require("../bot/models/user");
 const { getClassEmoji } = require("../bot/models/Class");
 const {
+  RAID_VISIBILITY_HIDE_ALL,
   RAID_VISIBILITY_SHOW_ALL,
   applyGoldReceive,
   applyModeDecision,
@@ -119,8 +120,14 @@ function makeRaidStatusView() {
 
 // ─── parser & persistence ──────────────────────────────────────────────────
 
-test("parseRaidVisibilityValues accepts empty arrays to hide all raids and rejects unknown keys", () => {
+test("parseRaidVisibilityValues accepts empty arrays and hide_all to hide all raids, and rejects unknown keys", () => {
   assert.deepEqual(parseRaidVisibilityValues([]), { kind: "set", raidKeys: [] });
+  assert.deepEqual(parseRaidVisibilityValues([RAID_VISIBILITY_HIDE_ALL]), {
+    kind: RAID_VISIBILITY_HIDE_ALL,
+  });
+  assert.deepEqual(parseRaidVisibilityValues(["armoche", RAID_VISIBILITY_HIDE_ALL]), {
+    kind: RAID_VISIBILITY_HIDE_ALL,
+  });
   assert.deepEqual(parseRaidVisibilityValues(["kazeros", "kazeros", "serca"]), {
     kind: "set",
     raidKeys: ["kazeros", "serca"],
@@ -548,9 +555,14 @@ test("multi-character visibility options pre-tick raids shown for every eligible
     return ui.buildVisibilityRaidsRow(false).toJSON().components[0].options;
   };
 
-  // Different item levels, nothing hidden: every raid stays ticked and marked 🔹.
+  // Different item levels, nothing hidden: every raid stays ticked and marked 🔹,
+  // while the trailing hide_all helper option stays unticked and marked 💤.
   const diffIlvlOptions = buildMenu([high, low], ["Main1755", "Alt1700"]);
-  for (const opt of diffIlvlOptions) {
+  const hideAllOpt = diffIlvlOptions[diffIlvlOptions.length - 1];
+  assert.equal(hideAllOpt.value, RAID_VISIBILITY_HIDE_ALL);
+  assert.equal(hideAllOpt.default, false);
+  assert.equal(hideAllOpt.emoji.name, "💤");
+  for (const opt of diffIlvlOptions.slice(0, -1)) {
     assert.equal(opt.default, true, `${opt.value} should stay pre-ticked when nothing is hidden`);
     assert.equal(opt.emoji.name, "🔹", `${opt.value} should keep 🔹 icon`);
   }
@@ -776,4 +788,142 @@ test("visibility save errors and share refusals report raid visibility instead o
   const failDesc = failFollowUps[0].embeds[0].toJSON().description;
   assert.match(failDesc, /hiển thị raid/);
   assert.doesNotMatch(failDesc, /cài đặt gold/);
+});
+
+test("single-raid 1700-1709 Solo characters keep max_values >= 2 via hide_all and hide clean via menu or Hide all button", async () => {
+  const soloOnly = makeCharacter("Nachtsieger", 1709, { armoche: { modeKey: "solo" } });
+  const ui = createRaidStatusGoldUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    formatGold,
+    getAccounts: () => [{ accountName: "Guavajuice", characters: [soloOnly] }],
+    getCurrentPage: () => 0,
+    getGoldCharSelection: () => ["Nachtsieger"],
+    getVisibilityCharSelection: () => ["Nachtsieger"],
+    getGoldSubView: () => "visibility",
+    getRaidsFor: getStatusRaidsForCharacter,
+    lang: "vi",
+  });
+
+  const raidsSelect = ui.buildVisibilityRaidsRow(false).toJSON().components[0];
+  assert.deepEqual(raidsSelect.options.map((opt) => opt.value), ["armoche", RAID_VISIBILITY_HIDE_ALL]);
+  assert.equal(raidsSelect.min_values, 0);
+  assert.equal(raidsSelect.max_values, 2, "single-raid char must not collapse to a pre-ticked max_values=1 select");
+  assert.equal(ui.buildVisibilityHideAllButton(false).toJSON().custom_id, "status-gold:visibility-hide-all");
+
+  // Both picking `hide_all` alongside the pre-ticked raid AND clicking the Hide all button hide armoche:solo.
+  for (const trigger of [
+    (handlers, followUps) => handlers[STATUS_COMPONENT_ACTION.goldVisibility]({
+      values: ["armoche", RAID_VISIBILITY_HIDE_ALL],
+      followUp: async (payload) => followUps.push(payload),
+    }),
+    (handlers, followUps) => handlers[STATUS_COMPONENT_ACTION.goldVisibilityHideAll]({
+      followUp: async (payload) => followUps.push(payload),
+    }),
+  ]) {
+    const { doc, model } = makeRosterModel([makeCharacter("Nachtsieger", 1709, { armoche: { modeKey: "solo" } })]);
+    const state = await createRaidStatusSessionState({
+      User: model,
+      discordId: "owner-1",
+      userDoc: doc.toObject(),
+      incomingSharedAccounts: [],
+      buildMergedAccounts: async (_, accounts) => accounts,
+      getStatusRaidsForCharacter,
+      buildRaidDropdownState,
+      buildStatusRosterFilterEntries,
+      initialView: "gold",
+    });
+    const session = createRaidStatusComponentSession({
+      state,
+      getStatusUserMeta: () => ({}),
+      setStatusUserMeta: () => {},
+      syncControls: { setCachedLocalSyncResumeUrl: () => {} },
+    });
+    session.goldSubView = "visibility";
+    const followUps = [];
+    const handlers = createStatusComponentRouteHandlers({
+      session,
+      EmbedBuilder,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      User: model,
+      saveWithRetry: directSave,
+      interaction: {},
+      discordId: "owner-1",
+      lang: "vi",
+      buildStatusUserMeta: () => ({}),
+      reloadViewerAccounts: (nextDoc) => state.reloadViewerAccounts(nextDoc),
+      buildEmbedAndCanvas: async () => ({ embeds: [], files: [], attachments: [] }),
+      buildComponents: () => [],
+      redrawMessage: async () => {},
+      runManualStatusSync: async () => {},
+      runManualRosterRefresh: async () => {},
+      formatNextCooldownRemaining,
+      getAutoManageCooldownMs: () => 60_000,
+      isReplyPrivate: () => true,
+      getGoldSelection: () => [],
+      getVisibilitySelection: () => [{ name: "Nachtsieger", itemLevel: 1709, raids: [] }],
+    });
+
+    const res = await trigger(handlers, followUps);
+    assert.deepEqual(res, { redraw: true });
+    assert.equal(doc.toObject().accounts[0].characters[0].assignedRaids.armoche.hidden, true);
+    assert.equal(state.raidDropdownEntries.some((entry) => entry.key === "armoche:solo"), false);
+    assert.equal(state.totalSoloPending, 0);
+    assert.equal(followUps.length, 1);
+    assert.match(followUps[0].embeds[0].toJSON().title, /ẩn hết raid/);
+  }
+});
+
+test("view-only share refuses Hide all visibility button without saving", async () => {
+  const { stats, model } = makeRosterModel([makeCharacter("SharedChar", 1709, { armoche: { modeKey: "solo" } })]);
+  const followUps = [];
+  const handlers = createStatusComponentRouteHandlers({
+    session: {
+      accounts: [{
+        accountName: "SharedRoster",
+        characters: [makeCharacter("SharedChar", 1709, { armoche: { modeKey: "solo" } })],
+        _sharedFrom: { ownerDiscordId: "owner-1", ownerLabel: "Owner", accessLevel: "view" },
+      }],
+      currentPage: 0,
+      goldSubView: "visibility",
+    },
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    User: model,
+    saveWithRetry: directSave,
+    interaction: {},
+    discordId: "viewer-2",
+    lang: "vi",
+    buildStatusUserMeta: () => ({}),
+    reloadViewerAccounts: async () => {},
+    buildEmbedAndCanvas: async () => ({ embeds: [], files: [], attachments: [] }),
+    buildComponents: () => [],
+    redrawMessage: async () => {},
+    runManualStatusSync: async () => {},
+    runManualRosterRefresh: async () => {},
+    formatNextCooldownRemaining,
+    getAutoManageCooldownMs: () => 60_000,
+    isReplyPrivate: () => true,
+    canEditAccountFn: async () => false,
+    getAccessibleAccountsFn: async () => [{ ownerDiscordId: "owner-1", accessLevel: "view", isOwn: false }],
+    getVisibilitySelection: () => [{ name: "SharedChar", itemLevel: 1709, raids: [] }],
+  });
+
+  const res = await handlers[STATUS_COMPONENT_ACTION.goldVisibilityHideAll]({
+    followUp: async (payload) => followUps.push(payload),
+  });
+  assert.deepEqual(res, { redraw: false });
+  assert.equal(stats.saves, 0);
+  assert.equal(followUps.length, 1);
+  assert.match(followUps[0].embeds[0].toJSON().description, /quyền xem/);
 });

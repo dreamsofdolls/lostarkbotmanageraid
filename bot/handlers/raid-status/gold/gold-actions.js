@@ -20,6 +20,7 @@ const {
 
 const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
 const GOLD_RECEIVE_AUTO = "auto";
+const RAID_VISIBILITY_HIDE_ALL = "hide_all";
 const RAID_VISIBILITY_SHOW_ALL = "show_all";
 const MODE_CANCEL = "cancel";
 
@@ -161,12 +162,10 @@ function receivingRaidKeys(character) {
 
 /**
  * Apply a gold set to a character. A set includes the ticked raids the
- * character has. When they fill every gold slot, every other raid its card
- * shows is excluded; when slots are left, the other raids return to
- * automatic so Artist fills them, instead of the character losing that gold.
- * A set that names none of its raids leaves the character as it is. Auto
- * removes every override. Raids are written only when their override
- * actually changes.
+ * character has and excludes every other raid its card shows, so users can
+ * choose 1, 2, or 3 gold-receiving raids explicitly. A set that names none
+ * of its raids leaves the character as it is. Auto removes every override.
+ * Raids are written only when their override actually changes.
  * @param {object} character - character document or plain object
  * @param {{kind: "auto"}|{kind: "set", raidKeys: string[]}} receive - from parseGoldReceiveValues
  * @returns {{changed: boolean, before: string[], after: string[], skipped: string[]}}
@@ -187,8 +186,10 @@ function applyGoldReceive(character, receive) {
   const setTargets = () => {
     const pinned = statusRaids.filter((raid) => ticked.has(raid.raidKey)).length;
     if (pinned === 0) return [];
-    const unticked = pinned >= GOLD_RAID_CAP_PER_CHARACTER ? "exclude" : null;
-    return statusRaids.map((raid) => [raid.raidKey, ticked.has(raid.raidKey) ? "include" : unticked]);
+    return statusRaids.map((raid) => [
+      raid.raidKey,
+      ticked.has(raid.raidKey) ? "include" : "exclude",
+    ]);
   };
   const targets = isAuto ? autoTargets() : setTargets();
 
@@ -359,14 +360,20 @@ async function saveBulkGoldReceive(options) {
 
 /**
  * Parse the multi-select raid visibility values. Each submitted value is a
- * catalog raid key whose raid stays visible; omitting a raid hides it, and an
- * empty array hides every eligible raid.
+ * catalog raid key whose raid stays visible; omitting a raid hides it, an
+ * empty array hides every eligible raid, and picking `hide_all` wins over any
+ * raid ticked alongside it so 1-raid characters can hide without being trapped
+ * in a single-select menu.
  * @param {string[]} values - submitted select values
- * @returns {{kind: "set", raidKeys: string[]}|{kind: "invalid"}}
+ * @returns {{kind: "hide_all"}|{kind: "set", raidKeys: string[]}|{kind: "invalid"}}
  */
 function parseRaidVisibilityValues(values) {
   if (!Array.isArray(values)) return { kind: "invalid" };
-  const raidKeys = [...new Set(values.map(String))];
+  const list = values.map(String);
+  if (list.includes(RAID_VISIBILITY_HIDE_ALL)) {
+    return { kind: RAID_VISIBILITY_HIDE_ALL };
+  }
+  const raidKeys = [...new Set(list)];
   if (raidKeys.some((raidKey) => !VALID_RAID_KEYS.has(raidKey))) {
     return { kind: "invalid" };
   }
@@ -377,7 +384,7 @@ function parseRaidVisibilityValues(values) {
  * Apply raid-visibility toggles to one character without altering gold overrides
  * or difficulty settings.
  * @param {object} character - character document or plain object
- * @param {{kind: "show_all"}|{kind: "set", raidKeys: string[]}} visibility
+ * @param {{kind: "show_all"}|{kind: "hide_all"}|{kind: "set", raidKeys: string[]}} visibility
  * @returns {{changed: boolean, beforeHidden: string[], afterHidden: string[], skipped: string[]}}
  */
 function applyRaidVisibility(character, visibility) {
@@ -398,7 +405,9 @@ function applyRaidVisibility(character, visibility) {
     return { changed, beforeHidden, afterHidden: [], skipped: [] };
   }
 
-  const visibleSet = new Set(visibility?.raidKeys || []);
+  const visibleSet = new Set(
+    visibility?.kind === RAID_VISIBILITY_HIDE_ALL ? [] : visibility?.raidKeys || []
+  );
   for (const raidKey of statusKeys) {
     const nextHidden = !visibleSet.has(raidKey);
     const prevHidden = character.assignedRaids[raidKey]?.hidden === true;
@@ -417,8 +426,8 @@ function applyRaidVisibility(character, visibility) {
 }
 
 /**
- * Apply raid visibility (or show-all reset) to every named character of one
- * account in a single save.
+ * Apply raid visibility (or show-all / hide-all) to every named character of
+ * one account in a single save.
  * @param {object} options - User, saveWithRetry, discordId (roster owner),
  *   targetAccountName, targetCharNames, visibility (from parseRaidVisibilityValues
  *   or { kind: RAID_VISIBILITY_SHOW_ALL }), and optionally canWrite
@@ -468,6 +477,7 @@ async function saveBulkRaidVisibility(options) {
 module.exports = {
   GOLD_RECEIVE_AUTO,
   MODE_CANCEL,
+  RAID_VISIBILITY_HIDE_ALL,
   RAID_VISIBILITY_SHOW_ALL,
   applyGoldReceive,
   applyModeDecision,

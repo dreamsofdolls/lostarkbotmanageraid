@@ -20,6 +20,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   goldSubView: "goldSubView",
   goldVisibilityChars: "goldVisibilityChars",
   goldVisibility: "goldVisibility",
+  goldVisibilityHideAll: "goldVisibilityHideAll",
   goldVisibilityReset: "goldVisibilityReset",
   localSyncAction: "localSyncAction",
 });
@@ -149,6 +150,12 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status-gold:visibility",
     action: STATUS_COMPONENT_ACTION.goldVisibility,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-gold:visibility-hide-all",
+    action: STATUS_COMPONENT_ACTION.goldVisibilityHideAll,
     editDriven: true,
     redraw: true,
   },

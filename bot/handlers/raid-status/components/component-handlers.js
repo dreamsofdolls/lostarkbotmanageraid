@@ -14,6 +14,7 @@ const {
 } = require("../task/task-actions");
 const {
   GOLD_RECEIVE_AUTO,
+  RAID_VISIBILITY_HIDE_ALL,
   RAID_VISIBILITY_SHOW_ALL,
   parseGoldModeValues,
   parseGoldReceiveValues,
@@ -850,6 +851,16 @@ function createStatusComponentRouteHandlers(ctx) {
         logLabel: "raid-status raid visibility reset",
         selection,
         visibility: { kind: RAID_VISIBILITY_SHOW_ALL },
+      });
+    },
+
+    [STATUS_COMPONENT_ACTION.goldVisibilityHideAll]: async (component) => {
+      const selection = getVisibilitySelection();
+      if (selection.length === 0) return noRedraw();
+      return writeRaidVisibility(component, {
+        logLabel: "raid-status raid visibility hide-all",
+        selection,
+        visibility: { kind: RAID_VISIBILITY_HIDE_ALL },
       });
     },
 
