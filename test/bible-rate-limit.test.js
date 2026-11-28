@@ -11,16 +11,7 @@ const {
 const {
   createBibleCharacterNotFoundError,
 } = require("../bot/services/auto-manage/bible/error-kinds");
-
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-}
+const { deferred } = require("./helpers/deferred");
 
 test("Bible limiter preserves its concurrency cap", async () => {
   const gates = [deferred(), deferred(), deferred()];

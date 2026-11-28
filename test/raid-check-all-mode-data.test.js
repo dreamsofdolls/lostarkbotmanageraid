@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { deferred } = require("./helpers/deferred");
 
 const {
   buildAllModePagesData,
@@ -30,14 +31,6 @@ function createQuery({ leanRows, awaitedRows, onSelect }) {
       return Promise.resolve(awaitedRows).then(resolve, reject);
     },
   };
-}
-
-function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }
 
 test("all-mode data helper converts mongoose-like docs to plain objects", () => {

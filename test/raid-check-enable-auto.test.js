@@ -26,33 +26,7 @@ const { EmbedBuilder } = require("discord.js");
 // findOneAndUpdate + lets each test plant its own findOneAndUpdate /
 // findOne result. The real Mongoose model has a chainable .select().lean()
 // API for findOne so the stub mirrors that shape.
-function makeUserStub({ findOneAndUpdateImpl, findOneImpl } = {}) {
-  const calls = { findOneAndUpdate: [], findOne: [] };
-  return {
-    calls,
-    findOneAndUpdate: (filter, update, options) => {
-      calls.findOneAndUpdate.push({ filter, update, options });
-      if (typeof findOneAndUpdateImpl === "function") {
-        return findOneAndUpdateImpl(filter, update, options);
-      }
-      return Promise.resolve(null);
-    },
-    findOne: (filter) => {
-      calls.findOne.push({ filter });
-      // Mongoose-style chain so the helper's `.select(...).lean()` works.
-      return {
-        select: () => ({
-          lean: () => {
-            if (typeof findOneImpl === "function") {
-              return findOneImpl(filter);
-            }
-            return Promise.resolve(null);
-          },
-        }),
-      };
-    },
-  };
-}
+const { makeUserStub } = require("./helpers/user-stub");
 
 test("tryEnableAutoManage returns 'missing' when discordId is empty (defensive guard)", async () => {
   const UserStub = makeUserStub();

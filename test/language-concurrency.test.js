@@ -4,12 +4,8 @@ const {
   getUserLanguage, setUserLanguage, clearUserLanguageCache,
   getGuildLanguage, setGuildLanguage,
 } = require('../bot/services/i18n');
+const { deferred } = require('./helpers/deferred');
 
-function deferred() {
-  let resolve, reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const scopes = [
   { name: 'user', get: (id, Model) => getUserLanguage(id, { UserModel: Model }), set: (id, lang, Model) => setUserLanguage(id, lang, { UserModel: Model }), clear: clearUserLanguageCache },

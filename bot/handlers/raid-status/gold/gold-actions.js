@@ -481,7 +481,6 @@ module.exports = {
   RAID_VISIBILITY_SHOW_ALL,
   applyGoldReceive,
   applyModeDecision,
-  applyRaidVisibility,
   parseGoldModeValues,
   parseGoldReceiveValues,
   parseRaidVisibilityValues,

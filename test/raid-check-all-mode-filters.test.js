@@ -20,42 +20,10 @@ const {
   resolveAllModeLocalPage,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
 
-class FakeSelectMenuBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setCustomId(customId) {
-    this.data.customId = customId;
-    return this;
-  }
-
-  setPlaceholder(placeholder) {
-    this.data.placeholder = placeholder;
-    return this;
-  }
-
-  setDisabled(disabled) {
-    this.data.disabled = disabled;
-    return this;
-  }
-
-  addOptions(options) {
-    this.data.options = options;
-    return this;
-  }
-}
-
-class FakeActionRowBuilder {
-  constructor() {
-    this.components = [];
-  }
-
-  addComponents(...components) {
-    this.components.push(...components);
-    return this;
-  }
-}
+const {
+  FakeActionRowBuilder,
+  FakeSelectMenuBuilder,
+} = require("./helpers/discord-fakes");
 
 function t(key, lang, vars = {}) {
   return [

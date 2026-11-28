@@ -8,37 +8,7 @@ const {
   buildRosterRefreshButton,
   buildSyncAllButton,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-buttons");
-
-class FakeButtonBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setCustomId(customId) {
-    this.data.customId = customId;
-    return this;
-  }
-
-  setLabel(label) {
-    this.data.label = label;
-    return this;
-  }
-
-  setEmoji(emoji) {
-    this.data.emoji = emoji;
-    return this;
-  }
-
-  setStyle(style) {
-    this.data.style = style;
-    return this;
-  }
-
-  setDisabled(disabled) {
-    this.data.disabled = disabled;
-    return this;
-  }
-}
+const { FakeButtonBuilder } = require("./helpers/discord-fakes");
 
 function createRow() {
   return {

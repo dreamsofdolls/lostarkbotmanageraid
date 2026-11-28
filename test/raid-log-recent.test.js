@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createRecentRaidLogs, MAX_RECENT_CHARACTERS } = require("../bot/services/raid-log/recent");
+const { deferred } = require("./helpers/deferred");
 const { silentLog } = require("./helpers/silent-log");
 
 const HOUR = 3_600_000;
@@ -225,12 +226,6 @@ test("a private flag aging past the daily skip invalidates an otherwise fresh ca
   assert.equal((await f.recent.load("owner", accounts)).entries[0].id, "q1");
   assert.equal(f.calls.length, 1);
 });
-
-function deferred() {
-  let resolve;
-  const promise = new Promise(done => { resolve = done; });
-  return { promise, resolve };
-}
 
 test("parallel panels share normal loads; a refresh supersedes an older load without being overwritten", async () => {
   const reads = [deferred(), deferred()];

@@ -18,42 +18,10 @@ const {
 } = require("../bot/handlers/raid-status/view/render-payload");
 const { t } = require("../bot/services/i18n");
 
-class FakeSelectMenuBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setCustomId(customId) {
-    this.data.customId = customId;
-    return this;
-  }
-
-  setPlaceholder(placeholder) {
-    this.data.placeholder = placeholder;
-    return this;
-  }
-
-  setDisabled(disabled) {
-    this.data.disabled = disabled;
-    return this;
-  }
-
-  addOptions(options) {
-    this.data.options = options;
-    return this;
-  }
-}
-
-class FakeActionRowBuilder {
-  constructor() {
-    this.components = [];
-  }
-
-  addComponents(...components) {
-    this.components.push(...components);
-    return this;
-  }
-}
+const {
+  FakeActionRowBuilder,
+  FakeSelectMenuBuilder,
+} = require("./helpers/discord-fakes");
 
 function account(accountName, raids) {
   return {

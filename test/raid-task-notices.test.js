@@ -7,42 +7,7 @@ const {
   buildShareRefusalNotice,
   createRaidTaskNoticeHelpers,
 } = require("../bot/handlers/raid/task/notices");
-
-class FakeEmbedBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setColor(value) {
-    this.data.color = value;
-    return this;
-  }
-
-  setTitle(value) {
-    this.data.title = value;
-    return this;
-  }
-
-  setDescription(value) {
-    this.data.description = value;
-    return this;
-  }
-
-  setTimestamp(value) {
-    this.data.timestamp = value;
-    return this;
-  }
-
-  setFooter(value) {
-    this.data.footer = value;
-    return this;
-  }
-
-  addFields(...fields) {
-    this.data.fields = [...(this.data.fields || []), ...fields];
-    return this;
-  }
-}
+const { FakeEmbedBuilder } = require("./helpers/discord-fakes");
 
 // Embed titles start with the notice icon and its spacing.
 const withoutIcon = (title) => title.replace(/^\S+\s+/, "");

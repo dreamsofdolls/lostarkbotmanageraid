@@ -11,79 +11,11 @@ const {
   t,
 } = require("../bot/services/i18n");
 const { UI } = require("../bot/utils/raid/common/shared");
-
-class FakeEmbedBuilder {
-  constructor() {
-    this.data = { fields: [] };
-  }
-
-  setColor(color) {
-    this.data.color = color;
-    return this;
-  }
-
-  setTitle(title) {
-    this.data.title = title;
-    return this;
-  }
-
-  setDescription(description) {
-    this.data.description = description;
-    return this;
-  }
-
-  setFooter(footer) {
-    this.data.footer = footer;
-    return this;
-  }
-
-  setTimestamp(timestamp) {
-    this.data.timestamp = timestamp;
-    return this;
-  }
-
-  addFields(...fields) {
-    this.data.fields.push(...fields);
-    return this;
-  }
-}
-
-class FakeActionRowBuilder {
-  constructor() {
-    this.components = [];
-  }
-
-  addComponents(...components) {
-    this.components.push(...components);
-    return this;
-  }
-}
-
-class FakeButtonBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setCustomId(customId) {
-    this.data.customId = customId;
-    return this;
-  }
-
-  setLabel(label) {
-    this.data.label = label;
-    return this;
-  }
-
-  setEmoji(emoji) {
-    this.data.emoji = emoji;
-    return this;
-  }
-
-  setStyle(style) {
-    this.data.style = style;
-    return this;
-  }
-}
+const {
+  FakeActionRowBuilder,
+  FakeButtonBuilder,
+  FakeEmbedBuilder,
+} = require("./helpers/discord-fakes");
 
 function makeUserModel({ findOneAndUpdateImpl, findOneSelectLeanImpl } = {}) {
   const calls = { findOne: [], findOneAndUpdate: [] };

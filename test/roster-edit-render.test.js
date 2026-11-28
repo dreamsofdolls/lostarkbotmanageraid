@@ -7,79 +7,11 @@ const { StringSelectMenuBuilder } = require("discord.js");
 
 const { createEditRosterRenderers } = require("../bot/handlers/roster/edit/edit-render");
 const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
-
-class FakeEmbedBuilder {
-  constructor() {
-    this.data = { fields: [] };
-  }
-
-  setTitle(title) {
-    this.data.title = title;
-    return this;
-  }
-
-  setDescription(description) {
-    this.data.description = description;
-    return this;
-  }
-
-  setColor(color) {
-    this.data.color = color;
-    return this;
-  }
-
-  setFooter(footer) {
-    this.data.footer = footer;
-    return this;
-  }
-
-  addFields(...fields) {
-    this.data.fields.push(...fields);
-    return this;
-  }
-
-  setTimestamp() {
-    this.data.timestamp = true;
-    return this;
-  }
-}
-
-class FakeActionRowBuilder {
-  constructor() {
-    this.components = [];
-  }
-
-  addComponents(...components) {
-    this.components.push(...components);
-    return this;
-  }
-}
-
-class FakeButtonBuilder {
-  constructor() {
-    this.data = {};
-  }
-
-  setCustomId(customId) {
-    this.data.customId = customId;
-    return this;
-  }
-
-  setLabel(label) {
-    this.data.label = label;
-    return this;
-  }
-
-  setStyle(style) {
-    this.data.style = style;
-    return this;
-  }
-
-  setDisabled(disabled) {
-    this.data.disabled = disabled;
-    return this;
-  }
-}
+const {
+  FakeActionRowBuilder,
+  FakeButtonBuilder,
+  FakeEmbedBuilder,
+} = require("./helpers/discord-fakes");
 
 function createRenderers() {
   return createEditRosterRenderers({

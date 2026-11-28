@@ -6,14 +6,7 @@ const assert = require("node:assert/strict");
 const {
   createLatestOnlyQueue,
 } = require("../bot/utils/async/latest-only-queue");
-
-function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
+const { deferred } = require("./helpers/deferred");
 
 test("latest-only queue coalesces requests made before rendering starts", async () => {
   const calls = [];

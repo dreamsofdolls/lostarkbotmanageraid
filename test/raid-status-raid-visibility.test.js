@@ -17,7 +17,6 @@ const {
   RAID_VISIBILITY_SHOW_ALL,
   applyGoldReceive,
   applyModeDecision,
-  applyRaidVisibility,
   parseRaidVisibilityValues,
   saveBulkRaidVisibility,
 } = require("../bot/handlers/raid-status/gold/gold-actions");

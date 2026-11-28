@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { deferred } = require("./helpers/deferred");
 
 const {
   createRaidChannelWelcomeService,
@@ -68,14 +69,6 @@ function createSentMessage(id, title = "en welcome title") {
       this.deleted = true;
     },
   };
-}
-
-function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }
 
 function makeBatch(messages) {

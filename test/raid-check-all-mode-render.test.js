@@ -6,42 +6,7 @@ const assert = require("node:assert/strict");
 const {
   createAllModePageRenderers,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-render");
-
-class FakeEmbedBuilder {
-  constructor() {
-    this.data = { fields: [] };
-  }
-
-  setColor(color) {
-    this.data.color = color;
-    return this;
-  }
-
-  setTitle(title) {
-    this.data.title = title;
-    return this;
-  }
-
-  setDescription(description) {
-    this.data.description = description;
-    return this;
-  }
-
-  setFooter(footer) {
-    this.data.footer = footer;
-    return this;
-  }
-
-  setAuthor(author) {
-    this.data.author = author;
-    return this;
-  }
-
-  addFields(...fields) {
-    this.data.fields.push(...fields);
-    return this;
-  }
-}
+const { FakeEmbedBuilder } = require("./helpers/discord-fakes");
 
 test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characters", () => {
   const character = {

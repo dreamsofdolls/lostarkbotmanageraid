@@ -24,40 +24,7 @@ const {
   recordLocalSyncSuccess,
 } = require("../bot/services/local-sync");
 
-function makeUserStub({ findOneAndUpdateImpl, findOneImpl } = {}) {
-  const calls = { findOneAndUpdate: [], findOne: [] };
-  return {
-    calls,
-    findOneAndUpdate: (filter, update, options) => {
-      calls.findOneAndUpdate.push({ filter, update, options });
-      if (typeof findOneAndUpdateImpl === "function") {
-        return findOneAndUpdateImpl(filter, update, options);
-      }
-      return Promise.resolve(null);
-    },
-    findOne: (filter) => {
-      calls.findOne.push({ filter });
-      return {
-        select: () => ({
-          lean: () => {
-            if (typeof findOneImpl === "function") {
-              return findOneImpl(filter);
-            }
-            return Promise.resolve(null);
-          },
-        }),
-        // Plain .lean() (no .select) for the conflict-probe path in
-        // setLocalSyncEnabled / setBibleAutoSyncEnabled.
-        lean: () => {
-          if (typeof findOneImpl === "function") {
-            return findOneImpl(filter);
-          }
-          return Promise.resolve(null);
-        },
-      };
-    },
-  };
-}
+const { makeUserStub } = require("./helpers/user-stub");
 
 // ---------- setLocalSyncEnabled ----------
 

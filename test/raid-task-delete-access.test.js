@@ -54,7 +54,14 @@ for (const kind of ["single", "shared"]) {
         options: { getString: key => ({ roster: "Main", character: "Alpha", task: "target" })[key] },
       });
       const removed = scenario === "success" || scenario === "save retry";
-      assert.equal(saves, scenario === "save retry" ? 2 : removed || scenario === "removed during retry" ? 1 : 0);
+      const expectedSaves = {
+        success: 1,
+        "save retry": 2,
+        "missing target": 0,
+        "missing task": 0,
+        "removed during retry": 1,
+      }[scenario];
+      assert.equal(saves, expectedSaves);
       assert.equal(notices.length, 1);
       const expectedKind = {
         success: "done",
@@ -229,15 +236,13 @@ for (const kind of ["single", "shared", "clear", "clear preview"]) {
       editReply: async payload => { sent.push(payload.embeds[0]); },
       options: { getString: key => ({ roster: "Main", character: "Alpha", task: "task" })[key] },
     };
-    if (kind === "clear") {
-      await createClearConfirmHandler(deps)(interaction, { hasRoster: true, rosterName: "Main", characterName: "Alpha" });
-    } else if (kind === "clear preview") {
-      await createClearPreviewHandler(deps)(interaction);
-    } else if (kind === "shared") {
-      await createRaidTaskSharedActionHandlers(deps).handleSharedRemove(interaction);
-    } else {
-      await createRaidTaskRemoveActionHandlers(deps).handleRemove(interaction);
-    }
+    const dispatchByKind = {
+      clear: () => createClearConfirmHandler(deps)(interaction, { hasRoster: true, rosterName: "Main", characterName: "Alpha" }),
+      "clear preview": () => createClearPreviewHandler(deps)(interaction),
+      shared: () => createRaidTaskSharedActionHandlers(deps).handleSharedRemove(interaction),
+      single: () => createRaidTaskRemoveActionHandlers(deps).handleRemove(interaction),
+    };
+    await dispatchByKind[kind]();
 
     assert.equal(lookups, 0);
     assert.equal(sent.length, 1);
