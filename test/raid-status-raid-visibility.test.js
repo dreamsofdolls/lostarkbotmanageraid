@@ -26,7 +26,6 @@ const {
 } = require("../bot/handlers/raid-status/gold/gold-summary");
 const {
   computeRaidVisibilityOptions,
-  raidVisibilityDefaults,
 } = require("../bot/handlers/raid-status/gold/gold-ui/toggle-rows");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
 const { createRaidStatusRenderPayload } = require("../bot/handlers/raid-status/view/render-payload");
@@ -387,11 +386,12 @@ test("visibility sub-view includes non-gold-earners and marks hidden raids clear
   currentSubView = "gold";
   assert.equal(ui.buildGoldSubViewButton(false).toJSON().emoji.name, "⚙️");
   currentSubView = "visibility";
+  const nonEarnerOptions = computeRaidVisibilityOptions([{ raids: getStatusRaidsForCharacter(nonEarner) }]);
   assert.deepEqual(
-    raidVisibilityDefaults([{ raids: getStatusRaidsForCharacter(nonEarner) }]),
+    nonEarnerOptions.filter((o) => o.default).map((o) => o.value),
     ["kazeros", "serca"],
   );
-  assert.equal(computeRaidVisibilityOptions([{ raids: getStatusRaidsForCharacter(nonEarner) }]).length, 3);
+  assert.equal(nonEarnerOptions.length, 3);
 
   const embedJson = ui.buildGoldViewEmbed({ accountName: "Main", characters: [nonEarner] }).toJSON();
   assert.match(embedJson.title, /^⚙️ Hiển thị raid/);

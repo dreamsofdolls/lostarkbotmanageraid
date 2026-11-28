@@ -8,7 +8,12 @@
 
 "use strict";
 
-const { getCharacterName, pack2Columns, truncateText: defaultTruncateText } = require("../common/shared");
+const {
+  getCharacterClassOrEmpty,
+  getCharacterName,
+  pack2Columns,
+  truncateText: defaultTruncateText,
+} = require("../common/shared");
 const { t } = require("../../../services/i18n");
 const { isTaskDone } = require("./task-cycle");
 const { escapeEmbedText } = require("../../discord/embed-text");
@@ -42,10 +47,6 @@ const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 const PAGE_CHAR_CAP = 11;
 const SHARED_TASK_DISPLAY_LIMIT = 12;
 const DISCORD_EMBED_FIELD_LIMIT = 25;
-
-function getCharacterClass(character) {
-  return String(character?.class || character?.className || "").trim();
-}
 
 function formatItemLevel(character) {
   const raw = character?.itemLevel;
@@ -99,7 +100,7 @@ function buildAccountTaskFields(account, helpers) {
 
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
-    const classIcon = getClassEmoji(getCharacterClass(character));
+    const classIcon = getClassEmoji(getCharacterClassOrEmpty(character));
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const fieldName = truncateText(
       `${namePrefix}${charName}${HEADER_SEPARATOR}${formatItemLevel(character)}`,

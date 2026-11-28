@@ -84,8 +84,7 @@ function createGoldViewEmbedBuilder({
     return `${GOLD_RECEIVE_ICON} ${slot}${label} - ${amount}${pendingTail}`;
   }
 
-  function buildGoldCharacterField(character, selectedNames) {
-    const raids = getRaidsFor(character);
+  function buildCharacterField(character, selectedNames, { countLabel, lines }) {
     const name = getCharacterName(character);
     const classIcon = getClassEmoji(character.class || character.className);
     // The pencil marks the characters the dropdowns below will edit.
@@ -94,16 +93,24 @@ function createGoldViewEmbedBuilder({
       : "";
     const namePrefix = `${editMark}${classIcon ? `${classIcon} ` : ""}`;
     const itemLevel = Number(character.itemLevel) || 0;
-    const counted = raids.filter((raid) => raid.goldReceives).length;
-    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${counted}/${GOLD_RAID_CAP_PER_CHARACTER}`;
-    const lines = raids.length === 0
-      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
-      : raids.map(formatGoldRaidLine);
+    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${countLabel}`;
     return {
       name: truncateText(header, 256),
       value: truncateText(lines.join("\n"), 1024),
       inline: true,
     };
+  }
+
+  function buildGoldCharacterField(character, selectedNames) {
+    const raids = getRaidsFor(character);
+    const counted = raids.filter((raid) => raid.goldReceives).length;
+    const lines = raids.length === 0
+      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      : raids.map(formatGoldRaidLine);
+    return buildCharacterField(character, selectedNames, {
+      countLabel: `${counted}/${GOLD_RAID_CAP_PER_CHARACTER}`,
+      lines,
+    });
   }
 
   function formatVisibilityRaidLine(raid) {
@@ -114,21 +121,14 @@ function createGoldViewEmbedBuilder({
 
   function buildVisibilityCharacterField(character, selectedNames) {
     const raids = getRaidsFor(character);
-    const name = getCharacterName(character);
-    const classIcon = getClassEmoji(character.class || character.className);
-    const editMark = selectedNames.some((selected) => sameCharacterName(selected, name))
-      ? `${GOLD_EDIT_MARK} `
-      : "";
-    const namePrefix = `${editMark}${classIcon ? `${classIcon} ` : ""}`;
-    const itemLevel = Number(character.itemLevel) || 0;
     const visibleCount = raids.filter((raid) => !raid.hidden).length;
-    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${visibleCount}/${raids.length}`;
-    const lines = raids.map(formatVisibilityRaidLine);
-    return {
-      name: truncateText(header, 256),
-      value: truncateText(lines.join("\n"), 1024),
-      inline: true,
-    };
+    const lines = raids.length === 0
+      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      : raids.map(formatVisibilityRaidLine);
+    return buildCharacterField(character, selectedNames, {
+      countLabel: `${visibleCount}/${raids.length}`,
+      lines,
+    });
   }
 
   function appendCharacterFields(embed, fields) {

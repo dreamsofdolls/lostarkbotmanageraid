@@ -17,11 +17,7 @@
  * map - this module is pure.
  */
 
-const { cutText, getCharacterName, normalizeName } = require("./shared");
-
-function getCharClass(character) {
-  return String(character?.class || character?.className || "").trim();
-}
+const { cutText, getCharacterClassOrEmpty, getCharacterName, normalizeName } = require("./shared");
 
 function getAccountCharacters(account) {
   return Array.isArray(account?.characters) ? account.characters : [];
@@ -99,7 +95,7 @@ function getCharacterMatches(userDoc, options = {}) {
         character,
         account,
         name,
-        className: getCharClass(character),
+        className: getCharacterClassOrEmpty(character),
         itemLevel: Number(character.itemLevel) || 0,
         sideTaskCount: sideTasks.length,
       });

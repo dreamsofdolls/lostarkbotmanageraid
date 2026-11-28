@@ -98,6 +98,16 @@ function getCharacterClass(character) {
   return character?.class || character?.className || "Unknown";
 }
 
+/**
+ * Read a character's class name across current (`class`) and legacy
+ * (`className`) schemas, trimmed, returning an empty string when absent.
+ * @param {object|null|undefined} character
+ * @returns {string}
+ */
+function getCharacterClassOrEmpty(character) {
+  return String(character?.class || character?.className || "").trim();
+}
+
 const TRAILING_HIGH_SURROGATE = /[\uD800-\uDBFF]$/;
 
 /**
@@ -250,6 +260,7 @@ module.exports = {
   toModeKey,
   getCharacterName,
   getCharacterClass,
+  getCharacterClassOrEmpty,
   cutText,
   truncateText,
   formatNextCooldownRemaining,

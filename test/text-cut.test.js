@@ -4,7 +4,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
 
-const { cutText, getCharacterName, truncateText } = require("../bot/utils/raid/common/shared");
+const {
+  cutText,
+  getCharacterClassOrEmpty,
+  getCharacterName,
+  truncateText,
+} = require("../bot/utils/raid/common/shared");
 const { truncateChoice } = require("../bot/utils/raid/common/autocomplete");
 const { buildFlipPickerComponents, buildTogglePickerComponents } = require("../bot/utils/raid/roster-picker");
 
@@ -67,4 +72,13 @@ test("getCharacterName reads current and legacy name fields and trims whitespace
   assert.equal(getCharacterName({}), "");
   assert.equal(getCharacterName(null), "");
   assert.equal(getCharacterName(undefined), "");
+});
+
+test("getCharacterClassOrEmpty reads current and legacy class fields and trims whitespace", () => {
+  assert.equal(getCharacterClassOrEmpty({ class: "  Bard  " }), "Bard");
+  assert.equal(getCharacterClassOrEmpty({ className: " Artist " }), "Artist");
+  assert.equal(getCharacterClassOrEmpty({ class: "", className: "Paladin" }), "Paladin");
+  assert.equal(getCharacterClassOrEmpty({}), "");
+  assert.equal(getCharacterClassOrEmpty(null), "");
+  assert.equal(getCharacterClassOrEmpty(undefined), "");
 });

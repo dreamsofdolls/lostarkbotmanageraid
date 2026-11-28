@@ -278,17 +278,6 @@ function computeRaidVisibilityOptions(entries) {
   return out;
 }
 
-/**
- * Raid keys pre-ticked in the visibility dropdown for these characters.
- * @param {Array<{raids: object[]}>} entries - selected characters
- * @returns {string[]}
- */
-function raidVisibilityDefaults(entries) {
-  return computeRaidVisibilityOptions(entries)
-    .filter((option) => option.default)
-    .map((option) => option.value);
-}
-
 function toOptionEmoji(icon) {
   return parseCustomEmoji(icon) || { name: icon };
 }
@@ -370,22 +359,24 @@ function createGoldToggleRows({
     );
   }
 
-  function buildGoldCharsRow(disabled) {
-    const candidates = goldCharactersOnPage().slice(0, DISCORD_SELECT_OPTION_CAP);
-    if (candidates.length === 0) return null;
-    const selected = resolveGoldCharSelection();
-    const options = candidates.map((character) => {
+  function buildCharacterSelectRow({
+    candidates,
+    selected,
+    describeCharacter,
+    customId,
+    placeholder,
+    disabled,
+  }) {
+    const capped = candidates.slice(0, DISCORD_SELECT_OPTION_CAP);
+    if (capped.length === 0) return null;
+    const options = capped.map((character) => {
       const name = getCharacterName(character);
-      const totals = summarizeCharacterGold(getRaidsFor(character));
       // A closed multi-select shows every picked label, so the label is the
-      // name alone and the picks sit side by side; item level and gold show
-      // in the description once it opens.
+      // name alone and the picks sit side by side; stats show in the
+      // description once it opens.
       const option = {
         label: truncateText(name, 100),
-        description: truncateText(
-          `${Number(character.itemLevel) || 0} · ${formatGold(totals.earned)}/${formatGold(totals.total)}`,
-          100
-        ),
+        description: truncateText(describeCharacter(character), 100),
         value: name.slice(0, 100),
         default: selected.some((selectedName) => sameCharacterName(selectedName, name)),
       };
@@ -394,11 +385,25 @@ function createGoldToggleRows({
       return option;
     });
     return selectMenu({
-      customId: "status-gold:chars",
-      placeholder: t("raid-status.goldView.charsPlaceholder", lang),
+      customId,
+      placeholder,
       disabled,
       options,
       maxValues: options.length,
+    });
+  }
+
+  function buildGoldCharsRow(disabled) {
+    return buildCharacterSelectRow({
+      candidates: goldCharactersOnPage(),
+      selected: resolveGoldCharSelection(),
+      describeCharacter: (character) => {
+        const totals = summarizeCharacterGold(getRaidsFor(character));
+        return `${Number(character.itemLevel) || 0} · ${formatGold(totals.earned)}/${formatGold(totals.total)}`;
+      },
+      customId: "status-gold:chars",
+      placeholder: t("raid-status.goldView.charsPlaceholder", lang),
+      disabled,
     });
   }
 
@@ -581,36 +586,21 @@ function createGoldToggleRows({
   }
 
   function buildVisibilityCharsRow(disabled) {
-    const candidates = visibilityCharactersOnPage().slice(0, DISCORD_SELECT_OPTION_CAP);
-    if (candidates.length === 0) return null;
-    const selected = resolveVisibilityCharSelection();
-    const options = candidates.map((character) => {
-      const name = getCharacterName(character);
-      const raids = getRaidsFor(character);
-      const visible = raids.filter((raid) => !raid.hidden).length;
-      const option = {
-        label: truncateText(name, 100),
-        description: truncateText(
-          t("raid-status.goldView.visibilityCharDesc", lang, {
-            ilvl: Number(character.itemLevel) || 0,
-            visible,
-            total: raids.length,
-          }),
-          100
-        ),
-        value: name.slice(0, 100),
-        default: selected.some((selectedName) => sameCharacterName(selectedName, name)),
-      };
-      const classEmojiObj = parseCustomEmoji(getClassEmoji(character.class || character.className));
-      if (classEmojiObj) option.emoji = classEmojiObj;
-      return option;
-    });
-    return selectMenu({
+    return buildCharacterSelectRow({
+      candidates: visibilityCharactersOnPage(),
+      selected: resolveVisibilityCharSelection(),
+      describeCharacter: (character) => {
+        const raids = getRaidsFor(character);
+        const visible = raids.filter((raid) => !raid.hidden).length;
+        return t("raid-status.goldView.visibilityCharDesc", lang, {
+          ilvl: Number(character.itemLevel) || 0,
+          visible,
+          total: raids.length,
+        });
+      },
       customId: "status-gold:visibility-chars",
       placeholder: t("raid-status.goldView.visibilityCharsPlaceholder", lang),
       disabled,
-      options,
-      maxValues: options.length,
     });
   }
 
@@ -738,5 +728,4 @@ module.exports = {
   computeGoldReceiveOptions,
   computeRaidVisibilityOptions,
   goldReceiveDefaults,
-  raidVisibilityDefaults,
 };
